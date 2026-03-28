@@ -10,6 +10,15 @@ Cloning this repo is enough to work on the canonical `pi` skill locally:
 - Other Agent Skills-compatible tools can load the same skill through `.agents/skills/pi`.
 - Extension work in this repo should usually use `pi --extension`, not `pi install`.
 
+If you use `mise`, trust the repo config once and install the pinned local toolchain:
+
+```bash
+mise trust
+mise install
+```
+
+That provisions the repo's expected `node`, `pnpm`, `actionlint`, and `zizmor` versions.
+
 ### User installs
 
 ```bash
