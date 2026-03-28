@@ -18,15 +18,17 @@ pi install ./packages/pi-web-search
 
 Configure at least one search provider API key to enable `web_search`.
 
-- `BRAVE_API_KEY`
-- `SERPER_API_KEY`
-- `TAVILY_API_KEY`
-- `EXA_API_KEY`
+Supported search providers:
 
-Optional fetch providers:
+- `BRAVE_API_KEY` - Brave Search
+- `SERPER_API_KEY` - Serper (Google Search API)
+- `TAVILY_API_KEY` - Tavily
+- `EXA_API_KEY` - Exa
 
-- `JINA_API_KEY`
-- `FIRECRAWL_API_KEY`
+Supported fetch providers for `web_fetch`:
+
+- `JINA_API_KEY` - Jina Reader (optional; also works without a key at lower limits)
+- `FIRECRAWL_API_KEY` - Firecrawl
 
 ## Files
 
