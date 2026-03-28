@@ -1,0 +1,44 @@
+name: Release Jsr
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish JSR packages when they exist
+        run: |
+          if ls packages/*/jsr.json >/dev/null 2>&1; then
+            for manifest in packages/*/jsr.json; do
+              package_dir=$(dirname "$manifest")
+              echo "Publishing $package_dir to JSR"
+              (
+                cd "$package_dir"
+                pnpm dlx jsr publish
+              )
+            done
+          else
+            echo "No JSR packages configured yet. This workflow remains dormant until a real JSR package is added."
+          fi

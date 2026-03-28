@@ -1,0 +1,33 @@
+{
+  "name": "@counterposition/pi-monorepo",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test && pnpm run validate:skills && pnpm run validate:packages",
+    "lint": "pnpm -r --if-present run lint && markdownlint-cli2 \"README.md\" \"skills/**/*.md\" \"docs/**/*.md\" \"packages/**/*.md\" \".changeset/*.md\"",
+    "lint:fix": "pnpm -r --if-present run lint:fix && markdownlint-cli2 --fix \"README.md\" \"skills/**/*.md\" \"docs/**/*.md\" \"packages/**/*.md\" \".changeset/*.md\"",
+    "format": "pnpm -r --if-present run format",
+    "format:check": "pnpm -r --if-present run format:check",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm -r --if-present run test",
+    "sync:skills": "node ./scripts/sync-skill-package.mjs",
+    "validate:skills": "node ./scripts/validate-skills.mjs",
+    "validate:packages": "node ./scripts/validate-packages.mjs",
+    "pack:check": "pnpm run sync:skills && pnpm -r --if-present run pack:check",
+    "changeset": "changeset",
+    "version:packages": "changeset version",
+    "release:npm": "changeset publish --provenance"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.7",
+    "@types/node": "^25.5.0",
+    "markdownlint-cli2": "^0.18.1",
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  }
+}

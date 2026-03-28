@@ -1,0 +1,10 @@
+{
+  "ignores": [
+    "**/node_modules/**",
+    "**/LICENSE.md",
+    "packages/*/skills/**"
+  ],
+  "config": {
+    "MD013": false
+  }
+}

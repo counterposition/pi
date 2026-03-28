@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run repo checks
+        run: pnpm run check
+
+      - name: Verify publishable packages
+        run: pnpm run pack:check
+
+      - name: Run JSR dry-run checks when needed
+        run: |
+          if ls packages/*/jsr.json >/dev/null 2>&1; then
+            for manifest in packages/*/jsr.json; do
+              package_dir=$(dirname "$manifest")
+              echo "Running JSR dry-run for $package_dir"
+              (
+                cd "$package_dir"
+                pnpm dlx jsr publish --dry-run
+              )
+            done
+          else
+            echo "No JSR packages found."
+          fi
