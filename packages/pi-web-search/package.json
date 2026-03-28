@@ -1,0 +1,60 @@
+{
+  "name": "@counterposition/pi-web-search",
+  "version": "0.1.0",
+  "description": "Web search and page fetching tools for the Pi coding agent",
+  "homepage": "https://github.com/counterposition/pi/tree/main/packages/pi-web-search",
+  "bugs": {
+    "url": "https://github.com/counterposition/pi/issues"
+  },
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/counterposition/pi.git",
+    "directory": "packages/pi-web-search"
+  },
+  "files": [
+    "extensions/",
+    "src/",
+    "README.md",
+    "LICENSE.md",
+    "package.json"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "lint": "pnpm run lint:code && pnpm run lint:docs",
+    "lint:code": "oxlint .",
+    "lint:code:fix": "oxlint . --fix",
+    "lint:docs": "markdownlint-cli2 \"README.md\" \"CHANGELOG.md\" \"docs/**/*.md\"",
+    "lint:docs:fix": "markdownlint-cli2 --fix \"README.md\" \"CHANGELOG.md\" \"docs/**/*.md\"",
+    "lint:fix": "pnpm run lint:code:fix && pnpm run lint:docs:fix",
+    "format": "oxfmt .",
+    "format:check": "oxfmt . --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test",
+    "pack:check": "pnpm pack --pack-destination ../../.pack"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "pi": {
+    "extensions": [
+      "extensions/web-search.ts"
+    ]
+  }
+}
