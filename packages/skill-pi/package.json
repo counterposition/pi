@@ -1,6 +1,6 @@
 {
   "name": "@counterposition/skill-pi",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pi skill package for pi install",
   "keywords": [
     "pi-package"
