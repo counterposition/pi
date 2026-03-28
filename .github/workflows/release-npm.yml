@@ -41,6 +41,6 @@ jobs:
         with:
           version: pnpm run version:packages
           publish: pnpm run release:npm
-          createGithubReleases: false
+          createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

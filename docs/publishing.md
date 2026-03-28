@@ -20,7 +20,7 @@ All publishable packages must include:
 1. Add a changeset for every user-facing npm package change.
 2. Merge to `main`.
 3. `release-npm.yml` opens or updates the Changesets release PR.
-4. Merging the release PR publishes changed packages with provenance enabled.
+4. Merging the release PR publishes changed packages with provenance enabled and creates matching GitHub Releases.
 
 ## JSR Policy
 
