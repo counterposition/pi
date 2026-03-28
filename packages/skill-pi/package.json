@@ -2,7 +2,9 @@
   "name": "@counterposition/skill-pi",
   "version": "0.1.0",
   "description": "Pi skill package for pi install",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "homepage": "https://github.com/counterposition/pi/tree/main/packages/skill-pi",
   "bugs": {
     "url": "https://github.com/counterposition/pi/issues"

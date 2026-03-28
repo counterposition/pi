@@ -2,7 +2,9 @@
   "name": "@counterposition/pi-web-search",
   "version": "0.1.0",
   "description": "Web search and page fetching tools for the Pi coding agent",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "homepage": "https://github.com/counterposition/pi/tree/main/packages/pi-web-search",
   "bugs": {
     "url": "https://github.com/counterposition/pi/issues"
