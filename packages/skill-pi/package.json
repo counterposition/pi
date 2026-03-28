@@ -1,0 +1,42 @@
+{
+  "name": "@counterposition/skill-pi",
+  "version": "0.1.0",
+  "description": "Pi skill package for pi install",
+  "homepage": "https://github.com/counterposition/pi/tree/main/packages/skill-pi",
+  "bugs": {
+    "url": "https://github.com/counterposition/pi/issues"
+  },
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/counterposition/pi.git",
+    "directory": "packages/skill-pi"
+  },
+  "files": [
+    "skills/",
+    "README.md",
+    "LICENSE.md",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "lint": "pnpm run lint:docs",
+    "lint:docs": "markdownlint-cli2 \"README.md\"",
+    "lint:docs:fix": "markdownlint-cli2 --fix \"README.md\"",
+    "format": "oxfmt \"README.md\" \"package.json\"",
+    "format:check": "oxfmt \"README.md\" \"package.json\" --check",
+    "prepack": "node ../../scripts/sync-skill-package.mjs",
+    "check": "pnpm run lint && pnpm run format:check && pnpm run pack:check",
+    "pack:check": "pnpm pack --pack-destination ../../.pack"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "pi": {
+    "skills": [
+      "skills/pi"
+    ]
+  }
+}

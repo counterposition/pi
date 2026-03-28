@@ -1,0 +1,50 @@
+{
+  "skill_name": "pi",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Write a Pi extension that blocks any bash command containing `curl` unless the user confirms, and logs all blocked commands to a file at ~/.pi/agent/blocked-commands.log",
+      "expected_output": "A TypeScript extension file that hooks into tool_call events, checks for curl in bash commands, prompts via ctx.ui.select, and appends blocked commands to a log file. Should check ctx.hasUI and handle non-interactive mode.",
+      "files": [],
+      "assertions": [
+        "Uses correct ExtensionAPI import from @mariozechner/pi-coding-agent",
+        "Hooks into tool_call event (the correct event for intercepting tool calls)",
+        "Checks event.toolName === 'bash' before inspecting command",
+        "Tests for curl in the command string",
+        "Checks ctx.hasUI before calling interactive UI methods",
+        "Uses ctx.ui.select or ctx.ui.confirm for user confirmation",
+        "Returns { block: true, reason: '...' } to prevent execution",
+        "Logs blocked commands to ~/.pi/agent/blocked-commands.log",
+        "Uses correct export default function (pi: ExtensionAPI) signature"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I want to set up Pi to use Ollama with llama3.2 locally, with auto-compaction disabled and a custom session directory at ~/pi-sessions. Walk me through the configuration.",
+      "expected_output": "Instructions covering models.json with Ollama provider config (baseUrl localhost:11434/v1, api openai-completions, dummy apiKey, model id llama3.2), settings.json with compaction.enabled=false and sessionDir pointing to ~/pi-sessions.",
+      "files": [],
+      "assertions": [
+        "Provides models.json with Ollama baseUrl containing localhost:11434",
+        "Uses api type openai-completions (correct for Ollama)",
+        "Includes model entry with id llama3.2",
+        "Provides settings.json with compaction.enabled set to false",
+        "Sets sessionDir to ~/pi-sessions",
+        "Correct file paths: ~/.pi/agent/models.json and ~/.pi/agent/settings.json"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Create a Pi skill that helps with database migrations — it should know about Prisma, Drizzle, and raw SQL approaches. Give me the full SKILL.md and any reference files.",
+      "expected_output": "A SKILL.md with proper frontmatter (name, description), a main body routing to reference files, and separate reference docs for Prisma, Drizzle, and raw SQL migration patterns.",
+      "files": [],
+      "assertions": [
+        "SKILL.md has valid YAML frontmatter with name and description fields",
+        "Name follows Pi convention: lowercase, hyphens only, max 64 chars",
+        "Description mentions trigger contexts (migrations, Prisma, Drizzle, SQL)",
+        "Includes separate reference files for Prisma, Drizzle, and raw SQL",
+        "SKILL.md uses relative paths to reference files",
+        "Body routes to the correct reference doc based on the user's framework choice"
+      ]
+    }
+  ]
+}
