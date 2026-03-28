@@ -22,6 +22,8 @@ pnpm --filter <package-name> run pack:check
 pnpm run validate:packages
 ```
 
+When the package is meant for `pi install`, use `pi install ./packages/<package-name>` from the monorepo root as a maintainer smoke test of the publishable package layout. For day-to-day extension development, prefer loading the extension directly, for example with `pi --extension`.
+
 ## Publishing Readiness
 
 - Keep package contents narrow with `files`.

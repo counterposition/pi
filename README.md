@@ -8,30 +8,31 @@ Cloning this repo is enough to work on the canonical `pi` skill locally:
 
 - Pi loads `./skills/pi` through `.pi/settings.json`.
 - Other Agent Skills-compatible tools can load the same skill through `.agents/skills/pi`.
+- Extension work in this repo should usually use `pi --extension`, not `pi install`.
 
-### Skills via `npx skills add`
+### User installs
 
 ```bash
+# skill via Agent Skills
 npx skills add counterposition/pi --skill pi
-```
 
-Local smoke-test equivalent:
-
-```bash
-npx skills add /absolute/path/to/pi --skill pi --list
-```
-
-### Skills via `pi install`
-
-```bash
+# skill via Pi package
 pi install npm:@counterposition/skill-pi
-pi install ./packages/skill-pi
+
+# extension via Pi package
+pi install npm:@counterposition/pi-web-search
 ```
 
-### Extensions via `pi install`
+### Maintainer smoke tests
+
+Use these when validating the local checkout or the publishable package layout before release:
 
 ```bash
-pi install npm:@counterposition/pi-web-search
+# canonical skill from a local checkout
+npx skills add /absolute/path/to/pi --skill pi --list
+
+# packaged Pi installs from the monorepo root
+pi install ./packages/skill-pi
 pi install ./packages/pi-web-search
 ```
 

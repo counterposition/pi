@@ -6,6 +6,11 @@ Single-skill npm package for installing the `pi` skill with `pi install`.
 
 ```bash
 pi install npm:@counterposition/skill-pi
+```
+
+Maintainer smoke test from the monorepo root:
+
+```bash
 pi install ./packages/skill-pi
 ```
 

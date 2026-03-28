@@ -31,6 +31,8 @@ If the skill should also be installable with `pi install`:
 3. Set `pi.skills` in that package's `package.json`.
 4. Use `pnpm run sync:skills` before packing or publishing.
 
+Treat `pi install ./packages/skill-<name>` as a maintainer smoke test for the packaged distribution, not the normal workflow for editing the canonical skill inside this repo.
+
 Users should still be able to install the canonical skill from GitHub with:
 
 ```bash

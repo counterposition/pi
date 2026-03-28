@@ -7,8 +7,8 @@ This repository separates canonical skill authoring from publishable Pi packages
 - `.pi/settings.json` loads the canonical local skill for Pi when working inside this repo.
 - `.agents/skills/pi` symlinks to `skills/pi` so other Agent Skills-compatible tools discover the same source.
 - `skills/<name>/` holds the canonical source for each skill.
-- `packages/skill-<name>/` ships one skill per npm package for `pi install`.
-- `packages/<other-package>/` holds publishable Pi extensions and future libraries.
+- `packages/skill-<name>/` ships one skill per npm package for `pi install` and local package smoke tests.
+- `packages/<other-package>/` holds publishable Pi extensions and future libraries, plus their pre-publish package layouts.
 - `scripts/` contains repo-level validation and sync utilities.
 
 ## Package Classes
@@ -25,6 +25,7 @@ This repository separates canonical skill authoring from publishable Pi packages
 - Live in `packages/`.
 - Publish independently through Changesets.
 - Ship Pi-facing assets such as `skills/` or `extensions/`.
+- Support maintainer validation via local-path installs like `pi install ./packages/...`.
 - Must pass metadata validation and `pnpm pack` checks.
 
 ### JSR-worthy Libraries
@@ -36,5 +37,5 @@ This repository separates canonical skill authoring from publishable Pi packages
 ## Current Inventory
 
 - `skills/pi` - canonical Pi skill.
-- `packages/skill-pi` - single-skill npm distribution for `pi install`.
-- `packages/pi-web-search` - web search extension package.
+- `packages/skill-pi` - single-skill npm distribution for `pi install` and local package smoke tests.
+- `packages/pi-web-search` - web search extension package and local package smoke-test target.

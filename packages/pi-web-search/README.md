@@ -6,6 +6,11 @@ Pi extension package that adds `web_search` and `web_fetch` tools.
 
 ```bash
 pi install npm:@counterposition/pi-web-search
+```
+
+Maintainer smoke test from the monorepo root:
+
+```bash
 pi install ./packages/pi-web-search
 ```
 

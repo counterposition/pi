@@ -12,15 +12,21 @@ Reference skill for the Pi coding agent.
 # multi-skill repo
 npx skills add counterposition/pi --skill pi
 
-# local checkout
-npx skills add /absolute/path/to/pi --skill pi
-
 # pi install from npm
 pi install npm:@counterposition/skill-pi
+```
 
-# pi install from local package
+Maintainer smoke tests:
+
+```bash
+# canonical skill from a local checkout
+npx skills add /absolute/path/to/pi --skill pi
+
+# packaged Pi install from the monorepo root
 pi install ./packages/skill-pi
 ```
+
+If you are developing inside this repo, Pi already loads the canonical skill via `.pi/settings.json`, so you usually do not need `pi install`.
 
 ## Covers
 
