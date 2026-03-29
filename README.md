@@ -51,7 +51,7 @@ pi install ./packages/pi-web-search
 - `.agents/skills/pi` - symlink to `skills/pi` for other agents
 - `skills/` - canonical skill sources for `npx skills add`
 - `packages/` - publishable npm packages for `pi install`
-- `docs/` - architecture, publishing, and contributor guides
+- `docs/` - architecture, ADRs, publishing, and contributor guides
 - `scripts/` - repo validators and packaging helpers
 
 ## Available Packages

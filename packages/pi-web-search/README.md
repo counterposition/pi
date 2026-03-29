@@ -21,14 +21,12 @@ Configure at least one search provider API key to enable `web_search`.
 Supported search providers:
 
 - `BRAVE_API_KEY` - Brave Search
-- `SERPER_API_KEY` - Serper (Google Search API)
 - `TAVILY_API_KEY` - Tavily
 - `EXA_API_KEY` - Exa
 
-Supported fetch providers for `web_fetch`:
+`web_fetch` is Jina-backed:
 
 - `JINA_API_KEY` - Jina Reader (optional; also works without a key at lower limits)
-- `FIRECRAWL_API_KEY` - Firecrawl
 
 ## Files
 

@@ -11,6 +11,13 @@
 - Extend `../../tsconfig.base.json`.
 - Reuse the root Oxlint and Oxfmt config.
 - Add `lint`, `format`, `format:check`, `typecheck`, `test`, `check`, and `pack:check` scripts as needed.
+- Add `docs/adrs/` when the package needs package-scoped architectural decision records.
+
+## ADRs
+
+- Keep monorepo-wide ADRs in `docs/adrs/`.
+- Keep package-specific ADRs in `packages/<name>/docs/adrs/`.
+- Use the plural directory name `adrs/` for consistency with the rest of the repo.
 
 ## Validation
 

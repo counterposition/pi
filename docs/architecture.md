@@ -6,9 +6,11 @@ This repository separates canonical skill authoring from publishable Pi packages
 
 - `.pi/settings.json` loads the canonical local skill for Pi when working inside this repo.
 - `.agents/skills/pi` symlinks to `skills/pi` so other Agent Skills-compatible tools discover the same source.
+- `docs/adrs/` holds monorepo-level architectural decision records.
 - `skills/<name>/` holds the canonical source for each skill.
 - `packages/skill-<name>/` ships one skill per npm package for `pi install` and local package smoke tests.
 - `packages/<other-package>/` holds publishable Pi extensions and future libraries, plus their pre-publish package layouts.
+- `packages/<name>/docs/adrs/` holds package-scoped architectural decision records.
 - `scripts/` contains repo-level validation and sync utilities.
 
 ## Package Classes
@@ -25,6 +27,7 @@ This repository separates canonical skill authoring from publishable Pi packages
 - Live in `packages/`.
 - Publish independently through Changesets.
 - Ship Pi-facing assets such as `skills/` or `extensions/`.
+- Keep package-specific ADRs in `docs/adrs/` inside the package when the package needs long-lived design records.
 - Support maintainer validation via local-path installs like `pi install ./packages/...`.
 - Must pass metadata validation and `pnpm pack` checks.
 
