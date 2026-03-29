@@ -1,6 +1,6 @@
-export type SearchProviderName = "brave" | "serper" | "tavily" | "exa";
+export type SearchProviderName = "brave" | "tavily" | "exa";
 
-export type FetchProviderName = "jina" | "firecrawl";
+export type FetchProviderName = "jina";
 
 export type ProviderName = SearchProviderName | FetchProviderName;
 
@@ -26,8 +26,8 @@ export interface SearchResult {
 }
 
 export interface AppliedFilters {
-  freshness?: "native" | "approximate" | "not_applied";
-  domains?: "native" | "query_rewrite" | "fanout_merge" | "not_applied";
+  freshness?: "native" | "approximate";
+  domains?: "native" | "query_rewrite" | "fanout_merge";
 }
 
 export interface ProviderSearchResponse {
@@ -74,16 +74,13 @@ export interface FetchProvider {
 export interface WebSearchSettings {
   preferredBasicProvider?: SearchProviderName | null;
   preferredThoroughProvider?: SearchProviderName | null;
-  preferredFetchProvider?: FetchProviderName | null;
 }
 
 export type ApiKeyEnvName =
   | "BRAVE_API_KEY"
-  | "SERPER_API_KEY"
   | "TAVILY_API_KEY"
   | "EXA_API_KEY"
-  | "JINA_API_KEY"
-  | "FIRECRAWL_API_KEY";
+  | "JINA_API_KEY";
 
 export interface LoadedConfig {
   apiKeys: Partial<Record<ApiKeyEnvName, string>>;

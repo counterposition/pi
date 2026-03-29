@@ -10,7 +10,6 @@ const state = vi.hoisted(() => ({
     settings: {
       preferredBasicProvider: null,
       preferredThoroughProvider: null,
-      preferredFetchProvider: null,
     },
     warnings: [],
   },
@@ -25,7 +24,6 @@ const state = vi.hoisted(() => ({
   },
   normalizeDomains: vi.fn((domains?: string[]) => domains),
   resolveSearchProviders: vi.fn(),
-  resolveFetchProvider: vi.fn(),
 }));
 
 vi.mock("@mariozechner/pi-ai", () => ({
@@ -45,8 +43,6 @@ vi.mock("../src/config.js", () => ({
     state.normalizeDomains(...args),
   resolveSearchProviders: (...args: Parameters<typeof state.resolveSearchProviders>) =>
     state.resolveSearchProviders(...args),
-  resolveFetchProvider: (...args: Parameters<typeof state.resolveFetchProvider>) =>
-    state.resolveFetchProvider(...args),
 }));
 
 vi.mock("../src/providers/index.js", () => ({
@@ -61,7 +57,6 @@ describe("web-search extension", () => {
     state.normalizeDomains.mockReset();
     state.normalizeDomains.mockImplementation((domains?: string[]) => domains);
     state.resolveSearchProviders.mockReset();
-    state.resolveFetchProvider.mockReset();
     state.config.warnings = [];
     state.providers = {
       search: {},
@@ -131,23 +126,15 @@ describe("web-search extension", () => {
     expect(result.details.resultCount).toBe(1);
   });
 
-  it("falls through to the next fetch provider on transient failure and then serves cached pagination", async () => {
-    const jina = makeFetchProvider("jina", async () => {
-      throw new ProviderError({
-        provider: "jina",
-        message: "jina request failed: 503 Service Unavailable",
-        transient: true,
-        status: 503,
-      });
-    });
-    const firecrawl = makeFetchProvider("firecrawl", async () => "A".repeat(13_000));
+  it("fetches through Jina and serves later pages from cache", async () => {
+    const fetchImpl = vi.fn(async () => "A".repeat(13_000));
+    const jina = makeFetchProvider("jina", fetchImpl);
 
     state.providers = {
       search: {},
-      fetch: { jina, firecrawl },
+      fetch: { jina },
       hasAnySearchProvider: false,
     };
-    state.resolveFetchProvider.mockReturnValue(jina);
 
     const tools = registerTools();
     const first = await tools.web_fetch.execute(
@@ -156,7 +143,7 @@ describe("web-search extension", () => {
       new AbortController().signal,
     );
 
-    expect(first.details.provider).toBe("firecrawl");
+    expect(first.details.provider).toBe("jina");
     expect(first.details.hasMore).toBe(true);
 
     const second = await tools.web_fetch.execute(
@@ -169,11 +156,12 @@ describe("web-search extension", () => {
       new AbortController().signal,
     );
 
-    expect(second.details.provider).toBe("firecrawl");
+    expect(second.details.provider).toBe("jina");
     expect(second.details.offset).toBe(first.details.nextOffset);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
-  it("does not fall through on non-transient fetch errors", async () => {
+  it("propagates provider errors from Jina", async () => {
     const jina = makeFetchProvider("jina", async () => {
       throw new ProviderError({
         provider: "jina",
@@ -182,14 +170,12 @@ describe("web-search extension", () => {
         status: 403,
       });
     });
-    const firecrawl = makeFetchProvider("firecrawl", async () => "should not run");
 
     state.providers = {
       search: {},
-      fetch: { jina, firecrawl },
+      fetch: { jina },
       hasAnySearchProvider: false,
     };
-    state.resolveFetchProvider.mockReturnValue(jina);
 
     const tools = registerTools();
 

@@ -4,7 +4,6 @@ import path from "node:path";
 
 import type {
   ApiKeyEnvName,
-  FetchProvider,
   FetchProviderName,
   LoadedConfig,
   ResolvedSearchProviders,
@@ -18,22 +17,15 @@ import type {
 
 const SEARCH_KEY_BY_PROVIDER: Record<SearchProviderName, ApiKeyEnvName> = {
   brave: "BRAVE_API_KEY",
-  serper: "SERPER_API_KEY",
   tavily: "TAVILY_API_KEY",
   exa: "EXA_API_KEY",
 };
 
-const FETCH_KEY_BY_PROVIDER: Record<Exclude<FetchProviderName, "jina">, ApiKeyEnvName> = {
-  firecrawl: "FIRECRAWL_API_KEY",
-};
-
 const API_KEY_NAMES = [
   "BRAVE_API_KEY",
-  "SERPER_API_KEY",
   "TAVILY_API_KEY",
   "EXA_API_KEY",
   "JINA_API_KEY",
-  "FIRECRAWL_API_KEY",
 ] satisfies ApiKeyEnvName[];
 
 export function loadConfig(): LoadedConfig {
@@ -97,10 +89,10 @@ export function rankingFor(
   depth: SearchDepth,
   args: { freshness?: SearchFreshness; domains?: string[] },
 ): SearchProviderName[] {
-  if (depth === "thorough") return ["tavily", "exa", "brave", "serper"];
-  if (args.domains?.length) return ["tavily", "exa", "brave", "serper"];
-  if (args.freshness) return ["brave", "tavily", "exa", "serper"];
-  return ["brave", "serper", "tavily", "exa"];
+  if (depth === "thorough") return ["tavily", "exa", "brave"];
+  if (args.domains?.length) return ["tavily", "exa", "brave"];
+  if (args.freshness) return ["brave", "tavily", "exa"];
+  return ["brave", "tavily", "exa"];
 }
 
 export function requiredCapabilities(depth: SearchDepth): ReadonlySet<SearchCapability> {
@@ -120,12 +112,8 @@ export function hasKey(
   providerName: SearchProviderName | FetchProviderName,
 ): boolean {
   if (providerName === "jina") return true;
-  if (providerName in SEARCH_KEY_BY_PROVIDER) {
-    return Boolean(config.apiKeys[SEARCH_KEY_BY_PROVIDER[providerName as SearchProviderName]]);
-  }
-  return Boolean(
-    config.apiKeys[FETCH_KEY_BY_PROVIDER[providerName as Exclude<FetchProviderName, "jina">]],
-  );
+
+  return Boolean(config.apiKeys[SEARCH_KEY_BY_PROVIDER[providerName as SearchProviderName]]);
 }
 
 export function resolveSearchProviders(
@@ -203,25 +191,6 @@ export function resolveSearchProviders(
   };
 }
 
-export function resolveFetchProvider(
-  fetchProviders: Partial<Record<FetchProviderName, FetchProvider>>,
-  config: LoadedConfig,
-): FetchProvider {
-  const preferred = config.settings.preferredFetchProvider;
-  if (preferred) {
-    const candidate = fetchProviders[preferred];
-    if (candidate && hasKey(config, candidate.name)) {
-      return candidate;
-    }
-  }
-
-  const fallback = fetchProviders.jina;
-  if (!fallback) {
-    throw new Error("No fetch provider available.");
-  }
-  return fallback;
-}
-
 function readSettingsFile(filePath: string): {
   webSearch?: {
     apiKeys?: Partial<Record<ApiKeyEnvName, string>>;
@@ -261,8 +230,6 @@ function mergeSettings(
       projectSettings?.preferredThoroughProvider ??
       globalSettings?.preferredThoroughProvider ??
       null,
-    preferredFetchProvider:
-      projectSettings?.preferredFetchProvider ?? globalSettings?.preferredFetchProvider ?? null,
   };
 }
 

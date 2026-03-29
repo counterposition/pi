@@ -1,12 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { StringEnum, Type } from "@mariozechner/pi-ai";
 
-import {
-  loadConfig,
-  normalizeDomains,
-  resolveFetchProvider,
-  resolveSearchProviders,
-} from "../src/config.js";
+import { loadConfig, normalizeDomains, resolveSearchProviders } from "../src/config.js";
 import { formatFetchContent, formatSearchResults, paginateContent } from "../src/format.js";
 import { pageCache } from "../src/page-cache.js";
 import { isTransientProviderError } from "../src/provider-utils.js";
@@ -68,7 +63,7 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, params, signal, onUpdate) {
       if (!providers.hasAnySearchProvider) {
         throw new Error(
-          "No search provider configured. Set one of BRAVE_API_KEY, SERPER_API_KEY, TAVILY_API_KEY, or EXA_API_KEY to enable web_search.",
+          "No search provider configured. Set one of BRAVE_API_KEY, TAVILY_API_KEY, or EXA_API_KEY to enable web_search.",
         );
       }
 
@@ -195,33 +190,24 @@ export default function (pi: ExtensionAPI) {
       let content = cached?.content;
 
       if (!content) {
-        const preferredProvider = resolveFetchProvider(providers.fetch, config);
-        const providerOrder = [
-          preferredProvider,
-          ...Object.values(providers.fetch).filter(
-            (provider) => provider !== undefined && provider !== preferredProvider,
-          ),
-        ];
-
-        let lastError: Error | undefined;
-        for (const provider of providerOrder) {
-          try {
-            content = await provider.fetch(url, signal);
-            providerName = provider.name;
-            pageCache.set(url, content, provider.name);
-            break;
-          } catch (error) {
-            if (signal.aborted) throw error;
-
-            lastError = error instanceof Error ? error : new Error(String(error));
-            if (!isTransientProviderError(lastError)) {
-              throw lastError;
-            }
-          }
+        const provider = providers.fetch.jina;
+        if (!provider) {
+          throw new Error("No fetch provider available.");
         }
 
-        if (!content) {
-          throw lastError ?? new Error("All fetch providers failed for this request.");
+        try {
+          content = await provider.fetch(url, signal);
+          providerName = provider.name;
+          pageCache.set(url, content, provider.name);
+        } catch (error) {
+          if (signal.aborted) throw error;
+
+          const providerError = error instanceof Error ? error : new Error(String(error));
+          if (!isTransientProviderError(providerError)) {
+            throw providerError;
+          }
+
+          throw providerError;
         }
       }
 

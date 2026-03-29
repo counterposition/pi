@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Remove Firecrawl support from `pi-web-search` and keep `web_fetch` on the Jina backend only.
+- Remove the `FIRECRAWL_API_KEY` configuration path.
+- Remove the `preferredFetchProvider` setting.
+
 ## 0.1.2
 
 ### Documentation

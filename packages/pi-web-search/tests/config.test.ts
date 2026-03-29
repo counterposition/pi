@@ -11,11 +11,9 @@ const originalCwd = process.cwd();
 const ENV_NAMES = [
   "PI_CODING_AGENT_DIR",
   "BRAVE_API_KEY",
-  "SERPER_API_KEY",
   "TAVILY_API_KEY",
   "EXA_API_KEY",
   "JINA_API_KEY",
-  "FIRECRAWL_API_KEY",
 ] as const;
 const originalEnv = Object.fromEntries(
   ENV_NAMES.map((name) => [name, process.env[name]]),
@@ -108,7 +106,6 @@ describe("loadConfig", () => {
           apiKeys: {
             EXA_API_KEY: "should-not-be-used",
           },
-          preferredFetchProvider: "jina",
         },
       }),
     );
@@ -123,7 +120,7 @@ describe("loadConfig", () => {
     expect(config.apiKeys.BRAVE_API_KEY).toBe("env-brave");
     expect(config.apiKeys.EXA_API_KEY).toBeUndefined();
     expect(config.settings.preferredBasicProvider).toBe("brave");
-    expect(config.settings.preferredFetchProvider).toBe("jina");
+    expect(config.settings.preferredThoroughProvider).toBeNull();
     expect(config.warnings.join(" ")).toMatch(/ignoring websearch\.apikeys/i);
   });
 });
@@ -152,7 +149,6 @@ function makeConfig(
     settings: {
       preferredBasicProvider: null,
       preferredThoroughProvider: null,
-      preferredFetchProvider: null,
       ...settings,
     },
     warnings: [],

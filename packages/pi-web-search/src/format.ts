@@ -288,8 +288,6 @@ function formatFreshnessNote(
       return `Freshness filter "${freshness}" was applied natively by the provider.`;
     case "approximate":
       return `Freshness filter "${freshness}" was applied approximately by the provider.`;
-    case "not_applied":
-      return `Freshness filter "${freshness}" could not be applied strictly by the provider.`;
     default:
       return `Freshness filter "${freshness}" was requested.`;
   }
@@ -308,8 +306,6 @@ function formatDomainNote(
       return `Domain filter was approximated with a site: query rewrite for ${domains.join(", ")}.`;
     case "fanout_merge":
       return `Domain filter was approximated by running one query per domain and merging results for ${domains.join(", ")}.`;
-    case "not_applied":
-      return `Domain filter could not be applied strictly for ${domains.join(", ")}.`;
     default:
       return `Domain filter requested for ${domains.join(", ")}.`;
   }
@@ -332,16 +328,12 @@ function providerLabel(provider: string): string {
   switch (provider) {
     case "brave":
       return "Brave";
-    case "serper":
-      return "Serper";
     case "tavily":
       return "Tavily";
     case "exa":
       return "Exa";
     case "jina":
       return "Jina Reader";
-    case "firecrawl":
-      return "Firecrawl";
     default:
       return provider;
   }
