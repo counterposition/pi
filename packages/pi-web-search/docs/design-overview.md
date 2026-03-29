@@ -145,6 +145,8 @@ Useful configuration values:
 - `EXA_API_KEY`
 - `JINA_API_KEY`
 
+For the best experience, configure at least two search provider keys: one basic-capable provider and one content-capable provider. **The recommended pair is Brave plus either Exa or Tavily**. Brave is the default first choice for basic and freshness-filtered searches but cannot extract page content. Exa and Tavily can both serve thorough searches that return content alongside results. Without a content-capable provider key, thorough searches degrade to basic. Configuring all three search keys adds fallback resilience but is not necessary for full functionality.
+
 Useful non-secret settings:
 
 - `preferredBasicProvider`

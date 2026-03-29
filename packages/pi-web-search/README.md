@@ -28,6 +28,8 @@ Supported search providers:
 
 - `JINA_API_KEY` - Jina Reader (optional; also works without a key at lower limits)
 
+**Recommended minimum:** Set both `BRAVE_API_KEY` and `EXA_API_KEY` (or `TAVILY_API_KEY`). Brave covers basic and freshness-filtered searches. Exa or Tavily covers thorough searches that return page content. With only one provider configured, thorough searches may silently degrade to basic results.
+
 ## Files
 
 - `extensions/web-search.ts` - extension entrypoint loaded by Pi
