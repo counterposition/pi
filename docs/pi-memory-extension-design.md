@@ -48,8 +48,10 @@ The most useful public reference points are:
   per-project memory directory under `~/.claude/projects/<project>/memory/`,
   with a concise `MEMORY.md` entrypoint, optional topic files, `/memory`
   inspection, and a startup budget of the first 200 lines or 25 KB of
-  `MEMORY.md`. Topic files are read on demand. The documented model is plain
-  Markdown and human-editable; the docs do not present typed YAML memory
+  `MEMORY.md`. The storage-location docs say the project path is derived from
+  the git repository so worktrees and subdirectories within the same repo share
+  one memory directory. Topic files are read on demand. The documented model is
+  plain Markdown and human-editable; the docs do not present typed YAML memory
   categories or age-based reminders as core behavior.
 
 - **Anthropic `memory_20250818` tool.** Current docs describe a beta memory
@@ -106,6 +108,8 @@ are:
 - The extension works with Pi's current extension API. No core changes.
 - The extension complements Pi's session history rather than replacing it.
 - The default experience is private and low-risk.
+- Project/worktree scope is explicit rather than an accidental consequence of
+  filesystem paths.
 - Retrieval quality can improve over time without requiring embeddings or an
   external service in v1.
 
@@ -130,11 +134,11 @@ clear decision surface. Memory has two fundamental operations:
 
 A third tool like `memory_get` (targeted file read) is unnecessary, but only if
 `memory_search` returns enough context to make the common case efficient: a
-bounded excerpt, exact file path, heading, status/date metadata, and a stable
-entry locator such as a line span or derived entry reference. Then `read`
-remains available for deeper inspection or surrounding file context. Adding a
-third tool increases prompt overhead and routing mistakes without giving the
-agent a meaningfully different capability.
+bounded excerpt, exact file path, heading, status/date metadata, a stable
+entry ID, and the current line span for convenience. Then `read` remains
+available for deeper inspection or surrounding file context. Adding a third
+tool increases prompt overhead and routing mistakes without giving the agent a
+meaningfully different capability.
 
 ### Two tools, not one
 
@@ -158,7 +162,13 @@ accidental-commit risk. Pi should default to a user-local private store:
 - Keeps everything on disk as Markdown.
 
 A future `storageMode: "workspace"` option can place memory under `.pi/memory/`
-for teams that want shared, versioned project memory.
+for teams that want shared, versioned project memory inside a checkout.
+Storage location and memory scope are separate concerns: private storage should
+still default to repo-shared memory across worktrees, while workspace storage
+would be intentionally checkout-local. Because Pi deep-merges project
+`.pi/settings.json` over global settings, workspace storage must not be enabled
+by repo-committed project config. If Pi adds that mode later, it should be a
+user-level choice in global settings or another explicit user-local opt-in.
 
 ### Inbox and topics, not one flat directory
 
@@ -216,11 +226,37 @@ Default location:
     └── ...
 ```
 
-### Project identity
+### Project identity and worktree policy
 
-Project memory is keyed by the git root realpath when available, falling back to
-the working directory realpath outside a repo. The project ID is a
-deterministic slug derived from this path.
+Project identity is a product decision, not an implementation side effect.
+
+The default v1 policy should be:
+
+- Inside a git repo, all subdirectories and all worktrees that share the same
+  underlying repository share one project memory root.
+- Outside a git repo, the working directory realpath defines the project.
+- The project ID is a deterministic slug derived from that resolved identity
+  anchor.
+
+The important distinction is between repo identity and checkout path. A
+worktree path describes where one checkout lives on disk, not the durable
+project the memory is about. Most memories in scope here are repo-level facts:
+workflow conventions, user preferences for this repo, architectural decisions,
+and debugging findings that should survive branch changes. Keying by worktree
+path would fragment recall and duplicate maintenance for the same underlying
+project.
+
+The implementation anchor should therefore be shared repo identity, not raw
+worktree location. In git terms, use the shared repository identity (`git
+common dir` or equivalent), not the per-worktree root path.
+
+This does create a real tradeoff: careless writes could leak branch-local
+assumptions across worktrees. The right response in v1 is not accidental
+path-based isolation. It is repo-shared memory plus a stricter write policy:
+implicit writes should only capture facts expected to remain valid across
+worktrees. If Pi later needs isolation for long-lived branch-specific work, it
+should add an explicit worktree-local overlay on top of the repo store rather
+than changing the base identity model.
 
 ### `MEMORY.md`
 
@@ -243,7 +279,7 @@ canonical.
 
 ### `inbox/YYYY-MM-DD.md`
 
-Daily inbox files are append-only capture. They hold fresh notes that have not
+Daily inbox files are append-oriented capture. They hold fresh notes that have not
 yet earned promotion into topic memory. They are not transcripts; they are a
 filtered capture of memory candidates.
 
@@ -254,6 +290,8 @@ Format:
 
 ## 14:32 — Tests require local Redis
 
+- ID: mem_01JW2YCP4J4P7D9M9YQX4G8P4H
+- Status: active
 - Source: assistant
 - Context: discovered while debugging integration test failures
 
@@ -263,6 +301,8 @@ but local development requires `docker compose up redis` first.
 
 ## 16:10 — User prefers pnpm over npm
 
+- ID: mem_01JW2Z7E36P4WQ5Q1K0T8N2M6A
+- Status: active
 - Source: user
 
 Always use `pnpm`, not `npm`, for package management in this repo.
@@ -270,8 +310,11 @@ Always use `pnpm`, not `npm`, for package management in this repo.
 
 Characteristics:
 
-- Cheap to write. Append-only within the day.
+- Cheap to write. Append body text within the day; later maintenance may update
+  metadata such as `Status`.
 - Naturally date-scoped for recency ranking.
+- Each entry gets a stable `ID`, so later promotion or invalidation can target
+  the exact note rather than a fragile heading/path combination.
 - Not injected into the prompt by default. Found via search or maintenance.
 - Safe to summarize and archive later.
 
@@ -290,6 +333,7 @@ description: Build system conventions and tooling preferences
 # Build
 
 ## Use pnpm, not npm
+- ID: mem_01JW2ZZB7N6K4Q2R1P8D5H3C9F
 - Status: active
 - Source: user
 - Updated: 2026-03-29
@@ -298,35 +342,40 @@ Always use `pnpm` for package management. The repo uses pnpm workspaces and
 the lockfile is `pnpm-lock.yaml`.
 
 ## Tests require local Redis
+- ID: mem_01JW30BK6K3R6N3Y0F2A1M8Q9D
 - Status: active
 - Source: assistant
 - Updated: 2026-03-29
-- Promoted-from: inbox/2026-03-29.md
+- Promoted-from: mem_01JW2YCP4J4P7D9M9YQX4G8P4H
 
 Integration tests in `packages/api/tests/` need a local Redis instance.
 Run `docker compose up redis` before `pnpm test`.
 
 ## Use npm for installs
+- ID: mem_01JW31M0R5M8C7H2P4S9D6F1QK
 - Status: superseded
-- Superseded-by: "Use pnpm, not npm"
+- Superseded-by: mem_01JW2ZZB7N6K4Q2R1P8D5H3C9F
 - Updated: 2026-03-29
 
 Historical note retained for traceability.
 ```
 
-This is intentionally simple: Markdown headings for entry boundaries, short
-metadata bullets, and free-form content. No custom IDs, no formal schema, no
-YAML frontmatter per entry. The structure gives the extension enough to support
-status filtering and staleness tracking while remaining comfortable to read and
-edit by hand.
+This is still intentionally simple: Markdown headings define entry boundaries,
+metadata stays as short bullet lists, and the body stays free-form. The one
+extra field that earns its keep is a stable `ID` per entry. That ID is the
+durable selector for lineage and mutations; headings and line spans remain
+navigation aids, not long-lived identity.
 
 Entry metadata fields:
 
-- `Status`: `active | superseded | invalid` (required)
+- `ID`: stable opaque selector unique within the project memory root
+  (required)
+- `Status`: `active | promoted | superseded | invalid` (required)
 - `Source`: `user | assistant` (required)
-- `Updated`: date (required)
-- `Superseded-by`: reference to the replacing entry (when superseded)
-- `Promoted-from`: inbox source (when promoted from inbox)
+- `Updated`: date (required for topic entries)
+- `Superseded-by`: entry ID of the replacing entry (when superseded)
+- `Promoted-from`: entry ID of the source inbox entry (when promoted from
+  inbox)
 - `Review-after`: date (optional, for time-sensitive facts)
 
 Two details matter:
@@ -336,10 +385,14 @@ Two details matter:
 2. `Review-after` lets the system surface candidates for review without
    silently deleting history.
 
-No custom IDs in the on-disk format does not mean "no precise identity at
-runtime." The parser can derive an internal `entryRef` and line span for each
-entry so tool results and maintenance actions can target one memory entry
-precisely without making the Markdown format noisier.
+In practice, `promoted` is mainly for source inbox notes after a topic entry has
+been created from them. That keeps promotion traceable while hiding duplicate
+capture from default search results.
+
+The parser can still derive an internal `entryRef` and current line span for
+each entry at runtime, but those are secondary locators built on top of the
+stable `ID`. They are useful for immediate `read` follow-ups, not as the
+canonical identity used by lineage or mutation workflows.
 
 ### Retrieval is entry-based, not file-based
 
@@ -349,9 +402,9 @@ memory entries:
 - One topic entry = one heading section in `topics/*.md`.
 - One inbox entry = one timestamped heading section in `inbox/YYYY-MM-DD.md`.
 
-Each parsed entry carries the data retrieval actually needs: file path,
-heading, body, status, dates, and whether it came from a topic file or the
-inbox.
+Each parsed entry carries the data retrieval actually needs: stable `ID`, file
+path, heading, body, status, dates, lineage references, and whether it came
+from a topic file or the inbox.
 
 This distinction matters even if the v1 implementation uses simple file
 operations. It matters even more for future indexed backends such as QMD,
@@ -395,13 +448,12 @@ QMD is attractive, but making it a default dependency in v1 is the wrong trade:
 
 1. Search parsed topic entries and recent inbox entries.
 2. Use heading boundaries as entry boundaries, not fixed character windows.
-3. Exclude entries with `Status: invalid` by default.
+3. Exclude entries with `Status: invalid` or `Status: promoted` by default.
 4. Down-rank entries with `Status: superseded` unless the query asks for
    history.
-5. Prefer recent inbox notes over old ones.
-6. Return results with exact file path, heading, status, dates, a bounded
-   excerpt, and a stable entry locator such as a line span or derived
-   `entryRef`.
+5. Prefer active topic entries first, then recent active inbox notes.
+6. Return results with stable `ID`, exact file path, heading, status, dates, a
+   bounded excerpt, and the current line span for convenience.
 7. Provide enough inline context that the agent can usually judge relevance
    without an immediate follow-up `read`.
 
@@ -411,7 +463,8 @@ When the corpus grows large enough to make direct grep slow, add a rebuildable
 index behind the same `memory_search` interface:
 
 - Index a derived entry corpus, not raw topic files. Each indexed document
-  should correspond to one parsed memory entry.
+  should correspond to one parsed memory entry and be keyed by that entry's
+  stable `ID`.
 - QMD is a strong candidate backend because it already provides local BM25,
   vector search, reranking, path context, and an embeddable SDK.
 - Pi must continue to enforce `Status`, history requests, and inbox recency
@@ -419,7 +472,8 @@ index behind the same `memory_search` interface:
 - Optional hybrid lexical + semantic retrieval can arrive later without
   changing the user-facing model.
 - The user-facing tool should not change when the retrieval backend changes,
-  including the use of bounded excerpts and stable entry locators in results.
+  including the use of bounded excerpts, stable entry IDs, and current line
+  spans in results.
 
 ## Write Model
 
@@ -433,6 +487,11 @@ memory root must also be protected in code.
 mutations such as `/remember`, `/forget`, inbox promotion, invalidation, and
 maintenance should reuse the same internal mutation pipeline rather than
 writing files ad hoc.
+
+That mutation pipeline should resolve and operate on stable entry IDs. Query-
+driven flows such as `/forget <query>` or duplicate merging may use search to
+find candidates, but the final write must target concrete IDs rather than
+headings, paths, or stale line spans.
 
 The extension should block direct agent mutations targeting the managed memory
 root via generic `write`, `edit`, or obvious `bash` commands in `tool_call`.
@@ -457,27 +516,47 @@ or "keep in mind that...", the extension should write a durable memory. Explicit
 user requests go directly to a topic file when they express a standing
 preference or convention, and to the inbox otherwise.
 
+Because v1 memory is repo-shared across worktrees, requests that are clearly
+checkout-local should not be persisted as ordinary durable memory. The
+extension should ask the user to restate them as repo-wide guidance or leave
+them in session history until Pi grows an explicit local scope.
+
 ### Implicit writes
 
 The extension may write memory automatically when the agent judges that a fact
 is:
 
 1. Likely useful in a future session.
-2. Not obvious from repository state alone and not efficient to recover later
-   from session history (code, git history, config files, or old branches).
-3. At least moderately confident.
+2. Not cheap to recover from checked-in files, scripts, CI config, repo docs,
+   git metadata, or ordinary inspection of the repo.
+3. Learned through interaction, failure, or user guidance rather than obvious
+   static repo state.
+4. Not efficient to recover later from session history alone.
+5. At least moderately confident.
+6. Expected to remain valid across worktrees for this repo, not just in the
+   current checkout.
+
+Facts that are easy to rediscover from code, configuration, or repository
+documentation do not belong in memory just because they were useful once.
 
 Good implicit writes:
 
-- "tests require `pnpm dev:services` before `pnpm test`"
-- "the flaky integration test passes only when Redis is local"
-- "the repo uses changesets for versioning publishable packages"
+- "integration tests time out unless local services are started first, and the
+  failure message does not make that dependency obvious"
+- "after schema changes, deleting the user's stale local cache is the reliable
+  fix; rerunning the command alone keeps failing"
+- "maintainers expect rollback notes alongside risky migrations, even though
+  the repo does not encode that convention"
 
 Bad implicit writes:
 
 - "edited three files" (transient, obvious from git)
 - "the current task is to rename a variable" (ephemeral)
 - "assistant thinks the bug is probably in auth" (unresolved guess)
+- "the repo uses changesets for versioning publishable packages" (cheap to
+  recover from repo files)
+- "this workaround only applies on the current migration worktree" (checkout-
+  local)
 - contents of `.env` files or credentials (secrets)
 
 ### Capture before promote
@@ -514,10 +593,11 @@ normal conversation and performs bounded memory hygiene.
 
 ### What dreaming does
 
-- Promote durable inbox notes into topic files.
+- Promote durable inbox notes into topic files and mark the source inbox
+  entries as `promoted`.
 - Mark contradictions or stale notes for review.
 - Refresh `MEMORY.md` to reflect current topic file state.
-- Merge duplicate entries within topic files.
+- Merge duplicate entries within topic files while preserving lineage by ID.
 - Flag entries past their `Review-after` date.
 
 ### What dreaming does not do
@@ -531,20 +611,21 @@ normal conversation and performs bounded memory hygiene.
 
 - **Manual:** `/dream` command.
 - **Opportunistic:** after `session_shutdown` when the agent is idle, if
-  enabled.
+  enabled by the user.
 
 ### Guardrails
 
 - Hard token budget for the LLM call.
 - Write at most N memory mutations per run.
-- Emit a maintenance report listing what changed and why.
+- Emit a maintenance report listing which entry IDs changed and why.
 - Prefer append, promote, and supersede over destructive edits.
 
 ### Cost
 
 Dreaming requires an LLM call. The extension should use a cost-effective model
 for maintenance (configurable, defaulting to a fast/cheap option). The user
-should be able to disable automatic dreaming entirely.
+should be able to disable automatic dreaming entirely. Project settings must
+not choose the maintenance model or turn shutdown dreaming on.
 
 ## System Prompt Contract
 
@@ -568,8 +649,8 @@ The contract tells the agent:
    message, repository state, or fresh tool output, the current source wins.
 6. To use `memory_write` only for durable preferences, conventions,
    constraints, or findings likely to matter in a future session.
-7. Not to write transient task state, unresolved guesses, summaries of obvious
-   file changes, or secrets.
+7. Not to write transient task state, unresolved guesses, checkout-local
+   branch/worktree quirks, summaries of obvious file changes, or secrets.
 
 The system prompt should carry the memory policy, not the memory contents. Pi
 should not assume any session-start-only injection model or recurrent
@@ -582,7 +663,7 @@ sole enforcement mechanism for managed-memory writes.
 
 | Hook | Purpose |
 |------|---------|
-| `session_start` | Resolve project ID and memory root. Ensure directory structure exists. |
+| `session_start` | Resolve the repo-scoped project ID and memory root. Ensure directory structure exists. |
 | `before_agent_start` | Inject the narrow memory decision contract into the system prompt. |
 | `session_before_compact` | Pre-compaction flush of durable learnings to inbox. |
 | `session_shutdown` | Optionally trigger light maintenance. |
@@ -592,16 +673,16 @@ sole enforcement mechanism for managed-memory writes.
 
 | Tool | Purpose |
 |------|---------|
-| `memory_search` | Query durable memory. Returns ranked entry results with excerpts, locators, paths, headings, status, and dates. |
+| `memory_search` | Query durable memory. Returns ranked entry results with IDs, excerpts, current line spans, paths, headings, status, and dates. |
 | `memory_write` | Store a memory note through the managed mutation pipeline. Parameters: `content`, `topic` (optional — routes to topic file; omit for inbox). |
 
 ### Commands
 
 | Command | Purpose |
 |---------|---------|
-| `/memory` | Show memory status: file count, last modified, storage location. |
+| `/memory` | Show memory status: file count, last modified, storage location, and scope policy. |
 | `/remember <text>` | Shortcut for explicit durable write. |
-| `/forget <query>` | Mark matching memories as invalid. |
+| `/forget <query>` | Resolve matching memories to entry IDs, then mark those entries as invalid. |
 | `/dream` | Run maintenance on demand. |
 
 ## Prompt Behavior
@@ -614,8 +695,8 @@ Instead:
 2. Leave `MEMORY.md`, topic files, and inbox notes on disk for on-demand use.
 3. Use `memory_search` only when the task appears to require prior-session
    facts.
-4. If `memory_search` returns a relevant excerpt and entry locator, let the
-   agent use `read` for deeper inspection only when needed.
+4. If `memory_search` returns a relevant excerpt, entry ID, and current line
+   span, let the agent use `read` for deeper inspection only when needed.
 
 This directly avoids the failure mode in the literal Cline Memory Bank custom
 instructions: reading all memory files into context at the start of every task
@@ -630,9 +711,12 @@ This is the area where most current designs are weakest.
 ### Rules
 
 - New contradictory information should supersede the old entry, not simply add
-  another active note alongside it.
-- `superseded` and `invalid` entries remain on disk for traceability but are
-  excluded from default search results.
+  another active note alongside it. The supersession link should point to the
+  replacing entry's stable ID.
+- Promoted inbox source entries remain on disk, marked `promoted`, and linked
+  from the topic entry via `Promoted-from`.
+- `promoted`, `superseded`, and `invalid` entries remain on disk for
+  traceability but are excluded from default search results.
 - Entries with `Review-after` dates appear in the maintenance report when past
   due.
 - Inbox notes are naturally deprioritized by age in search results.
@@ -649,7 +733,6 @@ both dimensions.
 {
   "memory": {
     "enabled": true,
-    "storageMode": "private",
     "maintenance": {
       "dreamOnShutdown": false,
       "dreamModel": null
@@ -658,15 +741,34 @@ both dimensions.
 }
 ```
 
-Minimal surface. `dreamModel` defaults to null (use the session's current
-model). Teams that want cheaper maintenance can point it at a fast model.
+This block belongs in user-level settings only. In v1, the extension should
+ignore `memory` keys in project `.pi/settings.json` entirely instead of trying
+to deep-merge them. That keeps three boundaries hard:
+
+- Enablement is a user choice, not a repo choice.
+- Storage/privacy decisions are user choices, not repo choices.
+- Autonomous maintenance behavior and model cost are user choices, not repo
+  choices.
+
+`dreamModel` defaults to null (use the session's current model). Teams that
+want cheaper maintenance can point it at a fast model in global settings. In
+v1, scope stays fixed instead of configurable: private memory is repo-shared
+across worktrees for git repos and directory-scoped outside git. If Pi later
+adds worktree-local memory or workspace storage, those should be explicit
+user-level features rather than silent consequences of project config.
+
+If later experience justifies project-level memory settings, they should be
+restricted to non-sensitive behavioral hints only. They should never control
+enablement, storage root, storage mode, maintenance triggers, or maintenance
+model selection.
 
 ## Recommended v1 Scope
 
 Ship the smallest version that has the right shape:
 
-1. Private Markdown-backed storage under `~/.pi/agent/memory/projects/`.
-2. `MEMORY.md` + `inbox/` + `topics/`.
+1. Private Markdown-backed storage under `~/.pi/agent/memory/projects/`,
+   keyed by repo identity rather than worktree path.
+2. `MEMORY.md` + `inbox/` + `topics/`, with stable per-entry IDs.
 3. Narrow recurrent system prompt contract with no memory-content preload.
 4. `memory_search` and `memory_write` tools.
 5. Direct entry-aware file search, no index.
@@ -675,6 +777,7 @@ Ship the smallest version that has the right shape:
 7. Pre-compaction flush via `session_before_compact`.
 8. Manual `/dream` command for maintenance.
 9. `/memory`, `/remember`, `/forget` commands.
+10. User-level settings only; ignore project `memory` config in v1.
 
 Do not require in v1:
 
@@ -684,14 +787,15 @@ Do not require in v1:
 - Automatic dreaming on shutdown.
 - Monthly summaries or archival.
 - Workspace storage mode.
+- Worktree-local memory overlays.
 
 ## Evolution Path
 
 ### v1.1
 
-- Automatic dreaming on session shutdown (opt-in).
+- Automatic dreaming on session shutdown (opt-in, user-level only).
 - `Review-after` and expiration surfacing in maintenance reports.
-- Workspace storage mode for shared team memory.
+- User-enabled workspace storage mode for shared team memory.
 
 ### v1.2
 
@@ -699,6 +803,8 @@ Do not require in v1:
   corpora.
 - Duplicate suppression and reranking.
 - Inbox archival and monthly summary generation.
+- Optional explicit worktree-local overlay layered on top of repo-shared
+  memory.
 
 ### v2
 
@@ -720,5 +826,9 @@ Do not require in v1:
 
 3. What is the right default `dreamModel`? Using the session model is simple
    but potentially expensive. Using a fixed cheap model is economical but may
-   produce lower-quality maintenance. The setting exists to let users decide,
-   but the default matters.
+   produce lower-quality maintenance. The setting exists to let users decide in
+   global config, but the default matters.
+
+4. Once Pi adds a worktree-local overlay, should default search merge repo and
+   worktree scopes automatically, or require an explicit query flag when users
+   want checkout-local memory?
