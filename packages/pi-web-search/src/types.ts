@@ -76,11 +76,7 @@ export interface WebSearchSettings {
   preferredThoroughProvider?: SearchProviderName | null;
 }
 
-export type ApiKeyEnvName =
-  | "BRAVE_API_KEY"
-  | "TAVILY_API_KEY"
-  | "EXA_API_KEY"
-  | "JINA_API_KEY";
+export type ApiKeyEnvName = "BRAVE_API_KEY" | "TAVILY_API_KEY" | "EXA_API_KEY" | "JINA_API_KEY";
 
 export interface LoadedConfig {
   apiKeys: Partial<Record<ApiKeyEnvName, string>>;
