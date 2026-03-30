@@ -8,6 +8,12 @@
 - Remove the `FIRECRAWL_API_KEY` configuration path.
 - Remove the `preferredFetchProvider` setting.
 
+## 0.2.1
+
+### Metadata
+
+- Add the `pi-extension` keyword so `pi.dev/packages` can classify the package as an extension directly from npm metadata.
+
 ## 0.1.2
 
 ### Documentation
