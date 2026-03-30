@@ -56,6 +56,12 @@ The most useful public reference points are:
   separation of append-only capture from curated memory, though workspace
   storage creates accidental-commit risk.
 
+- **QMD.** A local retrieval engine for Markdown and code with BM25, vector
+  search, reranking, path context, and an SDK/MCP surface. Useful as a future
+  retrieval backend because it keeps files canonical and makes indexes
+  rebuildable. Not itself a memory system: it does not model invalidation,
+  promotion, or per-entry lifecycle.
+
 The clearest design lessons across all systems are:
 
 1. Keep Markdown as the source of truth. Treat indexes and summaries as derived
@@ -68,6 +74,8 @@ The clearest design lessons across all systems are:
    memories are stale.
 6. Treat compaction and long-term memory as cooperating concerns, not the same
    mechanism.
+7. Keep memory semantics separate from retrieval implementation so search can
+   improve without changing the storage model.
 
 ## Design Goals
 
@@ -154,6 +162,10 @@ This means the v1 design does not need an index at all. The memory corpus will
 be small enough for direct file operations. An index becomes valuable later when
 the corpus grows, and the design should not preclude one, but it should not
 require one either.
+
+QMD fits this rule well: it can be a local, rebuildable retrieval layer later
+without becoming the source of truth. If adopted, it should remain an internal
+backend behind `memory_search`, not a user-facing part of the storage model.
 
 ### Derived summaries never replace source memories
 
@@ -294,41 +306,80 @@ Two details matter:
 2. `Review-after` lets the system surface candidates for review without
    silently deleting history.
 
+### Retrieval is entry-based, not file-based
+
+The files above are organized for humans. Retrieval should operate on parsed
+memory entries:
+
+- One topic entry = one heading section in `topics/*.md`.
+- One inbox entry = one timestamped heading section in `inbox/YYYY-MM-DD.md`.
+
+Each parsed entry carries the data retrieval actually needs: file path,
+heading, body, status, dates, and whether it came from a topic file or the
+inbox.
+
+This distinction matters even if the v1 implementation uses simple file
+operations. It matters even more for future indexed backends such as QMD,
+because they index documents and chunks, not Pi's memory-state semantics. Pi
+therefore needs its own entry parser either way.
+
 ## Retrieval Model
 
 ### v1: direct file search
 
 The initial retrieval engine should be straightforward: glob for memory files,
-grep for query terms, parse results with heading-aware chunking.
+parse them into entries, use direct lexical matching over headings and bodies,
+and rank with simple heuristics. Grep can still be used internally to shortlist
+candidate files, but the retrieval unit returned to the agent is an entry, not
+a whole file.
 
 Why not require an index in v1:
 
 - Pi already has glob and grep as core capabilities. The extension can use
-  `pi.exec` to search its own Markdown files.
+  `pi.exec` to shortlist and inspect its own Markdown files.
 - The memory corpus in early usage will be small — dozens of files, not
   thousands.
 - A rebuildable index can be added later behind the same tool interface without
   changing the user-facing model.
 
+### Why not require QMD in v1
+
+QMD is attractive, but making it a default dependency in v1 is the wrong trade:
+
+- The default corpus is small enough that direct entry-aware search is simpler.
+- QMD adds index management, native dependencies, and optional local model
+  downloads that are disproportionate for a private memory store.
+- QMD does not understand `Status`, `Review-after`, promotion, or inbox recency
+  on its own.
+- Pi would still need its own entry parser and memory-policy layer, so QMD does
+  not simplify the core design.
+
 ### Search behavior
 
 `memory_search` should:
 
-1. Search `MEMORY.md`, `topics/*.md`, and recent `inbox/*.md`.
-2. Chunk results by heading boundaries, not fixed character windows.
+1. Search parsed topic entries and recent inbox entries, with `MEMORY.md` as an
+   orientation aid.
+2. Use heading boundaries as entry boundaries, not fixed character windows.
 3. Exclude entries with `Status: invalid` by default.
 4. Down-rank entries with `Status: superseded` unless the query asks for
    history.
 5. Prefer recent inbox notes over old ones.
 6. Return results with file path, heading, status, and date.
 
-### Future: indexed retrieval
+### Future: indexed retrieval via QMD or equivalent
 
 When the corpus grows large enough to make direct grep slow, add a rebuildable
 index behind the same `memory_search` interface:
 
-- Lexical index via SQLite FTS as a first step.
-- Optional hybrid lexical + semantic retrieval as a later step.
+- Index a derived entry corpus, not raw topic files. Each indexed document
+  should correspond to one parsed memory entry.
+- QMD is a strong candidate backend because it already provides local BM25,
+  vector search, reranking, path context, and an embeddable SDK.
+- Pi must continue to enforce `Status`, history requests, and inbox recency
+  itself before or after backend retrieval.
+- Optional hybrid lexical + semantic retrieval can arrive later without
+  changing the user-facing model.
 - The user-facing tool should not change when the retrieval backend changes.
 
 ## Write Model
@@ -538,7 +589,7 @@ Ship the smallest version that has the right shape:
 2. `MEMORY.md` + `inbox/` + `topics/`.
 3. Bounded startup load from `MEMORY.md`.
 4. `memory_search` and `memory_write` tools.
-5. Direct file search (glob + grep), no index.
+5. Direct entry-aware file search, no index.
 6. System prompt contract with full write policy.
 7. Pre-compaction flush via `session_before_compact`.
 8. Manual `/dream` command for maintenance.
@@ -547,6 +598,7 @@ Ship the smallest version that has the right shape:
 Do not require in v1:
 
 - SQLite or any index.
+- QMD or any other external retrieval runtime.
 - Embeddings.
 - Automatic dreaming on shutdown.
 - Monthly summaries or archival.
@@ -562,13 +614,15 @@ Do not require in v1:
 
 ### v1.2
 
-- Rebuildable SQLite FTS index for faster search over large corpora.
+- Optional QMD-backed rebuildable index over derived memory entries for larger
+  corpora.
 - Duplicate suppression and reranking.
 - Inbox archival and monthly summary generation.
 
 ### v2
 
-- Optional hybrid lexical + semantic retrieval.
+- Optional hybrid lexical + semantic retrieval via QMD or an equivalent local
+  backend.
 - Per-subagent memory scopes.
 - Richer inspection UI for memory lineage.
 
