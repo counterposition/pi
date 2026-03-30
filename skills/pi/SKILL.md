@@ -7,13 +7,13 @@ compatibility: "Pi-specific guidance for agents that support Agent Skills"
 
 # Pi Coding Agent
 
-Pi is a minimal, extensible terminal coding agent. It ships four default tools (read, write, edit, bash) and four execution modes (interactive TUI, print/JSON, RPC, SDK). Everything else — sub-agents, plan mode, permission popups, MCP — is added through extensions.
+Pi is a minimal terminal coding harness. It ships four default tools (`read`, `write`, `edit`, `bash`) and four execution modes (interactive TUI, print, JSON/RPC, SDK). Features like sub-agents, plan mode, permission flows, and MCP are intentionally left to extensions and Pi packages.
 
 Pi's philosophy: **adapt Pi to your workflows, not the other way around**. Users extend it via TypeScript extensions, skills, prompt templates, themes, and shareable Pi packages.
 
 ## Architecture at a Glance
 
-Pi is a monorepo with four core packages:
+The coding-agent stack centers on four core packages. The monorepo also includes adjacent packages such as `pi-web-ui`, `pi-mom`, and `pi-pods`.
 
 | Package | npm | Purpose |
 |---------|-----|---------|
@@ -76,6 +76,12 @@ Bundles of extensions, skills, prompts, and themes distributed via npm, git, or 
 
 Read `references/packages.md` for the package structure, `pi` manifest field, installation, and publishing.
 
+### Context Files & Prompt Templates
+
+Pi loads `AGENTS.md` or `CLAUDE.md` from the global agent dir and from `cwd` up through parent directories. `.pi/SYSTEM.md` replaces the default system prompt, and `APPEND_SYSTEM.md` appends to it. Prompt templates in `prompts/` directories become slash commands.
+
+Read `references/settings.md` for discovery rules and config keys, and `references/packages.md` for how prompts/themes ship in packages.
+
 ### SDK
 
 Programmatic embedding via `createAgentSession()`. Gives full control over models, tools, extensions, sessions, and event streaming.
@@ -117,7 +123,7 @@ Compaction walks backward from the newest message, keeping `keepRecentTokens` (d
 | `find` | Find files by glob pattern |
 | `ls` | List directory contents |
 
-**Tool presets:** `CODING_TOOLS` = [read, bash, edit, write], `READ_ONLY_TOOLS` = [read, grep, find, ls], `ALL_TOOLS` = all seven.
+**Common tool sets:** `codingTools()` = `[read, bash, edit, write]`, `readOnlyTools()` = `[read, grep, find, ls]`. When you provide a custom `cwd` and explicit tools in the SDK, use `createCodingTools(cwd)` / `createReadOnlyTools(cwd)` so path resolution stays correct.
 
 ## Execution Modes
 
@@ -125,34 +131,60 @@ Compaction walks backward from the newest message, keeping `keepRecentTokens` (d
 |------|-----------|----------|
 | Interactive | `pi` | Full TUI with editor, streaming, keybindings |
 | Print | `pi -p "prompt"` | Single-shot text output |
-| JSON | `pi --mode json -p "prompt"` | Newline-delimited JSON events |
+| JSON | `pi --mode json "prompt"` | Newline-delimited event stream |
 | RPC | `pi --mode rpc` | JSON-RPC over stdin/stdout for IDE integration |
 | SDK | `createAgentSession()` | Embed in Node.js applications |
 
 ## Quick Reference: CLI Flags
 
 ```text
-pi [options] [message]
+pi [options] [@files...] [messages...]
 
---model, -m <model>       Model (e.g., "claude-sonnet-4-20250514")
---provider <name>         Provider name
---api-key <key>           API key override
---tools <list>            Comma-separated tool names
---extensions, -e <path>   Load extension from path
---skills <path>           Load skill from path
---system-prompt <text>    Override system prompt
---thinking-level <level>  off | minimal | low | medium | high | xhigh
---new                     Start new session
---resume <id>             Resume session by ID
---fork <id>               Fork from session
---continue-recent         Continue most recent session
---no-session              Don't persist session
---mode <mode>             json | rpc
--p                        Print mode (non-interactive)
-install <source>          Install package (npm:pkg, git:url, path)
-remove <pkg>              Remove package
-update                    Update packages
-list                      List installed packages
+# package commands
+install <source> [-l]
+remove <source> [-l]
+uninstall <source> [-l]
+update [source]
+list
+config
+
+# modes and output
+-p, --print
+--mode json|rpc
+--export <in> [out]
+
+# model selection
+--provider <name>
+--model <pattern>
+--api-key <key>
+--thinking <level>
+--models <patterns>
+--list-models [search]
+
+# sessions
+-c, --continue
+-r, --resume
+--session <path|id>
+--fork <path|id>
+--session-dir <dir>
+--no-session
+
+# tools and resources
+--tools <list>
+--no-tools
+-e, --extension <source>
+--skill <path>
+--prompt-template <path>
+--theme <path>
+--no-extensions
+--no-skills
+--no-prompt-templates
+--no-themes
+
+# prompts and misc
+--system-prompt <text>
+--append-system-prompt <text>
+--verbose
 ```
 
 ## How to Use This Skill
@@ -164,6 +196,7 @@ When working with Pi, read the appropriate reference file for the task at hand:
 | Writing an extension (tools, commands, events, UI) | `references/extensions.md` |
 | Creating a skill (SKILL.md authoring) | `references/skills.md` |
 | Configuring Pi (settings.json options) | `references/settings.md` |
+| Context files, prompt templates, themes, and resource discovery | `references/settings.md` and `references/packages.md` |
 | Building a shareable package | `references/packages.md` |
 | Embedding Pi programmatically | `references/sdk.md` |
 | Adding LLM providers or models | `references/providers.md` |

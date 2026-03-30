@@ -1,97 +1,127 @@
 # Pi Packages
 
-Packages bundle extensions, skills, prompt templates, and themes for sharing via npm, git, or local paths.
+Pi packages bundle extensions, skills, prompt templates, and themes so they can be shared through npm, git, or local paths.
 
-**Security warning:** Packages run with full system access. Extensions execute arbitrary code, skills can instruct the model to perform any action. Review source before installing third-party packages.
+**Security warning:** Pi packages run with full system access. Review third-party source before installing it.
 
-## Installation
+## Install and Manage
 
 ```bash
-# From npm
-pi install npm:@foo/pi-extensions@1.0.0
-
-# From git
+pi install npm:@foo/bar@1.0.0
 pi install git:github.com/user/repo@v1
-pi install https://github.com/user/repo.git
-pi install git@github.com:user/repo.git
-
-# From local path
-pi install ./my-package
+pi install https://github.com/user/repo
 pi install /absolute/path/to/package
+pi install ./relative/path/to/package
 
-# Project-local install (writes to .pi/settings.json for team sharing)
-pi install -l npm:@foo/pi-extensions
-
-# Temporary trial (loads for current session, doesn't install)
-pi -e npm:@foo/pi-extensions
+pi remove npm:@foo/bar
+pi uninstall npm:@foo/bar
+pi list
+pi update
+pi config
 ```
 
-## Management Commands
+By default, `install` and `remove` write to global settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead.
 
-```bash
-pi list              # List installed packages
-pi update            # Update non-pinned packages
-pi remove <pkg>      # Remove a package
-```
+Project installs are shareable with a team. Pi will install missing project packages automatically on startup.
 
-## Package Structure
+For temporary one-run testing, use `--extension` / `-e` with an npm or git source. Pi installs it into a temporary directory for that run only.
 
-### Convention-Based (Auto-Discovery)
+## Package Sources
 
-Place files in standard directories — Pi discovers them automatically:
+### npm
 
 ```text
-my-pi-package/
-├── package.json          # npm package metadata + optional pi manifest
-├── extensions/           # .ts and .js files → loaded as extensions
-│   └── my-ext.ts
-├── skills/               # Directories with SKILL.md → loaded as skills
-│   └── my-skill/
-│       └── SKILL.md
-├── prompts/              # .md files → loaded as prompt templates
-│   └── review.md
-└── themes/               # .json files → loaded as themes
-    └── my-theme.json
+npm:@scope/pkg@1.2.3
+npm:pkg
 ```
 
-### Manifest-Based (Explicit)
+- Global installs use `npm install -g`
+- Project installs go under `.pi/npm/`
+- Version-pinned installs are skipped by `pi update`
+- Use `npmCommand` in settings if you need a wrapper such as `mise` or `asdf`
 
-Declare resources in `package.json` under the `pi` key:
+### git
+
+```text
+git:github.com/user/repo@v1
+git:git@github.com:user/repo@v1
+https://github.com/user/repo@v1
+ssh://git@github.com/user/repo@v1
+```
+
+- Global clones live in `~/.pi/agent/git/`
+- Project clones live in `.pi/git/`
+- Refs pin the package and are skipped by `pi update`
+- Pi runs `npm install` after clone/pull when `package.json` exists
+
+### local paths
+
+- Files are treated as single extensions
+- Directories are loaded using normal package rules
+- Relative paths resolve relative to the settings file they appear in
+
+## Creating a Package
+
+Pi supports either a `pi` manifest in `package.json` or convention-based directories.
 
 ```json
 {
-  "name": "@foo/pi-extensions",
-  "version": "1.0.0",
+  "name": "my-package",
+  "keywords": ["pi-package"],
   "pi": {
-    "extensions": ["src/ext1.ts", "src/ext2.ts"],
-    "skills": ["skills/my-skill"],
-    "prompts": ["prompts/"],
-    "themes": ["themes/custom.json"]
+    "extensions": ["./extensions"],
+    "skills": ["./skills"],
+    "prompts": ["./prompts"],
+    "themes": ["./themes"]
   }
 }
 ```
 
-Both approaches can be combined. Explicit paths in the `pi` manifest take precedence.
+If there is no `pi` manifest, Pi auto-discovers:
+
+- `extensions/` for `.ts` / `.js`
+- `skills/` for `SKILL.md` directories and top-level `.md` skill files
+- `prompts/` for `.md`
+- `themes/` for `.json`
 
 ## Dependencies
 
-- **Standard npm dependencies:** Declare in `package.json` → `dependencies` as usual. They're installed with the package.
-- **Pi peer dependencies** (`@mariozechner/pi-coding-agent`, `@mariozechner/pi-ai`, etc.): Use `"*"` as the version range in `peerDependencies`. Do NOT bundle these.
-- **Other Pi packages:** If your package depends on another Pi package, it must be bundled explicitly.
+- Normal runtime dependencies belong in `dependencies`
+- Pi core libraries should be peer deps with `"*"` ranges:
+  - `@mariozechner/pi-ai`
+  - `@mariozechner/pi-agent-core`
+  - `@mariozechner/pi-coding-agent`
+  - `@mariozechner/pi-tui`
+  - `@sinclair/typebox`
+- Other Pi packages must be bundled explicitly if your package depends on them
 
-## Publishing to npm
+## Package Filtering
 
-```bash
-cd my-pi-package
-npm publish
+`settings.json` can narrow package resources with object-form entries:
+
+```json
+{
+  "packages": [
+    {
+      "source": "npm:my-package",
+      "extensions": ["extensions/*.ts", "!extensions/legacy.ts"],
+      "skills": [],
+      "prompts": ["prompts/review.md"],
+      "themes": ["+themes/legacy.json"]
+    }
+  ]
+}
 ```
 
-Users install with `pi install npm:@foo/pi-extensions`.
+Rules:
 
-## Deduplication
+- Omit a key to load all resources of that type
+- Use `[]` to load none
+- Use `!pattern` to exclude glob matches
+- Use `+path` / `-path` for exact include or exclude
 
-When the same resource name appears from multiple sources:
+## Scope and Deduplication
 
-- Project-level packages override global ones
-- First discovery wins for same-level conflicts
-- Pi warns about collisions
+- Project settings override global settings for the same package identity
+- Identity is package name for npm, repo URL for git, and resolved absolute path for local sources
+- `pi config` can enable or disable package resources after installation

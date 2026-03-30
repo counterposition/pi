@@ -254,16 +254,16 @@ All components implement `render(width) → string[]` and optional `handleInput(
 
 ```typescript
 // Footer status text
-ctx.ui.setStatus("🔍 Searching...");
+ctx.ui.setStatus("search", "Searching...");
 
 // Widget above the editor
-ctx.ui.setWidget("above", new Text("Current task: refactoring auth", 0, 0));
+ctx.ui.setWidget("current-task", new Text("Current task: refactoring auth", 0, 0));
 
 // Widget below the editor
-ctx.ui.setWidget("below", progressComponent);
+ctx.ui.setWidget("progress", progressComponent, { placement: "belowEditor" });
 
 // Custom footer
-ctx.ui.setFooter(new Text(theme.fg("accent", "My Extension v1.0"), 0, 0));
+ctx.ui.setFooter((tui, theme) => new Text(theme.fg("accent", "My Extension v1.0"), 0, 0));
 ```
 
 ## File Watcher / Trigger

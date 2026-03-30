@@ -1,71 +1,104 @@
 # Providers & Custom Models
 
-Pi supports 20+ LLM providers out of the box and allows adding custom providers via `models.json` or extensions.
+Pi supports subscription-based providers via OAuth, API-key providers via env vars or `auth.json`, and custom providers via `models.json` or extensions.
 
-## Built-in Providers
+## Subscription Providers
 
-### Subscription-based (OAuth via `/login`)
+Use `/login` in interactive mode, then select a provider:
 
-| Provider | Subscription |
-|----------|-------------|
-| Anthropic | Claude Pro / Max |
-| OpenAI | ChatGPT Plus / Pro |
-| GitHub Copilot | Copilot subscription |
-| Google | Google AI / Vertex |
+- Anthropic Claude Pro / Max
+- OpenAI ChatGPT Plus / Pro (Codex)
+- GitHub Copilot
+- Google Gemini CLI
+- Google Antigravity
 
-### API Key Providers
+Use `/logout` to clear stored OAuth credentials.
 
-| Provider | Env Variable | Auth.json Key |
-|----------|-------------|---------------|
+## API Key Providers
+
+| Provider | Env Var | `auth.json` key |
+|----------|---------|-----------------|
 | Anthropic | `ANTHROPIC_API_KEY` | `anthropic` |
+| Azure OpenAI Responses | `AZURE_OPENAI_API_KEY` | `azure-openai-responses` |
 | OpenAI | `OPENAI_API_KEY` | `openai` |
-| Google | `GOOGLE_API_KEY` | `google` |
-| xAI | `XAI_API_KEY` | `xai` |
+| Google Gemini | `GEMINI_API_KEY` | `google` |
+| Mistral | `MISTRAL_API_KEY` | `mistral` |
 | Groq | `GROQ_API_KEY` | `groq` |
 | Cerebras | `CEREBRAS_API_KEY` | `cerebras` |
+| xAI | `XAI_API_KEY` | `xai` |
 | OpenRouter | `OPENROUTER_API_KEY` | `openrouter` |
-| Mistral | `MISTRAL_API_KEY` | `mistral` |
+| Vercel AI Gateway | `AI_GATEWAY_API_KEY` | `vercel-ai-gateway` |
+| ZAI | `ZAI_API_KEY` | `zai` |
+| OpenCode Zen | `OPENCODE_API_KEY` | `opencode` |
+| OpenCode Go | `OPENCODE_API_KEY` | `opencode-go` |
 | Hugging Face | `HF_TOKEN` | `huggingface` |
+| Kimi For Coding | `KIMI_API_KEY` | `kimi-coding` |
 | MiniMax | `MINIMAX_API_KEY` | `minimax` |
-| Together | `TOGETHER_API_KEY` | `together` |
-| Fireworks | `FIREWORKS_API_KEY` | `fireworks` |
-| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek` |
-| Sambanova | `SAMBANOVA_API_KEY` | `sambanova` |
+| MiniMax (China) | `MINIMAX_CN_API_KEY` | `minimax-cn` |
 
-## Credential Priority
+## Auth File
 
-1. CLI flags (`--api-key`)
-2. `~/.pi/agent/auth.json` entries
-3. Environment variables
-4. Custom provider config in `models.json`
-
-## Auth File Format
-
-`~/.pi/agent/auth.json` (permissions: `0600`):
+`~/.pi/agent/auth.json` stores API keys and OAuth tokens with `0600` permissions:
 
 ```json
 {
-  "anthropic": {
-    "key": "sk-ant-..."
-  },
-  "openai": {
-    "key": "!op read 'OpenAI API Key'"
-  },
-  "google": {
-    "key": "GOOGLE_API_KEY"
-  }
+  "anthropic": { "type": "api_key", "key": "sk-ant-..." },
+  "openai": { "type": "api_key", "key": "!op read 'OpenAI API Key'" },
+  "google": { "type": "api_key", "key": "GEMINI_API_KEY" }
 }
 ```
 
-Key value resolution:
+`key` values can be:
 
-- **Literal:** `"sk-ant-..."` — used directly
-- **Shell command:** `"!command"` — executes command, uses stdout
-- **Env variable:** `"ENV_VAR_NAME"` — reads from environment
+- A literal secret
+- An environment variable name
+- A shell command prefixed with `!`
 
-## Custom Models via models.json
+## Credential Resolution Order
 
-`~/.pi/agent/models.json`:
+1. `--api-key`
+2. `auth.json`
+3. Environment variables
+4. Custom provider keys from `models.json`
+
+## Cloud Providers
+
+### Azure OpenAI
+
+```bash
+export AZURE_OPENAI_API_KEY=...
+export AZURE_OPENAI_BASE_URL=https://your-resource.openai.azure.com
+export AZURE_OPENAI_API_VERSION=2024-02-01
+export AZURE_OPENAI_DEPLOYMENT_NAME_MAP=gpt-4o=my-gpt4o
+```
+
+### Amazon Bedrock
+
+Pi supports standard AWS auth flows:
+
+- `AWS_PROFILE`
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+- `AWS_BEARER_TOKEN_BEDROCK`
+
+Useful extras:
+
+- `AWS_REGION`
+- `AWS_BEDROCK_FORCE_CACHE=1` for application inference profiles
+- `AWS_ENDPOINT_URL_BEDROCK_RUNTIME` / `AWS_BEDROCK_SKIP_AUTH` / `AWS_BEDROCK_FORCE_HTTP1` for proxies
+
+### Google Vertex AI
+
+Use ADC:
+
+```bash
+gcloud auth application-default login
+export GOOGLE_CLOUD_PROJECT=your-project
+export GOOGLE_CLOUD_LOCATION=us-central1
+```
+
+## Custom Providers via `models.json`
+
+Use `models.json` for OpenAI-compatible, Anthropic-compatible, Google-compatible, or other supported APIs:
 
 ```json
 {
@@ -81,8 +114,7 @@ Key value resolution:
           "name": "Llama 3.2",
           "contextWindow": 128000,
           "maxTokens": 4096,
-          "input": ["text"],
-          "reasoning": false
+          "input": ["text"]
         }
       ]
     }
@@ -90,123 +122,39 @@ Key value resolution:
 }
 ```
 
-### Supported API Types
+Common `api` values:
 
-| API | Value |
-|-----|-------|
-| OpenAI Chat Completions | `"openai-completions"` |
-| OpenAI Responses | `"openai-responses"` |
-| Anthropic Messages | `"anthropic-messages"` |
-| Google Generative AI | `"google-generative-ai"` |
-| Google Vertex AI | `"google-vertex"` |
-| Azure OpenAI | `"azure-openai-responses"` |
-| Mistral | `"mistral-conversations"` |
-| Amazon Bedrock | `"bedrock-converse-stream"` |
+- `"openai-completions"`
+- `"openai-responses"`
+- `"anthropic-messages"`
+- `"google-generative-ai"`
+- `"google-vertex"`
+- `"azure-openai-responses"`
+- `"mistral-conversations"`
+- `"bedrock-converse-stream"`
 
-### Model Fields
+## Custom Providers via Extensions
 
-| Field | Required | Type | Description |
-|-------|----------|------|-------------|
-| `id` | Yes | string | Model ID sent to API |
-| `name` | No | string | Human-readable display name |
-| `reasoning` | No | boolean | Supports extended thinking |
-| `input` | No | string[] | `["text"]` or `["text", "image"]` |
-| `contextWindow` | No | number | Max context tokens |
-| `maxTokens` | No | number | Max output tokens |
-| `cost` | No | object | `{ input, output, cacheRead, cacheWrite }` per million tokens |
-
-### Provider Fields
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Provider identifier |
-| `baseUrl` | Yes | API endpoint URL |
-| `api` | Yes | API type (see table above) |
-| `apiKey` | Yes | API key (literal, env var, or shell command) |
-| `models` | Yes | Array of model definitions |
-| `headers` | No | Custom HTTP headers (same value resolution as apiKey) |
-
-### Compatibility Settings
-
-For partially OpenAI-compatible APIs, use the `compat` field on models:
-
-```json
-{
-  "compat": {
-    "supportsDeveloperRole": false,
-    "supportsReasoningEffort": false,
-    "supportsStreamOptions": true,
-    "openRouterProviderOrder": ["anthropic", "google"]
-  }
-}
-```
-
-## Cloud Providers
-
-### Azure OpenAI
-
-```json
-{
-  "name": "azure-openai",
-  "baseUrl": "https://myresource.openai.azure.com",
-  "api": "azure-openai-responses",
-  "apiKey": "AZURE_OPENAI_API_KEY",
-  "models": [{ "id": "gpt-4o", "name": "GPT-4o" }]
-}
-```
-
-### Amazon Bedrock
-
-Uses AWS credentials (profile, IAM keys, or bearer tokens). Set `AWS_PROFILE` or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`. Pi auto-enables Bedrock for Claude models when credentials are available.
-
-### Google Vertex AI
-
-Uses Application Default Credentials: `gcloud auth application-default login`.
-
-## Custom Provider via Extension
-
-For full control (custom streaming, OAuth, etc.):
+Use extensions when you need custom streaming, custom headers, or OAuth/device-flow logic:
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-
-export default function (pi: ExtensionAPI) {
-  pi.registerProvider("my-provider", {
-    baseUrl: "https://api.example.com",
-    api: "openai-completions",
-    apiKey: "my-key",
-    models: [
-      { id: "my-model", name: "My Model", contextWindow: 128000, maxTokens: 4096 }
-    ],
-    // Optional: custom streaming for non-standard APIs
-    streamSimple: async (model, context, options) => {
-      // Return AsyncIterable<AssistantMessageEvent>
-    },
-    // Optional: OAuth device flow
-    oauth: {
-      deviceCodeUrl: "https://auth.example.com/device",
-      tokenUrl: "https://auth.example.com/token",
-      clientId: "my-client-id",
-      scopes: ["chat"],
-    },
-  });
-}
+pi.registerProvider("my-provider", {
+  baseUrl: "https://api.example.com",
+  api: "openai-completions",
+  apiKey: "MY_PROVIDER_KEY",
+  models: [{ id: "my-model", name: "My Model", contextWindow: 128000, maxTokens: 4096 }],
+});
 ```
 
-## Overriding Built-in Providers
+## SDK / Extension Auth Lookup
 
-To route a built-in provider through a proxy while keeping its models:
+If extension or SDK code needs auth for a specific model request, use `getApiKeyAndHeaders(model)` rather than the removed `getApiKey(model)`:
 
-```json
-{
-  "providers": [
-    {
-      "name": "anthropic",
-      "baseUrl": "https://my-proxy.example.com/v1",
-      "apiKey": "proxy-key"
-    }
-  ]
-}
+```typescript
+const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+if (!auth.ok) throw new Error(auth.error);
+
+const { apiKey, headers } = auth;
 ```
 
-Models.json reloads automatically when accessing `/model` — no restart needed.
+This matters for providers whose headers or auth values resolve dynamically on every request.

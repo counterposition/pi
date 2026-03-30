@@ -1,170 +1,192 @@
 # Settings
 
-Pi uses hierarchical JSON configuration. Project settings (`.pi/settings.json`) merge over global settings (`~/.pi/agent/settings.json`). Nested objects are deep-merged; project values override global for the same key.
+Pi uses JSON settings files with project settings overriding global settings:
 
-Edit settings directly or use `/settings` in interactive mode.
+| Location | Scope |
+|----------|-------|
+| `~/.pi/agent/settings.json` | Global |
+| `.pi/settings.json` | Project |
 
-## Complete Settings Reference
+Edit JSON directly or use `/settings` for common interactive options.
 
-### Model & Thinking
+## Model & Thinking
 
 ```json
 {
-  "provider": "anthropic",           // Default provider name
-  "model": "claude-sonnet-4-20250514", // Default model ID
-  "thinkingLevel": "medium",         // "off" | "minimal" | "low" | "medium" | "high" | "xhigh"
-  "thinkingLevelBudget": null,       // Custom token budget per thinking level (overrides defaults)
-  "modelCyclePatterns": ["claude-*", "gpt-4o"]  // Glob patterns for Ctrl+P model cycling
+  "defaultProvider": "anthropic",
+  "defaultModel": "claude-sonnet-4-20250514",
+  "defaultThinkingLevel": "medium",
+  "hideThinkingBlock": false,
+  "thinkingBudgets": {
+    "minimal": 1024,
+    "low": 4096,
+    "medium": 10240,
+    "high": 32768
+  }
 }
 ```
 
-### Compaction
+- Thinking levels: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`
+- `hideThinkingBlock` hides visible thinking output in the UI
+
+## UI & Display
+
+```json
+{
+  "theme": "dark",
+  "quietStartup": false,
+  "collapseChangelog": false,
+  "doubleEscapeAction": "tree",
+  "treeFilterMode": "default",
+  "editorPaddingX": 0,
+  "autocompleteMaxVisible": 5,
+  "showHardwareCursor": false
+}
+```
+
+- `doubleEscapeAction`: `"tree"`, `"fork"`, or `"none"`
+- `treeFilterMode`: `"default"`, `"no-tools"`, `"user-only"`, `"labeled-only"`, or `"all"`
+
+## Compaction, Branch Summary, Retry
 
 ```json
 {
   "compaction": {
-    "enabled": true,                 // Enable auto-compaction
-    "reserveTokens": 16384,          // Tokens to reserve for new responses
-    "keepRecentTokens": 20000        // Recent tokens to keep uncompacted
-  }
-}
-```
-
-### Branch Summary
-
-```json
-{
+    "enabled": true,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000
+  },
   "branchSummary": {
-    "enabled": true,                 // Summarize when switching branches via /tree
-    "maxTokens": 4096,              // Max tokens for summary
-    "skipPrompt": false              // Skip confirmation prompt
-  }
-}
-```
-
-### Retry
-
-```json
-{
+    "reserveTokens": 16384,
+    "skipPrompt": false
+  },
   "retry": {
-    "maxRetries": 3,                 // Max automatic retries on transient errors
-    "initialDelayMs": 2000,          // First retry delay
-    "maxDelayMs": 60000              // Max delay (exponential backoff)
+    "enabled": true,
+    "maxRetries": 3,
+    "baseDelayMs": 2000,
+    "maxDelayMs": 60000
   }
 }
 ```
 
-### Message Delivery
+Notes:
+
+- `retry.maxDelayMs = 0` disables the cap on server-requested retry delays.
+- `branchSummary.skipPrompt` skips the confirmation step when navigating with `/tree`.
+
+## Message Delivery
 
 ```json
 {
-  "steeringMode": "all",            // "all" | "one-at-a-time" — how steer messages are delivered
-  "followUpMode": "all",            // "all" | "one-at-a-time" — how follow-up messages are delivered
-  "transport": "auto"               // "sse" | "websocket" | "auto"
+  "steeringMode": "one-at-a-time",
+  "followUpMode": "one-at-a-time",
+  "transport": "sse"
 }
 ```
 
-### Terminal & Images
+- `steeringMode` and `followUpMode`: `"all"` or `"one-at-a-time"`
+- `transport`: `"sse"`, `"websocket"`, or `"auto"`
+
+## Terminal, Images, and Shell
 
 ```json
 {
   "terminal": {
-    "showImages": true,              // Display images in terminal
-    "maxImageWidth": 2000,           // Max image dimensions for resizing
-    "maxImageHeight": 2000
+    "showImages": true,
+    "clearOnShrink": false
   },
-  "image": {
-    "autoResize": true               // Auto-resize large images before sending to LLM
+  "images": {
+    "autoResize": true,
+    "blockImages": false
+  },
+  "shellPath": "/bin/bash",
+  "shellCommandPrefix": "",
+  "npmCommand": ["mise", "exec", "node@20", "--", "npm"]
+}
+```
+
+- `npmCommand` is argv-style and is used for npm lookup/install operations, including git-package installs.
+
+## Sessions, Model Cycling, Markdown
+
+```json
+{
+  "sessionDir": ".pi/sessions",
+  "enabledModels": ["claude-*", "gpt-4o", "gemini-2*"],
+  "markdown": {
+    "codeBlockIndent": " "
   }
 }
 ```
 
-### Shell
+Precedence for session storage is:
+
+1. `--session-dir`
+2. `sessionDir` in settings
+3. Extension `session_directory` hooks
+
+## Resources
+
+These settings control what Pi loads from disk or packages:
 
 ```json
 {
-  "shellPath": "/bin/bash",          // Custom shell path (Windows: "C:\\...\\bash.exe")
-  "shellCommandPrefix": "",          // Prefix prepended to every bash command
-  "npmCommand": "npm"                // npm, pnpm, yarn, bun
+  "packages": [
+    "npm:@foo/pi-tools",
+    {
+      "source": "git:github.com/user/repo@v1",
+      "skills": ["brave-search"],
+      "extensions": []
+    }
+  ],
+  "extensions": ["./extensions/my-ext.ts"],
+  "skills": ["./skills", "../.claude/skills"],
+  "prompts": ["./prompts"],
+  "themes": ["./themes"],
+  "enableSkillCommands": true
 }
 ```
 
-### UI
+Notes:
 
-```json
-{
-  "theme": "dark",                   // "dark" | "light" | custom theme name
-  "showStartupBanner": true,         // Show banner on startup
-  "editorPadding": 1,               // Lines of padding in editor
-  "showAutoComplete": true,          // Show autocomplete suggestions
-  "cursorStyle": "block"            // "block" | "underline" | "bar"
-}
-```
+- Paths in `~/.pi/agent/settings.json` resolve relative to `~/.pi/agent`.
+- Paths in `.pi/settings.json` resolve relative to `.pi`.
+- `packages` loads npm/git/local Pi packages.
+- `extensions`, `skills`, `prompts`, and `themes` are for local files/directories.
+- `enableSkillCommands` controls `/skill:name` registration.
 
-### Sessions
+## Include / Exclude Patterns
 
-```json
-{
-  "sessionDir": null                 // Custom session storage path (default: ~/.pi/agent/sessions/)
-}
-```
-
-### Resources
-
-Load extensions, skills, prompts, and themes from paths or packages:
-
-```json
-{
-  "extensions": [
-    "~/.pi/agent/extensions/my-ext.ts",
-    "npm:@foo/pi-extensions"
-  ],
-  "skills": [
-    ".pi/skills/my-skill",
-    "npm:@foo/pi-skills"
-  ],
-  "prompts": [
-    "~/.pi/agent/prompts/"
-  ],
-  "themes": [
-    "npm:@foo/pi-themes"
-  ],
-  "customPackages": [
-    "npm:@foo/pi-package@1.0.0",
-    "git:github.com/user/repo",
-    "./local/path"
-  ]
-}
-```
-
-### Resource Pattern Matching
-
-Resources support include/exclude patterns:
+Arrays support filtering:
 
 ```json
 {
   "skills": [
-    "npm:@foo/pi-skills",      // Include all skills from package
-    "!secret-skill",            // Exclude by name
-    "+override-skill",          // Force-include (overrides exclusions)
-    "-unwanted-skill"           // Force-exclude (overrides inclusions)
+    "./skills",
+    "!legacy-skill",
+    "+must-load-skill",
+    "-blocked-skill"
   ]
 }
 ```
+
+- `!pattern` excludes glob matches
+- `+path` force-includes an exact path
+- `-path` force-excludes an exact path
 
 ## Environment Variables
 
 | Variable | Effect |
 |----------|--------|
-| `PI_CODING_AGENT_DIR` | Override global config directory (default: `~/.pi/agent/`) |
-| `PI_OFFLINE` | Disable package updates and tool downloads |
-| `ANTHROPIC_API_KEY` | Anthropic API key |
-| `OPENAI_API_KEY` | OpenAI API key |
-| Additional provider env vars | See `references/providers.md` |
+| `PI_CODING_AGENT_DIR` | Override the global agent directory |
+| `PI_PACKAGE_DIR` | Override package storage directory |
+| `PI_SKIP_VERSION_CHECK` | Skip startup version checks |
+| `PI_CACHE_RETENTION` | Use extended prompt-cache retention where supported |
+| `VISUAL`, `EDITOR` | External editor for `Ctrl+G` |
+| Provider API key env vars | See `references/providers.md` |
 
-## Editing Tips
+## Practical Notes
 
-- Use `/settings` in interactive mode for a guided editor
-- Project settings are committed to version control (`.pi/settings.json`) for team sharing
-- Global settings (`~/.pi/agent/settings.json`) are personal
-- Settings reload on next agent start — no restart needed for most changes
+- Project settings are good for shared package/resource configuration.
+- Global settings are better for personal credentials, UI preferences, and model defaults.
+- Nested objects are merged; project keys override the same global keys.

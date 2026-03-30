@@ -1,26 +1,61 @@
 # Skills
 
-Skills are self-contained capability packages that Pi's agent loads on demand. They follow the [Agent Skills standard](https://github.com/anthropics/agent-skills).
+Skills are self-contained capability packages that Pi loads on demand. Pi follows the [Agent Skills specification](https://agentskills.io/specification) and stays fairly lenient, warning on many violations instead of hard-failing.
 
 ## How Skills Work
 
-1. At startup, Pi discovers all skills and loads their **name + description** into the system prompt as XML.
-2. When the agent encounters a task matching a skill's description, it uses the `read` tool to load the full `SKILL.md`.
-3. The skill body contains detailed instructions, and may reference additional files in subdirectories.
+1. At startup, Pi scans skill locations and extracts each skill's name and description.
+2. The system prompt includes those skills in XML form.
+3. When a task matches, the agent uses `read` to load the full `SKILL.md`.
+4. The skill body can route to `references/`, `scripts/`, or `assets/` files via relative paths.
 
-This progressive disclosure keeps the system prompt lean while making deep knowledge available when needed.
+This is progressive disclosure: descriptions stay in prompt context, full instructions are loaded only when needed.
+
+## Locations
+
+Pi discovers skills from:
+
+- Global:
+  - `~/.pi/agent/skills/`
+  - `~/.agents/skills/`
+- Project:
+  - `.pi/skills/`
+  - `.agents/skills/` in `cwd` and ancestor directories
+- Packages:
+  - `skills/` directories or `pi.skills` entries in `package.json`
+- Settings:
+  - `skills` array in `settings.json`
+- CLI:
+  - `--skill <path>` (repeatable, still additive even with `--no-skills`)
+
+Discovery rules:
+
+- Root `.md` files in `.pi/skills/` and `~/.pi/agent/skills/` are loaded as standalone skills.
+- Directories containing `SKILL.md` are discovered recursively in all skill locations.
+- Root `.md` files in `.agents/skills/` locations are ignored.
+
+## Skill Commands
+
+Every skill can register as `/skill:name` when `enableSkillCommands` is enabled:
+
+```text
+/skill:my-skill
+/skill:my-skill extra arguments
+```
+
+Arguments after the command are appended to the skill body as `User: ...`.
 
 ## Directory Structure
 
 ```text
 my-skill/
-├── SKILL.md                    # Required — frontmatter + instructions
-├── scripts/                    # Optional — executable helper scripts
-│   └── build.sh
-├── references/                 # Optional — docs loaded into context as needed
-│   └── api-reference.md
-└── assets/                     # Optional — templates, icons, fonts
-    └── template.html
+├── SKILL.md
+├── scripts/
+│   └── process.sh
+├── references/
+│   └── api.md
+└── assets/
+    └── template.json
 ```
 
 ## SKILL.md Format
@@ -28,84 +63,59 @@ my-skill/
 ```markdown
 ---
 name: my-skill
-description: "What this skill does and when to use it. Be specific about trigger phrases and contexts — Pi tends to under-trigger skills, so make descriptions slightly assertive."
+description: "What this skill does and when to use it. Be specific."
 license: MIT
-compatibility: "Requires bash and node tools"
+compatibility: "Requires bash"
 ---
 
 # My Skill
 
-Instructions for the agent go here. Write in imperative form.
-Use markdown formatting. Reference supporting files with relative paths.
+## Setup
 
-## Step 1: Do the thing
+Run `npm install` in this directory before first use.
 
-Read `references/api-reference.md` for the full API spec, then...
+## Usage
+
+Read `references/api.md` for the full details.
 ```
 
-## Frontmatter Fields
+## Frontmatter
 
-| Field | Required | Constraints | Notes |
-|-------|----------|------------|-------|
-| `name` | Yes | 1–64 chars, lowercase `[a-z0-9-]` | Should match directory name |
-| `description` | Yes | Max 1024 chars | Primary trigger mechanism — include trigger phrases |
-| `license` | No | String | License identifier |
-| `compatibility` | No | String | Tool/dependency requirements |
-| `allowed-tools` | No | List | Restrict which tools the skill can use |
-| `disable-model-invocation` | No | Boolean | If true, agent cannot auto-invoke this skill |
-
-## Discovery Locations
-
-Skills are discovered from (in priority order — first wins on name collision):
-
-1. `.pi/skills/` — project-local
-2. `~/.pi/agent/skills/` — global
-3. Installed packages (via `pi install`)
-4. `settings.json` → `skills` array
-5. `pi --skills <path>` CLI argument
-
-Discovery respects `.gitignore`, `.ignore`, and `.fdignore` patterns.
-
-## Invocation
-
-- **Manual:** User types `/skill:my-skill` in the editor
-- **Automatic:** Agent reads the skill when it matches the task (progressive disclosure)
-- **Disable auto-invoke:** Set `disable-model-invocation: true` in frontmatter
+| Field | Required | Notes |
+|-------|----------|-------|
+| `name` | Yes | 1-64 chars, lowercase letters/numbers/hyphens, must match parent dir |
+| `description` | Yes | Max 1024 chars; primary trigger text |
+| `license` | No | License name or bundled reference |
+| `compatibility` | No | Environment requirements |
+| `metadata` | No | Arbitrary key-value mapping |
+| `allowed-tools` | No | Experimental, space-delimited list of pre-approved tools |
+| `disable-model-invocation` | No | Hides skill from system prompt; user must use `/skill:name` |
 
 ## Writing Good Skills
 
-### Descriptions
+- Make the description specific and assertive. It is the main trigger.
+- Keep `SKILL.md` focused and move bulk detail into `references/`.
+- Use imperative instructions and explain why when it changes the workflow.
+- Use relative links/paths so the agent can open supporting files reliably.
+- Put deterministic helper logic in `scripts/` instead of asking the model to recreate it.
 
-The description is the **primary trigger mechanism**. Make it assertive and specific:
+## Using Skills from Other Harnesses
 
-**Bad:** `"A tool for working with Docker"`
+To reuse Claude Code or Codex skill directories, add them to settings:
 
-**Good:** `"How to build, run, and debug Docker containers and docker-compose setups. Use this skill whenever the user mentions Docker, containers, docker-compose, Dockerfiles, container orchestration, or asks about building/deploying containerized applications."`
-
-### Body Structure
-
-- Keep SKILL.md under 500 lines. If approaching this limit, split detail into `references/` files with clear pointers.
-- Write in imperative form: "Run the build script" not "You should run the build script."
-- Explain **why** behind instructions so the model can adapt to edge cases.
-- Include concrete examples with input/output pairs.
-- For multi-domain skills, organize by variant in `references/` and let SKILL.md route to the right one.
-
-### Reference Files
-
-- Reference with relative paths: `Read references/aws.md for AWS-specific steps.`
-- For files over 300 lines, include a table of contents at the top.
-- The model reads these with the `read` tool — they don't go into the system prompt.
-
-### Helper Scripts
-
-Place in `scripts/`. The model can execute them via the `bash` tool. This avoids the model reinventing the wheel for deterministic operations.
+```json
+{
+  "skills": ["~/.claude/skills", "~/.codex/skills"]
+}
+```
 
 ## Validation
 
-Pi validates skills at load time:
+Pi warns on most issues but still loads the skill when possible:
 
-- Missing `description` → skill not loaded
-- Name > 64 chars → warning
-- Description > 1024 chars → warning
-- Name-directory mismatch → warning
-- Duplicate names → first discovered wins, warning issued
+- Name and parent-directory mismatch
+- Name too long or invalid
+- Description too long
+- Duplicate names, where first discovered wins
+
+One hard failure remains: a skill without `description` is not loaded.

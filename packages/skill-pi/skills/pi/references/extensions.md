@@ -1,30 +1,42 @@
 # Extensions
 
-Extensions are TypeScript modules that customize Pi's behavior. They have **full system permissions** — they can read/write files, run commands, make network requests, and access anything the user can.
+Extensions are TypeScript modules that extend Pi's behavior. They run with the user's full permissions, so treat them like normal application code.
 
 ## Placement & Discovery
 
-| Location | Scope | Auto-discovered |
-|----------|-------|-----------------|
-| `~/.pi/agent/extensions/*.ts` | Global (all projects) | Yes |
-| `.pi/extensions/*.ts` | Project-local | Yes |
-| `settings.json` → `extensions` | Configured | Yes |
-| `pi -e ./path.ts` | CLI one-off | No |
+| Location | Scope |
+|----------|-------|
+| `~/.pi/agent/extensions/*.ts` | Global |
+| `~/.pi/agent/extensions/*/index.ts` | Global |
+| `.pi/extensions/*.ts` | Project |
+| `.pi/extensions/*/index.ts` | Project |
+| `settings.json` → `extensions` | Additional local paths |
 
-Subdirectories with an `index.ts` or a `package.json` containing a `"pi"` field are also discovered. Reload with `/reload`.
+Use `pi -e ./my-extension.ts` or `pi --extension ...` for quick tests. Put stable extensions in auto-discovered locations if you want `/reload` to pick them up.
 
-## Basic Structure
+## Common Imports
 
 ```typescript
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
+import { StringEnum } from "@mariozechner/pi-ai";
+import { Text } from "@mariozechner/pi-tui";
+```
+
+- Use `@sinclair/typebox` for schemas
+- Use `StringEnum` from `@mariozechner/pi-ai` for Google-compatible string enums
+
+## Quick Start
+
+```typescript
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
 
 export default function (pi: ExtensionAPI) {
-  // Subscribe to lifecycle events
   pi.on("session_start", async (_event, ctx) => {
-    ctx.ui.notify("Extension loaded!", "info");
+    if (ctx.hasUI) ctx.ui.notify("Extension loaded", "info");
   });
 
-  // Register a tool the LLM can call
   pi.registerTool({
     name: "greet",
     label: "Greet",
@@ -32,312 +44,207 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       name: Type.String({ description: "Name to greet" }),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-      const { name } = params as { name: string };
+    async execute(_toolCallId, params) {
       return {
-        content: [{ type: "text", text: `Hello, ${name}!` }],
-        details: { greeted: name },
+        content: [{ type: "text", text: `Hello, ${params.name}!` }],
+        details: {},
       };
     },
   });
 
-  // Register a slash command
-  pi.registerCommand("mycommand", {
-    description: "Do something",
+  pi.registerCommand("hello", {
+    description: "Say hello",
     async handler(args, ctx) {
-      ctx.ui.notify(`You said: ${args}`, "info");
+      if (ctx.hasUI) ctx.ui.notify(`Hello ${args || "world"}!`, "info");
     },
   });
 }
 ```
 
-**Import note:** Use `Type` from `@mariozechner/pi-ai` (re-exports TypeBox) and `StringEnum` from the same package for string enums (required for Google API compatibility — do not use `Type.Union` with `Type.Literal` for string enums).
+## Event Surface
 
-## Lifecycle Events
+Useful session events:
 
-### Session Events
+- `session_directory`
+- `session_start`
+- `session_before_switch`
+- `session_switch`
+- `session_before_fork`
+- `session_fork`
+- `session_before_compact`
+- `session_compact`
+- `session_before_tree`
+- `session_tree`
+- `session_shutdown`
+- `resources_discover`
 
-| Event | When | Payload |
-|-------|------|---------|
-| `session_start` | Session begins | `{ sessionId }` |
-| `session_switch` | User switches session | `{ sessionId }` |
-| `session_fork` | Session forked | `{ entryId }` |
-| `session_before_fork` | Before fork executes | `{ entryId }` |
-| `session_shutdown` | Session closing | `{}` |
-| `session_tree` | After `/tree` navigation | `{ entryId }` |
-| `session_before_tree` | Before `/tree` navigation | `{ entryId, messages }` |
-| `session_before_compact` | Before compaction | `{ messages, settings, ... }` |
-| `session_compact` | After compaction | `{ summary }` |
-| `resources_discover` | Resource discovery phase | `{ extensions, skills, prompts, themes }` |
+Useful agent events:
 
-### Agent Events
+- `input`
+- `before_agent_start`
+- `agent_start`
+- `agent_end`
+- `turn_start`
+- `turn_end`
+- `message_start`
+- `message_update`
+- `message_end`
+- `context`
+- `before_provider_request`
+- `model_select`
 
-| Event | When | Payload |
-|-------|------|---------|
-| `before_agent_start` | Before LLM call (modify system prompt) | `{ systemPrompt }` |
-| `agent_start` | Agent begins processing | `{}` |
-| `agent_end` | Agent finishes | `{}` |
-| `turn_start` | New LLM turn begins | `{}` |
-| `turn_end` | LLM turn finishes | `{}` |
+Useful tool events:
 
-### Tool Events
+- `tool_execution_start`
+- `tool_call`
+- `tool_execution_update`
+- `tool_result`
+- `tool_execution_end`
 
-| Event | When | Payload |
-|-------|------|---------|
-| `tool_call` | Before tool executes | `{ toolName, input }` — return `{ block, reason }` to prevent |
-| `tool_result` | After tool executes | `{ toolName, result }` |
-| `tool_execution_start` | Tool execution begins | `{ toolCallId, toolName }` |
-| `tool_execution_end` | Tool execution ends | `{ toolCallId, toolName }` |
+## Extension Context
 
-### Other Events
+`ctx` gives extensions access to:
 
-| Event | When | Payload |
-|-------|------|---------|
-| `input` | User submits input | `{ text }` — return modified text or `{ block }` |
-| `model_select` | Model selector opened | `{ models }` — return filtered list |
-
-## Event Handler Signature
-
-```typescript
-pi.on("event_name", async (event, ctx) => {
-  // event: event-specific payload
-  // ctx: ExtensionContext
-});
-```
-
-### ExtensionContext
-
-```typescript
-interface ExtensionContext {
-  ui: ExtensionUIContext;      // UI interaction methods
-  cwd: string;                 // Working directory
-  session: AgentSession;       // Session access
-  sessionManager: SessionManager; // JSONL session persistence
-  modelRegistry: ModelRegistry;   // Available models
-  hasUI: boolean;              // Whether interactive mode is available
-  isIdle(): boolean;           // Whether the agent is idle
-  abort(): void;               // Stop current generation
-  getContextUsage(): ContextUsage; // Token usage info
-  getSystemPrompt(): string;   // Current system prompt
-}
-```
+- `ctx.ui` for interactive UI hooks
+- `ctx.cwd`
+- `ctx.session`
+- `ctx.sessionManager`
+- `ctx.modelRegistry`
+- `ctx.hasUI`
+- `ctx.isIdle()`
+- `ctx.abort()`
+- `ctx.getContextUsage()`
+- `ctx.getSystemPrompt()`
 
 ## Tool Registration
 
 ```typescript
 pi.registerTool({
-  name: "tool_name",           // Unique identifier
-  label: "Tool Name",          // Display name
-  description: "What this tool does",  // Shown to LLM
-  parameters: Type.Object({    // TypeBox schema
+  name: "tool_name",
+  label: "Tool Name",
+  description: "What this tool does",
+  parameters: Type.Object({
     arg1: Type.String({ description: "..." }),
-    arg2: Type.Optional(Type.Number()),
   }),
 
-  // Execute the tool (called by LLM)
-  async execute(toolCallId, params, signal, onUpdate, ctx) {
-    // params: parsed and validated parameters
-    // signal: AbortSignal for cancellation — check signal?.aborted
-    // onUpdate: callback for streaming partial results
-    // ctx: ExtensionContext
+  // Runs before schema validation. Useful for migrating old tool-call shapes.
+  prepareArguments(rawArgs) {
+    return rawArgs;
+  },
 
+  async execute(toolCallId, params, signal, onUpdate, ctx) {
     return {
       content: [{ type: "text", text: "result" }],
-      details: { anyMetadata: true },  // Stored in session, available on branch restore
+      details: { persisted: true },
     };
-  },
-
-  // Optional: custom TUI rendering for tool calls
-  renderCall(args, theme, context) {
-    return new Text(theme.fg("accent", `tool ${args.arg1}`), 0, 0);
-  },
-
-  // Optional: custom TUI rendering for tool results
-  renderResult(result, { expanded }, theme, context) {
-    return new Text(result.content[0].text, 0, 0);
   },
 });
 ```
 
-**Critical rules for tools:**
+Important rules:
 
-1. **Truncate output** — Default limits are 50KB or 2000 lines. Use `truncateHead()` or `truncateTail()` from the tools module.
-2. **Handle cancellation** — Check `signal?.aborted` in long-running operations.
-3. **Throw on error** — Throwing signals failure to the LLM. Returning always means success.
-4. **Use `withFileMutationQueue()`** — If your tool modifies files, wrap the operation to participate in the mutation queue.
-5. **Store state in `details`** — Tool result `details` persist in session history and survive branching. Reconstruct state from session entries on `session_start`.
+1. Truncate large output.
+2. Respect `signal.aborted`.
+3. Throw on failure instead of returning fake success.
+4. Use the file-mutation queue for write/edit style tools.
+5. Put reconstructable state in `details`; it persists in session history.
 
 ## UI Methods
 
-All UI methods are on `ctx.ui`. **Always check `ctx.hasUI` first** — non-interactive modes (print, JSON, RPC) may not support UI.
+Check `ctx.hasUI` first. Non-interactive modes may not support UI.
 
 ```typescript
-// Dialogs (blocking — waits for user response)
-const choice = await ctx.ui.select("Pick one:", ["Option A", "Option B"]);
-const confirmed = await ctx.ui.confirm("Are you sure?", "Details here");
-const text = await ctx.ui.input("Enter a value:", "default");
-const edited = await ctx.ui.editor("Edit this text", initialContent);
+const choice = await ctx.ui.select("Pick one:", ["A", "B"]);
+const ok = await ctx.ui.confirm("Delete?", "This cannot be undone");
+const text = await ctx.ui.input("Name:", "default");
+const edited = await ctx.ui.editor("Edit:", "prefilled text");
 
-// Notifications (non-blocking)
-ctx.ui.notify("Something happened", "info");  // "info" | "warning" | "error"
+ctx.ui.notify("Done", "info");
 
-// Status indicators
-ctx.ui.setStatus("Processing...");  // Footer status text
-ctx.ui.setWidget("above", component);  // Widget above/below editor
-ctx.ui.setFooter(component);  // Custom footer component
+ctx.ui.setStatus("my-ext", "Processing...");
+ctx.ui.setWorkingMessage("Thinking deeply...");
+ctx.ui.setWidget("my-widget", ["Line 1", "Line 2"]);
+ctx.ui.setFooter((tui, theme) => new Text(theme.fg("dim", "Custom footer"), 0, 0));
+ctx.ui.setTitle("pi - custom");
 
-// Editor control
 ctx.ui.setEditorText("prefilled text");
-ctx.ui.pasteToEditor("appended text");
+const current = ctx.ui.getEditorText();
+ctx.ui.pasteToEditor("extra text");
 
-// Custom components (advanced)
-const handle = ctx.ui.custom(component, { overlay: true });
-handle.requestRender();
-handle.close();
+ctx.ui.setToolsExpanded(true);
+
+const result = await ctx.ui.custom((tui, theme, keybindings, done) => {
+  return new Text("Press Enter", 0, 0);
+}, { overlay: true });
 ```
 
-## Command Registration
+Pi 0.64.0 also added `ctx.ui.setHiddenThinkingLabel(...)` so interactive extensions can customize the collapsed thinking label.
+
+## Commands, Shortcuts, Flags
 
 ```typescript
-pi.registerCommand("commandname", {
-  description: "What this command does",  // Shown in autocomplete
-  args: "optional args description",
-
-  // Argument autocompletion
-  complete(partial) {
-    return ["suggestion1", "suggestion2"].filter(s => s.startsWith(partial));
-  },
-
-  // Handler receives ExtensionCommandContext (superset of ExtensionContext)
+pi.registerCommand("name", {
+  description: "Run a command",
   async handler(args, ctx) {
-    await ctx.waitForIdle();     // Wait for agent to finish
-    ctx.newSession();            // Create new session
-    ctx.fork(entryId);           // Fork from entry
-    ctx.navigateTree();          // Open tree navigator
-    ctx.reload();                // Reload extensions
+    await ctx.waitForIdle();
+    ctx.reload();
   },
 });
-```
 
-## Keybinding Registration
-
-```typescript
-pi.registerKeybinding({
-  key: "ctrl+shift+k",
-  description: "Do something",
-  handler: async (ctx) => { /* ... */ },
+pi.registerShortcut("ctrl+x", {
+  description: "Do something quickly",
+  handler: async (ctx) => {},
 });
-```
 
-## CLI Flag Registration
-
-```typescript
-pi.registerFlag({
-  name: "--my-flag",
+pi.registerFlag("my-flag", {
   description: "Enable something",
-  handler: (value) => { /* value is the flag argument */ },
+  handler: (value) => {},
 });
 ```
 
-## State Persistence
+## Persistence & Process Hooks
 
-Extensions persist state via custom session entries:
+Store extension state with custom session entries:
 
 ```typescript
-// Write state
 pi.appendEntry("my-extension-state", { key: "value" });
+```
 
-// Read state on session restore
+Use lifecycle hooks to restore it:
+
+```typescript
 pi.on("session_start", async (_event, ctx) => {
-  const branch = ctx.sessionManager.getBranch();
-  for (const entry of branch.reverse()) {
+  for (const entry of ctx.sessionManager.getBranch().reverse()) {
     if (entry.type === "custom" && entry.name === "my-extension-state") {
-      const state = entry.data;
-      // Restore from state
       break;
     }
   }
 });
 ```
 
-## Provider Registration
+## Provider Integration
 
-Extensions can register custom LLM providers:
+Extensions can register providers:
 
 ```typescript
 pi.registerProvider("my-provider", {
   baseUrl: "https://api.example.com",
   api: "openai-completions",
-  apiKey: "sk-...",
-  models: [
-    { id: "my-model", name: "My Model", contextWindow: 128000, maxTokens: 4096 },
-  ],
+  apiKey: "MY_PROVIDER_KEY",
+  models: [{ id: "my-model", name: "My Model", contextWindow: 128000, maxTokens: 4096 }],
 });
 ```
 
-For full custom streaming, implement `streamSimple` on the provider config. See `references/providers.md`.
-
-## Bash Execution
+If you need auth for a specific model request, use:
 
 ```typescript
-const { stdout, stderr, exitCode } = await pi.exec("git", ["status"]);
+const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 ```
 
-## Practical Examples
+## Handy Patterns
 
-### Permission Gate
-
-```typescript
-pi.on("tool_call", async (event, ctx) => {
-  if (event.toolName !== "bash") return;
-  const cmd = event.input.command as string;
-  if (/\brm\s+(-rf?|--recursive)/i.test(cmd)) {
-    if (!ctx.hasUI) return { block: true, reason: "Dangerous command blocked" };
-    const ok = await ctx.ui.select(`⚠️ Dangerous: ${cmd}\nAllow?`, ["Yes", "No"]);
-    if (ok !== "Yes") return { block: true, reason: "Blocked by user" };
-  }
-});
-```
-
-### System Prompt Injection
-
-```typescript
-pi.on("before_agent_start", async (event, _ctx) => {
-  event.systemPrompt += "\n\nAdditional instructions here.";
-});
-```
-
-### Git Checkpoint on Every Turn
-
-```typescript
-pi.on("turn_start", async () => {
-  const { stdout } = await pi.exec("git", ["stash", "create"]);
-  if (stdout.trim()) checkpoints.set(currentEntryId, stdout.trim());
-});
-```
-
-### Custom Compaction
-
-```typescript
-pi.on("session_before_compact", async (event, ctx) => {
-  // Return a custom CompactionResult to override default compaction
-  const allMessages = [...event.messagesToSummarize, ...event.turnPrefixMessages];
-  const summary = await generateCustomSummary(allMessages);
-  return { summary, firstKeptEntryId: event.firstKeptEntryId, tokensBefore: event.tokens };
-});
-```
-
-### Dynamic Tool Registration
-
-```typescript
-pi.on("session_start", async () => {
-  pi.registerTool({ name: "echo", /* ... */ });
-});
-
-pi.registerCommand("add-tool", {
-  async handler(name, ctx) {
-    pi.registerTool({ name, /* ... */ });
-    ctx.ui.notify(`Registered tool: ${name}`, "info");
-  },
-});
-```
+- Permission gates via `tool_call`
+- Prompt injection via `before_agent_start`
+- Branch or compaction customization via `session_before_tree` / `session_before_compact`
+- Provider payload inspection via `before_provider_request`
+- Stateful tools via `details` plus `session_start` reconstruction
