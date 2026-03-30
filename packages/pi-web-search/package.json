@@ -1,6 +1,6 @@
 {
   "name": "@counterposition/pi-web-search",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Web search and page fetching tools for the Pi coding agent",
   "keywords": [
     "pi-package"
