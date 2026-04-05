@@ -6,6 +6,17 @@
 sessions. Memories are Markdown files on disk, human-readable and
 human-editable.
 
+Pi's session history and compaction summaries preserve conversation context, but
+they are not designed as a durable store of curated facts. A user who discovers
+that tests require local Redis, or that the team always uses pnpm, has no
+structured way to tell the agent "remember this for next time" and have it
+survive session boundaries and compaction.
+
+In v1, the extension gives the user a way to persist high-signal notes for the
+agent and gives the agent a way to search for them. The design is shaped so
+that later versions can add autonomous capture and richer retrieval without
+changing the storage model.
+
 The extension should borrow the strongest ideas from recent agent memory systems
 without inheriting their common failure modes:
 
@@ -13,9 +24,6 @@ without inheriting their common failure modes:
 - equal weighting of old and new notes
 - repeated prompt-context bloat from loading everything
 - summary drift where derived summaries silently replace source facts
-
-The result should be simple enough to ship as a small v1 and strong enough to
-evolve into richer retrieval later.
 
 ## Why This Exists
 
@@ -27,14 +35,14 @@ facts that should remain easy to recover across later sessions.
 Without that layer, project conventions, user preferences, debugging findings,
 and architectural constraints are recoverable only indirectly: by rereading old
 branches, leaning on compaction summaries, or rediscovering them from repo
-state. That is slow, noisy, and unreliable for facts the agent should be able
-to recall directly.
+state. That is slow, noisy, and unreliable — a problem that grows worse as
+autonomous capture and pre-compaction flush are added in later versions.
 
-A durable memory system fills this narrower gap. It gives the agent a place to
-write curated facts down and a way to find them again later without treating
-full session history as memory. Public systems in this area expose recurring
-tradeoffs, but their documented behavior varies enough that Pi should borrow
-patterns conservatively rather than treat any single implementation as settled.
+V1 solves the narrower problem: the user knows something is important and wants
+to tell the agent in a way that persists across sessions. The user writes;
+the agent indexes and retrieves. This is a curated notebook with search, not
+autonomous knowledge capture — but it establishes the storage model and
+retrieval tools that later versions build on.
 
 ## Research Summary
 
@@ -48,11 +56,25 @@ The most useful public reference points are:
   per-project memory directory under `~/.claude/projects/<project>/memory/`,
   with a concise `MEMORY.md` entrypoint, optional topic files, `/memory`
   inspection, and a startup budget of the first 200 lines or 25 KB of
-  `MEMORY.md`. The storage-location docs say the project path is derived from
-  the git repository so worktrees and subdirectories within the same repo share
-  one memory directory. Topic files are read on demand. The documented model is
-  plain Markdown and human-editable; the docs do not present typed YAML memory
-  categories or age-based reminders as core behavior.
+  `MEMORY.md`. The docs describe project path derivation from the git
+  repository, with one section stating worktrees and subdirectories share a
+  single memory directory, though a comparison table elsewhere says scope is
+  "per working tree." The intended behavior appears to be repo-shared, but the
+  docs are not fully consistent. Topic files are read on demand. Notably, auto
+  memory is agent-authored — Claude writes and maintains these files
+  autonomously, not in response to explicit user requests. This makes the
+  current Claude Code model closer to what this design defers as opt-in
+  autonomous capture than to the explicit-write-only v1 policy. Recent versions
+  include an AutoDream background process for automatic memory maintenance
+  (reorganizing topic files, removing stale entries, rebuilding `MEMORY.md`),
+  triggered after roughly 24 hours and 5+ sessions. A manual `/dream` slash
+  command is referenced in the UI and code but is not reliably available; a
+  GitHub issue notes it as missing for some users.
+  The public documentation presents memory as plain Markdown and
+  human-editable; it does not describe typed memory categories. However, Claude
+  Code's runtime system prompt defines four typed categories (`user`,
+  `feedback`, `project`, `reference`) with YAML frontmatter in individual
+  memory files — structure not reflected in the public docs.
 
 - **Anthropic `memory_20250818` tool.** Current docs describe a beta memory
   tool with `view`, `create`, `str_replace`, `insert`, `delete`, and `rename`
@@ -68,13 +90,18 @@ The most useful public reference points are:
   auditable, but if followed literally it also creates recurring context
   pressure and offers no first-class invalidation semantics for stale notes.
 
-- **OpenClaw memory.** Current docs describe workspace Markdown memory with a
-  curated `MEMORY.md`, dated memory files, automatic pre-compaction flush,
+- **OpenClaw memory.** Current docs describe workspace Markdown memory
+  (OpenClaw is a messaging-platform personal assistant, not a coding agent,
+  but its memory design is relevant as a reference) with a curated
+  `MEMORY.md`, dated memory files, automatic pre-compaction flush,
   explicit `memory_search` and `memory_get` tools, and indexed search over
   those files. It is useful as a reference for mixed-mode recall: some memory
   is loaded early, but tool-driven retrieval and ranking do substantial work.
-  The workspace-first storage model still carries accidental-commit and privacy
-  tradeoffs Pi should avoid by default.
+  Its default storage is user-local (`~/.openclaw/workspace`), reducing
+  accidental-commit risk, though memory files are plain text on disk. The docs
+  warn separately about credential exposure. Pi should still prefer private
+  storage by default, but OpenClaw's default is closer to that model than the
+  workspace-in-repo pattern this design warns against.
 
 - **QMD.** The current README describes a local search engine for Markdown and
   code with keyword search, semantic search, reranking, direct document
@@ -82,6 +109,29 @@ The most useful public reference points are:
   because it keeps files canonical and indexes rebuildable. It is not a memory
   lifecycle model: promotion, invalidation, and review policy would still
   belong to Pi.
+
+- **Hermes Agent.** Current source shows a dedicated `memory` tool with three
+  actions (`add`, `replace`, `remove`) writing to two capped Markdown files:
+  `MEMORY.md` (2,200 chars) and `USER.md` (1,375 chars). The memory snapshot is
+  injected frozen into the system prompt at session start and never updated
+  mid-session, preserving the LLM's prefix cache. Deep retrieval uses
+  `session_search` over raw session transcripts via SQLite FTS5, with results
+  summarized by a secondary LLM call (Gemini Flash). The dedicated tool acts as
+  a validation gateway — security scanning, size enforcement, deduplication,
+  atomic writes — but does not hard-prevent bypass via generic file tools;
+  enforcement is behavioral. Hermes also supports pluggable external memory
+  providers (Honcho, Holographic, RetainDB, Hindsight, and others), at most one
+  active at a time, bridged via an `on_memory_write()` callback. A broader
+  comparative analysis covering writing models, retrieval strategies, and file
+  format differences across Claude Code, OpenClaw, and Hermes is in
+  [docs/research/agent-memory-systems.md](research/agent-memory-systems.md).
+
+Other systems worth noting include Cursor (path-scoped `.mdc` rules with glob
+frontmatter, a four-tier rules system, and an evolving agent memory tool) and
+Windsurf Cascade (autonomous memory generation that progressively learns project
+patterns over extended use). Neither is analyzed in depth here, but Windsurf is
+a well-documented example of the autonomous capture model this design defers
+to a later version.
 
 These references do not imply a single shared design. For Pi, the main lessons
 are:
@@ -118,9 +168,12 @@ are:
 - Perfect truth maintenance.
 - A mandatory vector database or external service.
 - A hidden binary format.
+- Autonomous durable writes in v1.
 - Aggressive autonomous writing with no audit trail.
 - Replacing Pi's session history, `/tree`, `/fork`, or compaction summaries.
 - Indexing session transcripts.
+- A general-purpose multi-agent memory substrate with agent-to-agent visibility
+  rules or cross-agent coordination primitives.
 
 ## Design Rationale
 
@@ -132,13 +185,13 @@ clear decision surface. Memory has two fundamental operations:
 - **I want to find something I learned before.** Use `memory_search`.
 - **I want to write something down for later.** Use `memory_write`.
 
-A third tool like `memory_get` (targeted file read) is unnecessary, but only if
-`memory_search` returns enough context to make the common case efficient: a
-bounded excerpt, exact file path, heading, status/date metadata, a stable
-entry ID, and the current line span for convenience. Then `read` remains
-available for deeper inspection or surrounding file context. Adding a third
-tool increases prompt overhead and routing mistakes without giving the agent a
-meaningfully different capability.
+A dedicated `memory_get` is unnecessary because the built-in `read` tool
+already serves this purpose. `memory_search` returns enough context to make the
+common case efficient: a bounded excerpt, exact file path, heading, status/date
+metadata, a stable entry ID, and the current line span for convenience. These
+make `read` follow-ups straightforward for deeper inspection or surrounding file
+context. Adding a third memory-specific tool increases prompt overhead and
+routing mistakes without giving the agent a capability it does not already have.
 
 ### Two tools, not one
 
@@ -152,14 +205,56 @@ sense for a general-purpose API primitive. An agent extension can afford a
 narrower surface because it controls the storage model and can hide file
 management behind better abstractions.
 
+### Two scopes: global and project
+
+Memory has two natural scopes with different lifecycles:
+
+- **Global memory** holds cross-project user preferences and conventions:
+  "always use `uv`, never `pip`", "I prefer terse responses", "I'm a senior
+  engineer — skip beginner explanations." These follow the user everywhere and
+  should not need to be re-taught per project.
+
+- **Project memory** holds facts bound to a specific codebase or working
+  directory: build conventions, debugging findings, architecture decisions.
+  These are meaningless outside their project.
+
+A third scope — agent-specific memory — is unnecessary because Pi's existing
+project-scoping mechanism already covers it. A user who wants a specialized
+agent (e.g. a QA reviewer or a scheduling secretary) can give that agent its
+own folder. The folder becomes the agent's project, and project-scoped memory
+becomes agent-scoped memory with no new concepts. Skills and configuration are
+just files in that folder. The memory extension does not need to distinguish
+"a codebase I'm working on" from "an agent's home directory."
+
+This means cross-agent knowledge (user preferences that apply to all agents)
+flows exclusively through the global layer. Without it, every specialized
+agent independently learns the same preferences. The global layer is therefore
+load-bearing, not optional.
+
+Search merges both scopes, with project entries taking precedence on conflict.
+Writes default to project scope for factual findings and global scope for
+stated user preferences, but the agent can target either explicitly.
+
+Concurrent writes to global memory from multiple Pi sessions are a known v1
+limitation. Atomic rename prevents partial writes but not lost appends when two
+sessions write to the same topic file simultaneously. In practice this is
+unlikely — explicit writes are rare and global writes rarer — but if it becomes
+a real problem, file-level advisory locking or append-only entry files (one file
+per entry) could address it.
+
 ### Private by default
 
 OpenClaw stores memory in the workspace, which is simple but creates
 accidental-commit risk. Pi should default to a user-local private store:
 
 - Avoids leaking sensitive recollections into git.
-- Matches Pi's existing user-local configuration model under `~/.pi/agent/`.
+- Matches Pi's existing user-local configuration model under Pi's resolved
+  global agent directory.
 - Keeps everything on disk as Markdown.
+
+Here, "resolved global agent directory" means the same location Pi already uses
+for global settings and extensions: `PI_CODING_AGENT_DIR` when set, otherwise
+`~/.pi/agent/`.
 
 A future `storageMode: "workspace"` option can place memory under `.pi/memory/`
 for teams that want shared, versioned project memory inside a checkout.
@@ -178,7 +273,8 @@ and stable durable facts have fundamentally different lifecycles.
 A note captured mid-session ("tests require redis to be running locally") might
 be valuable or might be transient noise. Routing it directly into curated memory
 pollutes the durable store. Routing it into a dated inbox file is cheap, safe,
-and lets a later maintenance pass decide whether the note has earned promotion.
+and lets a later maintenance pass (deferred past v1) decide whether the note
+has earned promotion.
 
 Topic files hold facts that have proven durable: standing preferences, workflow
 conventions, architecture decisions, debugging findings worth preserving. They
@@ -205,26 +301,41 @@ backend behind `memory_search`, not a user-facing part of the storage model.
 
 ### Derived summaries never replace source memories
 
-`MEMORY.md` and any future monthly rollups are navigation aids. They are not
-authoritative facts. Source notes stay on disk and remain linkable. If a summary
-contradicts a source note, the source note wins.
+Any future index files (`MEMORY.md`) or monthly rollups are navigation aids.
+They are not authoritative facts. Source notes stay on disk and remain linkable.
+If a summary contradicts a source note, the source note wins.
 
 ## Storage Model
 
-Default location:
+Default private location:
 
 ```text
-~/.pi/agent/memory/projects/<project-id>/
-├── MEMORY.md              # concise derived index for navigation and maintenance
-├── inbox/
-│   ├── 2026-03-29.md      # append-only daily capture
-│   └── ...
-└── topics/
-    ├── build.md            # curated durable memory by topic
-    ├── testing.md
-    ├── preferences.md
-    └── ...
+<agentDir>/memory/
+├── global/                    # cross-project user preferences
+│   ├── inbox/
+│   │   └── ...
+│   └── topics/
+│       ├── preferences.md     # "always use uv", "prefer terse responses"
+│       └── ...
+└── projects/<project-id>/     # project-scoped facts
+    ├── inbox/
+    │   ├── 2026-03-29.md      # append-only daily capture
+    │   └── ...
+    └── topics/
+        ├── build.md           # curated durable memory by topic
+        ├── testing.md
+        └── ...
 ```
+
+Global and project memory roots share the same internal structure: `inbox/`
+and `topics/`, with the same entry format and metadata.
+The only difference is scope. Global memory has no project identity
+derivation; it is a single store per user.
+
+`<agentDir>` is Pi's resolved global agent directory: `PI_CODING_AGENT_DIR`
+when set, otherwise `~/.pi/agent/`. The memory extension should resolve this
+the same way other Pi components already resolve global settings paths, rather
+than hardcoding a home-directory path internally.
 
 ### Project identity and worktree policy
 
@@ -235,8 +346,8 @@ The default v1 policy should be:
 - Inside a git repo, all subdirectories and all worktrees that share the same
   underlying repository share one project memory root.
 - Outside a git repo, the working directory realpath defines the project.
-- The project ID is a deterministic slug derived from that resolved identity
-  anchor.
+- The extension derives a canonical identity anchor first, then derives
+  `project-id` from that anchor with a fixed normalization and hashing rule.
 
 The important distinction is between repo identity and checkout path. A
 worktree path describes where one checkout lives on disk, not the durable
@@ -250,32 +361,49 @@ The implementation anchor should therefore be shared repo identity, not raw
 worktree location. In git terms, use the shared repository identity (`git
 common dir` or equivalent), not the per-worktree root path.
 
+In v1, the derivation should be:
+
+1. Resolve the canonical identity anchor.
+   Inside git, use the repository's shared git common dir and resolve it to an
+   absolute realpath. Outside git, use the current working directory resolved
+   to an absolute realpath.
+2. Normalize the anchor string before hashing.
+   Normalize Unicode to NFC, convert path separators to `/`, remove any
+   trailing `/` except for a filesystem root, and lowercase the normalized
+   string on Windows so equivalent paths hash the same way.
+3. Derive a collision-resistant `project-id`.
+   Use `<slug>-<hash>`, where `<slug>` is a slugified readable prefix and
+   `<hash>` is the first 20 lowercase hex characters of the SHA-256 digest of
+   the normalized anchor.
+
+The readable prefix is for operators, not identity. For git repos it should be
+derived from the directory that owns the shared git common dir, so all
+worktrees of the same repository keep the same prefix. Outside git it should be
+derived from the canonical directory basename. If slugification produces an
+empty string, use `project`.
+
 This does create a real tradeoff: careless writes could leak branch-local
 assumptions across worktrees. The right response in v1 is not accidental
 path-based isolation. It is repo-shared memory plus a stricter write policy:
-implicit writes should only capture facts expected to remain valid across
-worktrees. If Pi later needs isolation for long-lived branch-specific work, it
-should add an explicit worktree-local overlay on top of the repo store rather
-than changing the base identity model.
+v1 should persist only explicit user-directed memories. If later experience
+justifies opt-in autonomous capture, it should be limited to facts expected to
+remain valid across worktrees. If Pi later needs isolation for long-lived
+branch-specific work, it should add an explicit worktree-local overlay on top
+of the repo store rather than changing the base identity model.
 
-### `MEMORY.md`
+### Orientation Summary (No `MEMORY.md` in v1)
 
-The top-level orientation file. In Pi, it should not be treated as recurring
-prompt payload because the documented prompt hook, `before_agent_start`, runs
-before LLM calls. `MEMORY.md` therefore stays concise and contains:
+The `before_agent_start` hook needs a one-line orientation summary — topic
+count, recent inbox count (~30 tokens) — to give the agent a signal that
+relevant memory exists without loading memory content. This summary is derived
+at runtime from filesystem state: glob topic files, count inbox entries, format
+the line. No maintained index file is needed.
 
-- Links to topic files with one-line descriptions.
-- A short "recently changed" section for orientation.
-- Nothing else.
-
-Borrow Claude Code's idea of a concise index, but adapt it to Pi's prompt
-model: keep `MEMORY.md` on disk as a lightweight navigation artifact and read
-it only on demand. It should be cheap for the extension, the user, or a future
-UI to inspect directly, but it should not be preloaded into every model call.
-
-`MEMORY.md` is a derived artifact. It should be rebuildable from the topic files
-and recent inbox state. The extension maintains it, but the topic files are
-canonical.
+A persistent `MEMORY.md` index becomes useful when the corpus grows large enough
+to need a human-browsable table of contents or when `/dream` maintenance needs a
+starting point for reorganization. Both are post-v1 concerns. When introduced,
+`MEMORY.md` should be a derived artifact maintained by `/dream`, not by the
+write path — the topic files remain canonical.
 
 ### `inbox/YYYY-MM-DD.md`
 
@@ -292,7 +420,6 @@ Format:
 
 - ID: mem_01JW2YCP4J4P7D9M9YQX4G8P4H
 - Status: active
-- Source: assistant
 - Context: discovered while debugging integration test failures
 
 The flaky integration test in `packages/api/tests/cache.test.ts` only passes
@@ -303,7 +430,6 @@ but local development requires `docker compose up redis` first.
 
 - ID: mem_01JW2Z7E36P4WQ5Q1K0T8N2M6A
 - Status: active
-- Source: user
 
 Always use `pnpm`, not `npm`, for package management in this repo.
 ```
@@ -317,6 +443,16 @@ Characteristics:
   the exact note rather than a fragile heading/path combination.
 - Not injected into the prompt by default. Found via search or maintenance.
 - Safe to summarize and archive later.
+
+In v1, most explicit user-directed memories will route directly to topic files
+because they express standing preferences or conventions. The inbox exists
+primarily as scaffolding for future autonomous capture. It costs nothing to
+maintain the directory structure, and having it from day one avoids a storage
+migration later. Implementers should not invest in inbox-specific features
+(e.g., inbox-aware search ranking, age-based deprioritization) until the inbox
+has real content. Because `/dream` is deferred (no extension LLM call API),
+inbox promotion has no automated path in v1; the only way an inbox entry gets
+promoted is manual editing or a future maintenance pass.
 
 ### `topics/*.md`
 
@@ -335,7 +471,6 @@ description: Build system conventions and tooling preferences
 ## Use pnpm, not npm
 - ID: mem_01JW2ZZB7N6K4Q2R1P8D5H3C9F
 - Status: active
-- Source: user
 - Updated: 2026-03-29
 
 Always use `pnpm` for package management. The repo uses pnpm workspaces and
@@ -344,50 +479,41 @@ the lockfile is `pnpm-lock.yaml`.
 ## Tests require local Redis
 - ID: mem_01JW30BK6K3R6N3Y0F2A1M8Q9D
 - Status: active
-- Source: assistant
 - Updated: 2026-03-29
-- Promoted-from: mem_01JW2YCP4J4P7D9M9YQX4G8P4H
 
 Integration tests in `packages/api/tests/` need a local Redis instance.
 Run `docker compose up redis` before `pnpm test`.
-
-## Use npm for installs
-- ID: mem_01JW31M0R5M8C7H2P4S9D6F1QK
-- Status: superseded
-- Superseded-by: mem_01JW2ZZB7N6K4Q2R1P8D5H3C9F
-- Updated: 2026-03-29
-
-Historical note retained for traceability.
 ```
 
 This is still intentionally simple: Markdown headings define entry boundaries,
 metadata stays as short bullet lists, and the body stays free-form. The one
 extra field that earns its keep is a stable `ID` per entry. That ID is the
-durable selector for lineage and mutations; headings and line spans remain
-navigation aids, not long-lived identity.
+durable selector for mutations (and future lineage); headings and line spans
+remain navigation aids, not long-lived identity.
 
-Entry metadata fields:
+V1 entry metadata fields:
 
-- `ID`: stable opaque selector unique within the project memory root
-  (required)
-- `Status`: `active | promoted | superseded | invalid` (required)
-- `Source`: `user | assistant` (required)
+- `ID`: a `mem_` prefix followed by a ULID (26 characters of Crockford
+  Base32) — stable opaque selector unique within the project memory root
+  (required). Example: `mem_01JW2YCP4J4P7D9M9YQX4G8P4H`.
+- `Status`: `active | invalid` (required)
 - `Updated`: date (required for topic entries)
-- `Superseded-by`: entry ID of the replacing entry (when superseded)
-- `Promoted-from`: entry ID of the source inbox entry (when promoted from
-  inbox)
-- `Review-after`: date (optional, for time-sensitive facts)
 
-Two details matter:
+The following fields are reserved for forward compatibility but not populated
+or interpreted until maintenance and autonomous capture exist:
 
-1. `Status` is first-class so stale memories are a data problem, not only a
-   retrieval problem.
-2. `Review-after` lets the system surface candidates for review without
-   silently deleting history.
+- `Source`: `user | assistant`
+- `Superseded-by`: entry ID of the replacing entry
+- `Promoted-from`: entry ID of the source inbox entry
+- `Review-after`: date (for time-sensitive facts)
 
-In practice, `promoted` is mainly for source inbox notes after a topic entry has
-been created from them. That keeps promotion traceable while hiding duplicate
-capture from default search results.
+The parser should ignore unknown metadata fields so hand-added fields do not
+break anything.
+
+`Status` is first-class so stale memories are a data problem, not only a
+retrieval problem. In v1, entries are either `active` or `invalid` (set by
+`/forget`). The remaining statuses (`promoted`, `superseded`) depend on
+maintenance and supersession workflows that do not exist yet.
 
 The parser can still derive an internal `entryRef` and current line span for
 each entry at runtime, but those are secondary locators built on top of the
@@ -403,8 +529,8 @@ memory entries:
 - One inbox entry = one timestamped heading section in `inbox/YYYY-MM-DD.md`.
 
 Each parsed entry carries the data retrieval actually needs: stable `ID`, file
-path, heading, body, status, dates, lineage references, and whether it came
-from a topic file or the inbox.
+path, heading, body, status, dates, and whether it came from a topic file or
+the inbox.
 
 This distinction matters even if the v1 implementation uses simple file
 operations. It matters even more for future indexed backends such as QMD,
@@ -446,14 +572,22 @@ QMD is attractive, but making it a default dependency in v1 is the wrong trade:
 
 `memory_search` should:
 
-1. Search parsed topic entries and recent inbox entries.
-2. Use heading boundaries as entry boundaries, not fixed character windows.
-3. Exclude entries with `Status: invalid` or `Status: promoted` by default.
-4. Down-rank entries with `Status: superseded` unless the query asks for
-   history.
+1. Search both global and project memory, merging results into a single ranked
+   list. When entries from both scopes match, project entries take precedence
+   on conflict (e.g. a project-scoped "use npm" supersedes a global "use pnpm").
+2. Search parsed topic entries and recent inbox entries.
+3. Use heading boundaries as entry boundaries, not fixed character windows.
+4. Exclude entries with `Status: invalid` by default. When `promoted` and
+   `superseded` statuses exist (post-v1), exclude `promoted` and down-rank
+   `superseded` unless the query asks for history.
 5. Prefer active topic entries first, then recent active inbox notes.
 6. Return results with stable `ID`, exact file path, heading, status, dates, a
-   bounded excerpt, and the current line span for convenience.
+   bounded excerpt, the current line span for convenience, and the scope
+   (global or project). Dates should include a human-readable relative age
+   (e.g. "2026-03-29 (3 days ago)") so that staleness is immediately visible
+   in the result. An entry updated 90 days ago should read "(3 months ago)."
+   This is trivial to compute and makes the agent naturally more skeptical of
+   old entries without any prompt-side cost.
 7. Provide enough inline context that the agent can usually judge relevance
    without an immediate follow-up `read`.
 
@@ -478,68 +612,117 @@ index behind the same `memory_search` interface:
 ## Write Model
 
 The extension needs a tighter write policy than most memory-bank-style systems.
-The system prompt should steer when the model chooses to write, but the managed
-memory root must also be protected in code.
+In v1, that means durable writes are explicit only: the user asks Pi to
+remember or persist something, and the extension routes that request through the
+managed write path. The system prompt should reinforce that policy, and the
+extension should make the managed write path the preferred path in code. With
+Pi's current extension surface, that boundary is best-effort rather than a full
+protected-path sandbox.
 
-### Managed memory boundary
+### Best-effort managed memory boundary
 
-`memory_write` is the only model-facing write tool for managed memory. Other
-mutations such as `/remember`, `/forget`, inbox promotion, invalidation, and
-maintenance should reuse the same internal mutation pipeline rather than
-writing files ad hoc.
+`memory_write` should be the primary model-facing write tool for managed
+memory. Other extension-owned mutations such as `/remember`, `/forget`, inbox
+promotion (deferred), invalidation, and maintenance (deferred) should reuse
+the same internal write path rather than writing files ad hoc.
 
-That mutation pipeline should resolve and operate on stable entry IDs. Query-
-driven flows such as `/forget <query>` or duplicate merging may use search to
-find candidates, but the final write must target concrete IDs rather than
-headings, paths, or stale line spans.
+That write path should resolve and operate on stable entry IDs. Query-driven
+flows such as `/forget <query>` or duplicate merging may use search to find
+candidates, but the final write must target concrete IDs rather than headings,
+paths, or stale line spans.
 
-The extension should block direct agent mutations targeting the managed memory
-root via generic `write`, `edit`, or obvious `bash` commands in `tool_call`.
-Generic reads remain allowed. This keeps memory auditable and schema-aware even
-though the files themselves stay human-readable.
+The extension should intercept direct agent mutations targeting the managed
+memory root via `write` and `edit` in `tool_call` — these are reliable because
+the hook receives `event.toolName` and `event.input.file_path`, so path-
+matching is straightforward. Generic reads remain allowed. Bash command
+interception is not included in v1: regex-matching shell strings is inherently
+fragile (variable indirection, heredocs, scripting-language one-liners, and
+symlinks all defeat it), and the real defense against accidental bash writes is
+the system prompt contract directing the agent to use `memory_write`. If real-
+world usage shows agents frequently bypassing via bash, targeted interception
+can be added then.
 
-All managed mutations should:
+This boundary is policy-backed and best-effort, not a complete sandbox. The
+system prompt tells the agent to use `memory_write`; the `tool_call` hook
+catches common accidents via `write` and `edit`; but if the agent writes to the
+memory root through other means, the extension will re-parse on next access
+rather than crash.
+
+All managed-path mutations should:
 
 1. Normalize the requested path and resolve realpaths before writing.
 2. Reject path traversal or symlink escapes outside the managed memory root.
 3. Filter obvious secrets and other disallowed content before persisting.
-4. Participate in Pi's file mutation queue.
+4. Use atomic filesystem operations (write to a temp file in the same
+   directory, then rename) to avoid partial writes visible to concurrent
+   reads.
 
-Manual human edits outside the model tool loop remain allowed. On the next
-access, the extension should re-parse the corpus and refresh derived artifacts
-such as `MEMORY.md` as needed.
+Manual human edits outside the model tool loop remain allowed, and unmanaged
+mutations may still happen outside the managed write path. On the next access,
+the extension should re-parse the corpus from the canonical topic and inbox
+files.
 
 ### Explicit writes
 
-When the user says a variant of "remember this", "always do X", "never do Y",
-or "keep in mind that...", the extension should write a durable memory. Explicit
-user requests go directly to a topic file when they express a standing
-preference or convention, and to the inbox otherwise.
+In v1, `memory_write` is for explicit user-directed persistence only. When the
+user says a variant of "remember this", "always do X", "never do Y", or "keep
+in mind that...", the extension should write a durable memory. Explicit user
+requests go directly to a topic file when they express a standing preference or
+convention, and to the inbox otherwise. In practice, most explicit requests are
+standing preferences, so the inbox will see little v1 traffic (see the
+scaffolding note under `inbox/YYYY-MM-DD.md` above).
+
+The model should not treat "this seems useful later" as sufficient reason to
+persist memory on its own in v1. If the user did not ask to remember
+something, leave it in session history and ordinary tool traces.
 
 Because v1 memory is repo-shared across worktrees, requests that are clearly
 checkout-local should not be persisted as ordinary durable memory. The
 extension should ask the user to restate them as repo-wide guidance or leave
 them in session history until Pi grows an explicit local scope.
 
-### Implicit writes
+### Corrections in v1
 
-The extension may write memory automatically when the agent judges that a fact
-is:
+V1 handles stale memories conservatively: it does not populate lineage fields
+or interpret replacement relationships. If the user decides an old memory is
+wrong, the agent resolves it by ID through `memory_search` and `/forget`
+confirms the match before marking it `invalid`. Even a single match requires
+user confirmation, since the query might have matched the wrong entry. If the
+corrected fact should also be kept, the agent creates a new `memory_write`
+entry separately.
 
-1. Likely useful in a future session.
-2. Not cheap to recover from checked-in files, scripts, CI config, repo docs,
-   git metadata, or ordinary inspection of the repo.
-3. Learned through interaction, failure, or user guidance rather than obvious
-   static repo state.
-4. Not efficient to recover later from session history alone.
-5. At least moderately confident.
-6. Expected to remain valid across worktrees for this repo, not just in the
-   current checkout.
+This keeps the v1 write surface aligned with the minimal metadata schema:
+`memory_write` stays create-only, `/forget` handles the only built-in mutation,
+and the reserved lineage fields remain unused until maintenance and autonomous
+capture exist. Future versions can add explicit supersession once
+`superseded`, `Superseded-by`, and related workflows are active.
 
-Facts that are easy to rediscover from code, configuration, or repository
-documentation do not belong in memory just because they were useful once.
+### Heading extraction from `content`
 
-Good implicit writes:
+The first level-2 heading (for example, `## Use pnpm, not npm`) in `content`
+becomes the entry heading. If `content` contains no level-2 heading, the
+extension derives a heading from the first sentence. The heading is the
+primary human-readable label and the text `memory_search` matches against; the
+body is everything after it.
+
+### Future: opt-in autonomous capture
+
+Implicit capture is out of scope for v1. The extension should not write memory
+just because the agent judges a fact useful, and it should not flush new notes
+to memory automatically before compaction. That keeps the first release aligned
+with its low-risk claim and makes repo-shared memory across worktrees easier to
+trust.
+
+If later usage data justifies autonomous capture, it should be added as a
+user-level opt-in with conservative defaults:
+
+1. Capture into the inbox only, never directly into topic files.
+2. Limit capture to facts expected to remain valid across worktrees.
+3. Skip facts that are cheap to recover from repository files, scripts, CI
+   config, or ordinary inspection.
+4. Emit a clear report of what was written so users can audit the result.
+
+Examples of plausible future inbox capture candidates:
 
 - "integration tests time out unless local services are started first, and the
   failure message does not make that dependency obvious"
@@ -548,7 +731,7 @@ Good implicit writes:
 - "maintainers expect rollback notes alongside risky migrations, even though
   the repo does not encode that convention"
 
-Bad implicit writes:
+Examples that should still stay out of memory:
 
 - "edited three files" (transient, obvious from git)
 - "the current task is to rename a variable" (ephemeral)
@@ -559,83 +742,111 @@ Bad implicit writes:
   local)
 - contents of `.env` files or credentials (secrets)
 
-### Capture before promote
-
-Automatic writes should usually land in the daily inbox first. Promotion into a
-topic file happens later during maintenance, when a note proves durable. This
-reduces the risk of polluting curated memory with transient observations.
-
 ## Compaction Cooperation
 
 Compaction is the most important integration point. When Pi compacts a long
 conversation, older detail is reduced to a summary in the active context. Pi
 still preserves append-only session history and branch structure, but those are
 history/navigation features, not a durable memory layer. If the memory
-extension does not act before compaction, durable learnings become harder to
-recover in later sessions and easier to miss entirely.
+extension does not write before compaction, some useful details may become
+harder to recover later. V1 should accept that tradeoff rather than introduce
+automatic durable writes into a repo-scoped store.
 
-The extension hooks `session_before_compact` to perform a pre-compaction flush:
+In v1:
 
-1. Scan the conversation for facts worth remembering.
-2. Write them to the daily inbox.
-3. Optionally refresh `MEMORY.md` if the inbox added something important.
+1. Compaction summaries remain session artifacts, not memory artifacts.
+2. The extension does not attach a pre-compaction memory flush to
+   `session_before_compact`.
+3. If the user wants something preserved beyond the current session, Pi should
+   persist it only through an explicit write path such as `memory_write` or
+   `/remember`.
 
-The flush should be bounded — a fixed token budget for the scan, a maximum
-number of notes written — to avoid making compaction itself expensive.
+A later opt-in autonomous capture mode could experiment with bounded
+`session_before_compact` scanning, but that should be deferred until real usage
+shows it improves recall more than it adds noise.
 
-Compaction summaries are session artifacts, not memory artifacts. The extension
-should not treat a compaction summary as canonical memory.
-
-## Maintenance ("Dreaming")
+## Maintenance ("Dreaming") — Deferred Past v1
 
 Dreaming is an optional maintenance pass that runs outside the critical path of
-normal conversation and performs bounded memory hygiene.
+normal conversation and performs bounded memory hygiene. It is **deferred past
+v1** because the Pi extension API does not currently expose a supported
+mechanism for extensions to make LLM calls. The reference surface
+(`pi.registerTool`, `pi.registerProvider`,
+`ctx.modelRegistry.getApiKeyAndHeaders`, `pi.exec`) provides tool registration,
+provider routing, auth credentials, and shell execution — but no `pi.chat()` or
+`pi.complete()` for extension-initiated model calls.
 
-### What dreaming does
+An extension could technically make direct provider API calls using
+`ctx.modelRegistry.getApiKeyAndHeaders()` and an HTTP client, as the Custom
+Compaction pattern in Pi's reference docs implies. This is rejected for v1
+because it requires building an undocumented, fragile LLM client inside the
+extension — model selection, error handling, and provider compatibility would
+all be extension-local guesswork rather than supported API.
+
+Without a supported model-call primitive, `/dream` cannot perform the reasoning
+needed for non-trivial promotion, contradiction detection, or semantic
+deduplication.
+
+This section documents the intended future shape so that implementation can
+begin once Pi exposes the necessary API.
+
+### What dreaming would do
 
 - Promote durable inbox notes into topic files and mark the source inbox
   entries as `promoted`.
 - Mark contradictions or stale notes for review.
-- Refresh `MEMORY.md` to reflect current topic file state.
+- Generate or refresh a `MEMORY.md` index to reflect current topic file state.
 - Merge duplicate entries within topic files while preserving lineage by ID.
 - Flag entries past their `Review-after` date.
 
-### What dreaming does not do
+### What dreaming would not do
 
 - Invent new facts.
 - Rewrite large parts of memory without traceability.
 - Delete source notes (only change status).
 - Run so often that users lose predictability.
 
-### Triggers
+### Triggers (future)
 
 - **Manual:** `/dream` command.
-- **Opportunistic:** after `session_shutdown` when the agent is idle, if
-  enabled by the user.
+- Automatic triggers such as `session_shutdown` or pre-compaction scanning,
+  contingent on Pi documenting a stable model-selection and lifecycle contract
+  for extension-launched maintenance work.
 
-### Guardrails
+### Guardrails (future)
 
 - Hard token budget for the LLM call.
 - Write at most N memory mutations per run.
 - Emit a maintenance report listing which entry IDs changed and why.
 - Prefer append, promote, and supersede over destructive edits.
 
-### Cost
+### Cost (future)
 
 Dreaming requires an LLM call. The extension should use a cost-effective model
-for maintenance (configurable, defaulting to a fast/cheap option). The user
-should be able to disable automatic dreaming entirely. Project settings must
-not choose the maintenance model or turn shutdown dreaming on.
+for maintenance but should not guess which model that is. It should require an
+explicit user-level `dreamModel` configuration and fail fast with a clear
+configuration error when it is missing, rather than implicitly reusing the
+session's current model. Project settings must not choose the maintenance model
+or enable automatic dreaming.
 
 ## System Prompt Contract
 
 The `before_agent_start` hook injects a concise memory contract into the system
 prompt. Pi documents this hook as "Before LLM call," so anything inserted here
 must be treated as recurring prompt cost, not as a once-per-session cost. The
-contract should therefore carry only the decision policy, not project-specific
-memory content.
+contract carries two things:
 
-The contract tells the agent:
+1. **A one-line orientation summary** derived at runtime from filesystem state
+   — topic count and recent inbox count (~30 tokens). The extension globs topic
+   files and counts inbox entries to produce this; no index file is read. This
+   gives the agent enough signal to decide whether `memory_search` is worth
+   calling without loading memory content. Example: `Memory: 3 topics (build,
+   testing, preferences), 2 recent inbox notes. Use memory_search to find
+   specific memories.`
+2. **The decision policy** — when to search, when to write, and how to weigh
+   memory against current sources.
+
+The decision policy tells the agent:
 
 1. That durable memory is available via `memory_search` and `memory_write`.
 2. To use `memory_search` only when the task may depend on facts from prior
@@ -647,15 +858,24 @@ The contract tells the agent:
    a follow-up query necessary.
 5. To treat memory as advisory: if memory conflicts with the current user
    message, repository state, or fresh tool output, the current source wins.
-6. To use `memory_write` only for durable preferences, conventions,
+   Before acting on a memory, verify it against the current repository state
+   when verification is cheap (e.g. check that a referenced tool, command, or
+   configuration still exists). Do not treat a memory as authoritative if it
+   contradicts what the agent observes in the current codebase.
+6. To use `memory_write` only when the user explicitly asks Pi to remember or
+   persist something.
+7. When writing explicitly, to persist only durable preferences, conventions,
    constraints, or findings likely to matter in a future session.
-7. Not to write transient task state, unresolved guesses, checkout-local
+8. Not to write transient task state, unresolved guesses, checkout-local
    branch/worktree quirks, summaries of obvious file changes, or secrets.
 
-The system prompt should carry the memory policy, not the memory contents. Pi
-should not assume any session-start-only injection model or recurrent
-memory-content injection without core support. The prompt is guidance, not the
-sole enforcement mechanism for managed-memory writes.
+The system prompt should carry the memory policy and a minimal orientation
+summary, not memory contents. The one-line summary derived from filesystem state
+is the only memory-adjacent content in the recurring prompt; it is a signal
+about what exists, not the content itself. Pi should not assume any session-start-only
+injection model or recurrent memory-content injection without core support. The
+prompt is guidance, not the sole enforcement mechanism for managed-memory
+writes.
 
 ## Pi Extension Architecture
 
@@ -664,17 +884,21 @@ sole enforcement mechanism for managed-memory writes.
 | Hook | Purpose |
 |------|---------|
 | `session_start` | Resolve the repo-scoped project ID and memory root. Ensure directory structure exists. |
-| `before_agent_start` | Inject the narrow memory decision contract into the system prompt. |
-| `session_before_compact` | Pre-compaction flush of durable learnings to inbox. |
-| `session_shutdown` | Optionally trigger light maintenance. |
-| `tool_call` | Block generic mutations targeting the managed memory root while allowing reads. |
+| `before_agent_start` | Inject the orientation summary (derived from filesystem state) and the memory decision contract into the system prompt. |
+| `tool_call` | Best-effort interception of generic mutations targeting the managed memory root while allowing reads. |
+
+`session_shutdown` and `session_before_compact` remain plausible later hooks
+for user-opt-in maintenance or autonomous capture, but v1 should not attach
+model-backed maintenance or new durable writes to either lifecycle event. This
+is reinforced by the current lack of an extension LLM call API (see
+Maintenance section).
 
 ### Tools
 
 | Tool | Purpose |
 |------|---------|
-| `memory_search` | Query durable memory. Returns ranked entry results with IDs, excerpts, current line spans, paths, headings, status, and dates. |
-| `memory_write` | Store a memory note through the managed mutation pipeline. Parameters: `content`, `topic` (optional — routes to topic file; omit for inbox). |
+| `memory_search` | Query durable memory. Parameters: `query` (required — natural-language or keyword search string), `scope` (optional — `global`, `project`, or `all`; defaults to `all`; controls whether to search global memory, project memory, or both). Returns ranked entry results with IDs, excerpts, current line spans, paths, headings, status, dates with relative age, and scope. |
+| `memory_write` | Create an explicit user-directed memory note through the managed write path. Parameters: `content` (required — the first level-2 heading becomes the entry heading; if absent, the extension derives one from the first sentence), `topic` (optional — routes to topic file; omit for inbox), `scope` (optional — `global` or `project`; defaults to `project`). |
 
 ### Commands
 
@@ -682,8 +906,7 @@ sole enforcement mechanism for managed-memory writes.
 |---------|---------|
 | `/memory` | Show memory status: file count, last modified, storage location, and scope policy. |
 | `/remember <text>` | Shortcut for explicit durable write. |
-| `/forget <query>` | Resolve matching memories to entry IDs, then mark those entries as invalid. |
-| `/dream` | Run maintenance on demand. |
+| `/forget <query>` | Resolve matching memories to entry IDs, then mark those entries as invalid. If the query matches multiple entries, `/forget` presents the matches and asks the user to confirm which entries to invalidate. A single match is also confirmed before invalidation. In non-interactive mode, it reports the matching entry IDs without invalidating any. |
 
 ## Prompt Behavior
 
@@ -691,8 +914,11 @@ Pi does not currently expose a documented session-only prompt hook. The design
 should therefore treat prompt injection as a recurring cost and keep it minimal.
 Instead:
 
-1. At `before_agent_start`, inject only the narrow memory decision contract.
-2. Leave `MEMORY.md`, topic files, and inbox notes on disk for on-demand use.
+1. At `before_agent_start`, inject the orientation summary and the narrow
+   memory decision contract. The orientation summary is a single line derived
+   from filesystem state (~30 tokens) that tells the agent what topics and
+   recent notes exist without loading memory content.
+2. Leave topic files and inbox notes on disk for on-demand use.
 3. Use `memory_search` only when the task appears to require prior-session
    facts.
 4. If `memory_search` returns a relevant excerpt, entry ID, and current line
@@ -710,15 +936,18 @@ This is the area where most current designs are weakest.
 
 ### Rules
 
-- New contradictory information should supersede the old entry, not simply add
-  another active note alongside it. The supersession link should point to the
-  replacing entry's stable ID.
-- Promoted inbox source entries remain on disk, marked `promoted`, and linked
-  from the topic entry via `Promoted-from`.
-- `promoted`, `superseded`, and `invalid` entries remain on disk for
-  traceability but are excluded from default search results.
-- Entries with `Review-after` dates appear in the maintenance report when past
-  due.
+- In v1, contradictory memories are handled through explicit invalidation, not
+  lineage. `/forget` marks the stale entry `invalid`, and any corrected fact is
+  written as a separate new entry through `memory_write`.
+- `invalid` entries remain on disk for traceability but are excluded from
+  default search results.
+- When maintenance exists (post-v1), promoted inbox source entries remain on
+  disk, marked `promoted`, and linked from the topic entry via
+  `Promoted-from`.
+- When full lineage exists (post-v1), `superseded` entries remain on disk for
+  traceability and link to their replacements via `Superseded-by`.
+- Entries with `Review-after` dates surface in maintenance reports (post-v1)
+  when past due.
 - Inbox notes are naturally deprioritized by age in search results.
 
 ### Why both status and recency matter
@@ -732,30 +961,36 @@ both dimensions.
 ```json
 {
   "memory": {
-    "enabled": true,
-    "maintenance": {
-      "dreamOnShutdown": false,
-      "dreamModel": null
-    }
+    "enabled": true
   }
 }
 ```
 
 This block belongs in user-level settings only. In v1, the extension should
 ignore `memory` keys in project `.pi/settings.json` entirely instead of trying
-to deep-merge them. That keeps three boundaries hard:
+to deep-merge them. That keeps two boundaries hard:
 
 - Enablement is a user choice, not a repo choice.
 - Storage/privacy decisions are user choices, not repo choices.
-- Autonomous maintenance behavior and model cost are user choices, not repo
-  choices.
 
-`dreamModel` defaults to null (use the session's current model). Teams that
-want cheaper maintenance can point it at a fast model in global settings. In
-v1, scope stays fixed instead of configurable: private memory is repo-shared
+The storage root should follow Pi's resolved global agent directory rather than
+assume a literal `~/.pi/agent` path. A custom `PI_CODING_AGENT_DIR` should
+move memory with the rest of the user's Pi state.
+
+V1 should not expose settings for implicit capture or pre-compaction flushing,
+because both behaviors are deferred entirely.
+
+In v1, scope stays fixed instead of configurable: private memory is repo-shared
 across worktrees for git repos and directory-scoped outside git. If Pi later
 adds worktree-local memory or workspace storage, those should be explicit
 user-level features rather than silent consequences of project config.
+
+When maintenance is eventually implemented, `dreamModel` and related settings
+would be added to the `maintenance` key. Those settings should have no implicit
+fallback — if unset, the maintenance command should report that it is not
+configured rather than silently using the session's current model. Automatic
+maintenance triggers, model cost, and maintenance behavior remain user choices,
+not repo choices.
 
 If later experience justifies project-level memory settings, they should be
 restricted to non-sensitive behavioral hints only. They should never control
@@ -766,24 +1001,29 @@ model selection.
 
 Ship the smallest version that has the right shape:
 
-1. Private Markdown-backed storage under `~/.pi/agent/memory/projects/`,
-   keyed by repo identity rather than worktree path.
-2. `MEMORY.md` + `inbox/` + `topics/`, with stable per-entry IDs.
+1. Private Markdown-backed storage under `<resolved-agent-dir>/memory/` with
+   two scopes: `global/` for cross-project user preferences and
+   `projects/<project-id>/` keyed by a collision-resistant project identity
+   derived from repo identity rather than worktree path.
+2. `inbox/` + `topics/` in both scopes, with stable per-entry IDs and the
+   minimal v1 metadata schema (`ID`, `Status`, and `Updated` for topic
+   entries). Same entry format everywhere. Orientation summary derived at
+   runtime from filesystem state — no `MEMORY.md` index in v1.
 3. Narrow recurrent system prompt contract with no memory-content preload.
-4. `memory_search` and `memory_write` tools.
+4. `memory_search` and create-only `memory_write` tools.
 5. Direct entry-aware file search, no index.
-6. Managed memory boundary with conservative policy for explicit and implicit
-   memories.
-7. Pre-compaction flush via `session_before_compact`.
-8. Manual `/dream` command for maintenance.
-9. `/memory`, `/remember`, `/forget` commands.
-10. User-level settings only; ignore project `memory` config in v1.
+6. Managed memory boundary with an explicit-write-only policy.
+7. `/memory`, `/remember`, `/forget` commands.
+8. User-level settings only; ignore project `memory` config in v1.
+9. No maintenance. Pi's extension API does not currently expose an LLM call
+   mechanism, so `/dream` is deferred until that API exists.
 
 Do not require in v1:
 
 - SQLite or any index.
 - QMD or any other external retrieval runtime.
 - Embeddings.
+- `/dream` or any maintenance pass (blocked on Pi extension LLM call API).
 - Automatic dreaming on shutdown.
 - Monthly summaries or archival.
 - Workspace storage mode.
@@ -793,42 +1033,53 @@ Do not require in v1:
 
 ### v1.1
 
-- Automatic dreaming on session shutdown (opt-in, user-level only).
+- `/dream` manual maintenance command, contingent on Pi exposing an extension
+  LLM call API (e.g. `pi.chat()` or equivalent). Includes `dreamModel`, the
+  full metadata schema (`Source`, `Superseded-by`, `Promoted-from`,
+  `Review-after`), and inbox-to-topic promotion plus lineage-aware
+  maintenance.
+- If Pi later documents a stable maintenance model-selection and shutdown
+  lifecycle contract, optional automatic maintenance triggers such as session
+  shutdown (opt-in, user-level only).
 - `Review-after` and expiration surfacing in maintenance reports.
 - User-enabled workspace storage mode for shared team memory.
 
 ### v1.2
 
+- Optional user-enabled autonomous inbox capture, including bounded
+  `session_before_compact` scanning, disabled by default.
 - Optional QMD-backed rebuildable index over derived memory entries for larger
   corpora.
 - Duplicate suppression and reranking.
 - Inbox archival and monthly summary generation.
 - Optional explicit worktree-local overlay layered on top of repo-shared
-  memory.
+  memory, if real usage shows repo-shared scope is insufficient for long-lived
+  branch work.
 
 ### v2
 
 - Optional hybrid lexical + semantic retrieval via QMD or an equivalent local
   backend.
-- Per-subagent memory scopes.
 - Richer inspection UI for memory lineage.
 
 ## Open Questions
 
-1. How aggressive should implicit writes be before users find the memory store
-   noisy? This probably needs tuning based on real usage rather than guessing
-   in the design phase.
+1. If Pi later adds opt-in autonomous capture, how aggressive should it be
+   before users find the memory store noisy? This probably needs tuning based
+   on real usage rather than guessing in the design phase.
 
 2. Should promotion from inbox to topics happen only during `/dream`
-   maintenance, or also automatically when a note is recalled multiple times
-   by `memory_search`? Recall-driven promotion is appealing but adds
-   bookkeeping complexity.
+   maintenance (post-v1), or also automatically when a note is recalled
+   multiple times by `memory_search`? Recall-driven promotion is appealing but
+   adds bookkeeping complexity. In v1 without maintenance, inbox notes
+   accumulate with no triage path except manual `/forget` or hand-editing.
 
-3. What is the right default `dreamModel`? Using the session model is simple
-   but potentially expensive. Using a fixed cheap model is economical but may
-   produce lower-quality maintenance. The setting exists to let users decide in
-   global config, but the default matters.
+3. If Pi later adds an extension LLM call API and automatic maintenance
+   triggers, what should the contract be for selecting a maintenance model and
+   handling model-backed work during shutdown or other lifecycle events? This
+   should follow documented Pi APIs rather than extension-local guesswork.
 
-4. Once Pi adds a worktree-local overlay, should default search merge repo and
-   worktree scopes automatically, or require an explicit query flag when users
-   want checkout-local memory?
+4. The folder-per-agent pattern means "project" now covers both codebases and
+   agent home directories. Should the extension surface this distinction in
+   `/memory` status or maintenance reports, or is the abstraction better left
+   invisible?
