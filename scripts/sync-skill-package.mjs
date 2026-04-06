@@ -41,6 +41,11 @@ for (const entry of entries) {
       await cp(licenseSource, join(packageDir, "LICENSE.md"));
     }
 
+    const readmeSource = join(canonicalDir, "README.md");
+    if (existsSync(readmeSource)) {
+      await cp(readmeSource, join(packageDir, "README.md"));
+    }
+
     synced.push(`${packageJson.name} <- ${skillName}`);
   }
 }
