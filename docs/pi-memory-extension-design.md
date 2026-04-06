@@ -1,5 +1,27 @@
 # Pi Memory Extension Design
 
+## Table of Contents
+
+- [Purpose](#purpose)
+- [Why This Exists](#why-this-exists)
+- [Research Summary](#research-summary)
+- [Design Goals](#design-goals)
+- [Non-Goals](#non-goals)
+- [Design Rationale](#design-rationale)
+- [Storage Model](#storage-model)
+- [Retrieval Model](#retrieval-model)
+- [Write Model](#write-model)
+- [Compaction Cooperation](#compaction-cooperation)
+- [Maintenance ("Dreaming") — Deferred Past v1](#maintenance-dreaming--deferred-past-v1)
+- [System Prompt Contract](#system-prompt-contract)
+- [Pi Extension Architecture](#pi-extension-architecture)
+- [Prompt Behavior](#prompt-behavior)
+- [Staleness and Invalidation](#staleness-and-invalidation)
+- [Settings](#settings)
+- [Recommended v1 Scope](#recommended-v1-scope)
+- [Evolution Path](#evolution-path)
+- [Open Questions](#open-questions)
+
 ## Purpose
 
 `@counterposition/pi-memory` gives the Pi coding agent durable memory across
