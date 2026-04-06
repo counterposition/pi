@@ -18,6 +18,7 @@
 - [Prompt Behavior](#prompt-behavior)
 - [Staleness and Invalidation](#staleness-and-invalidation)
 - [Settings](#settings)
+- [Testing Strategy](#testing-strategy)
 - [Recommended v1 Scope](#recommended-v1-scope)
 - [Evolution Path](#evolution-path)
 - [Open Questions](#open-questions)
@@ -613,16 +614,19 @@ frontmatter delimited by `---` and the level-1 topic title — is file-level
 metadata, not an entry. The parser should preserve it on write but not return it
 as a search result.
 
-**Metadata region.** Zero or more consecutive lines starting with `- `
+**Metadata region.** Zero or more consecutive lines starting with `-` followed
+by a space
 immediately after the heading line (blank lines between the heading and the
 first metadata line are allowed). The metadata region ends at the first
-non-blank line that does not start with `- `. A line matching `- ` that does
-not contain `: ` (colon followed by a space) is treated as body content, not
-metadata — this terminates the metadata region.
+non-blank line that does not start with `-` followed by a space. A line
+matching `-` followed by a space that does not contain `:` followed by a space
+is treated as body content, not metadata — this terminates the metadata
+region.
 
 **Key-value parsing.** Each metadata line is parsed as `- Key: Value` where the
-key is the text before the first `: ` and the value is the trimmed remainder of
-the line. Both key and value are trimmed of leading/trailing whitespace.
+key is the text before the first `:` followed by a space, and the value is the
+trimmed remainder of the line. Both key and value are trimmed of
+leading/trailing whitespace.
 `- Status:active` (no space after colon) does not parse as metadata.
 
 **Body.** Everything after the metadata region until the next entry boundary.
@@ -1226,6 +1230,151 @@ If later experience justifies project-level memory settings, they should be
 restricted to non-sensitive behavioral hints only. They should never control
 enablement, storage root, storage mode, maintenance triggers, or maintenance
 model selection.
+
+## Testing Strategy
+
+The implementation should bias toward deterministic tests over prompt-only
+evaluation. Most of v1 is filesystem, parsing, identity, and ranking logic;
+those behaviors should be covered by automated tests. No merge-blocking test
+should require network access, a live provider call, or an interactive TUI.
+
+The extension wiring should stay thin enough that most behavior can be tested
+as plain functions. Project-ID derivation, entry parsing, search ranking,
+excerpt generation, write planning, invalidation, and prompt construction
+should live outside the Pi hook registration layer so Vitest can exercise them
+without booting a full agent session.
+
+### Automated coverage
+
+The automated test suite should be split into pure unit tests and
+filesystem-backed integration tests.
+
+Unit tests should cover:
+
+- project identity derivation, including git-repo detection, shared-worktree
+  identity via git common dir, non-git directory fallback, path normalization,
+  slug generation, and stable `<slug>-<hash>` output
+- topic and inbox entry parsing, including frontmatter preservation, fenced
+  code blocks, metadata parsing rules, and each robustness rule from the
+  Storage Model section traced to at least one test case: missing `ID`
+  (synthetic ID assigned and backfilled on write), missing `Status` (defaults
+  to `active`), missing `Updated` (inbox falls back to filename date, topic
+  falls back to file mtime), unknown metadata fields (ignored), duplicate IDs
+  within a file (last entry wins), duplicate IDs across files (more recently
+  modified file wins), and empty entries (valid, empty body)
+- search semantics, including case-insensitive all-words matching,
+  word-boundary matching ("pnpm" matches "use pnpm" but not "xpnpmx"), heading
+  bonus, recency tiebreaking, invalid-entry filtering, project-over-global
+  precedence on conflicts, and bounded excerpt generation. Ranking tests should
+  use ordered assertions on full result lists, not just membership checks — a
+  test that only asserts "entry X appears" will not catch ranking regressions
+  such as a broken heading bonus
+- write planning, including heading derivation when `content` lacks a level-2
+  heading, new-topic creation, `Updated` stamping, ULID generation, length
+  limits (reject body over 2,000 characters), and ID-targeted invalidation
+  behavior for `/forget`
+- prompt/orientation generation, including topic-name discovery, one-line
+  summary formatting, and exact injected-contract text
+
+- error paths:
+  - memory root does not exist or is not writable (e.g. permissions)
+  - topic file contains non-Markdown binary content or structurally invalid
+    Markdown (parser must not crash; entries should be skipped with a warning)
+  - `pi.exec` for git commands fails or times out (project identity must fall
+    back to non-git directory behavior rather than throwing)
+  - atomic rename fails (disk full, permissions — the write path must report a
+    clear error, not leave a temp file behind)
+
+Integration tests should cover:
+
+- `session_start` creating the expected `global/` and `projects/<project-id>/`
+  directory structure under the resolved agent dir and caching the orientation
+  summary
+- `before_agent_start` injecting the cached orientation summary and decision
+  contract, then refreshing that summary after a `memory_write` that creates a
+  new topic
+- `memory_search` against the fixture corpus described below, verifying
+  returned IDs, headings, paths, line spans, statuses, relative-age
+  formatting, scope labels, and result limits
+- `memory_write` appending exactly one new entry, preserving file preamble,
+  creating a topic file on demand, and refusing oversized entries
+- `/forget` resolving search hits to stable IDs, marking the selected entry
+  `invalid`, preserving traceability on disk, and reporting-only in
+  non-interactive mode
+- `tool_call` interception of the managed memory root:
+  - `write` to `<memory-root>/topics/build.md` → blocked
+  - `write` to a path that traverses out of the memory root
+    (`<memory-root>/../escape.md`) → blocked
+  - `read` from `<memory-root>/topics/build.md` → allowed
+  - `write` to an unrelated path that happens to contain "memory" → allowed
+  - the extension's own managed write path (atomic rename into the memory
+    root) → allowed. The test must verify the exemption mechanism, not just
+    that "writes work"
+- concurrent writes: two `memory_write` calls targeting the same topic file
+  in parallel. Both must complete without producing a partial or corrupt file.
+  This is not a stress test — a single two-writer race is sufficient to verify
+  the atomic-rename contract
+
+### Test fixture corpus
+
+Integration tests should share a common fixture corpus that covers the edge
+cases the parser and search engine must handle. The fixture should be checked
+into the test directory as static Markdown files (not generated at runtime)
+so reviewers can inspect them directly.
+
+Minimum fixture contents:
+
+| File | Notable properties |
+|------|--------------------|
+| `project/topics/build.md` | 3 entries: one fully populated, one with `Status: invalid`, one missing `ID` (exercises synthetic-ID assignment) |
+| `project/topics/testing.md` | 2 entries: one with an `Updated` date >90 days old, one recent. Exercises recency tiebreaking and relative-age formatting |
+| `project/topics/empty.md` | 1 entry: heading only, no metadata, no body. Exercises the empty-entry rule |
+| `project/topics/codeblocks.md` | 1 entry whose body contains a fenced code block with `## ` inside. Exercises the heading-boundary parser against false positives |
+| `project/topics/duplicates.md` | 2 entries with the same `ID`. Exercises the duplicate-ID-within-file rule (last entry wins) |
+| `global/topics/preferences.md` | 2 entries: one that conflicts with a project entry (e.g. "use npm" vs project's "use pnpm"), one unique. Exercises scope-precedence merge |
+
+This is a minimum — implementations may add fixtures for additional edge cases
+discovered during development. The fixture corpus should also include at least
+one topic file with 10+ entries to exercise the `max_results` truncation path.
+
+### Error recovery and filesystem edge cases
+
+The following filesystem scenarios should be tested at the integration level:
+
+- `session_start` when the memory root does not yet exist (first run): the
+  extension creates the full directory structure without error
+- `session_start` when the memory root exists but a subdirectory is missing
+  (e.g. `projects/<id>/topics/` was deleted): the extension recreates missing
+  subdirectories
+- `memory_write` when the target topic file is read-only: the write fails with
+  a clear error, no temp file is left behind, and the existing file is not
+  modified
+- `memory_search` when the memory root exists but contains no topic files:
+  returns an empty result set, not an error
+
+### Manual acceptance checks
+
+Some behaviors in this design are model-mediated rather than extension-local,
+so they should be validated with a small manual smoke checklist instead of
+pretending they are deterministic unit tests.
+
+Before shipping v1, run the extension in a temporary repo with `pi -e` (or the
+package under test once it exists) and verify:
+
+- explicit remember flows create project-scoped and global memories in the
+  expected locations
+- memory created in one worktree is visible from a sibling worktree of the same
+  repo, while a non-git directory gets its own project root
+- a custom `PI_CODING_AGENT_DIR` relocates the memory store correctly
+- `/memory`, `/remember`, and `/forget` behave correctly in interactive and
+  non-interactive modes
+- the prompt-behavior examples in the earlier Prompt Behavior section still
+  produce the intended agent behavior after prompt wording changes
+
+These manual checks are the acceptance layer for prompt wording. The
+filesystem, parser, ranking, and mutation rules should still be enforced by
+automated tests so regressions are caught without rerunning a live-model
+exercise for every change.
 
 ## Recommended v1 Scope
 
