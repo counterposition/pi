@@ -1,10 +1,15 @@
 {
   "name": "@counterposition/pi-web-search",
-  "version": "0.2.2",
-  "description": "Web search and page fetching tools for the Pi coding agent",
+  "version": "0.2.3",
+  "description": "Multi-provider web search and markdown page fetch for Pi",
   "keywords": [
     "pi-extension",
-    "pi-package"
+    "pi-package",
+    "web-search",
+    "search",
+    "brave-search",
+    "tavily",
+    "exa"
   ],
   "homepage": "https://github.com/counterposition/pi/tree/main/packages/pi-web-search",
   "bugs": {
