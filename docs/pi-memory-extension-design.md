@@ -7,10 +7,16 @@ sessions. Memories are Markdown files on disk, human-readable and
 human-editable.
 
 Pi's session history and compaction summaries preserve conversation context, but
-they are not designed as a durable store of curated facts. A user who discovers
-that tests require local Redis, or that the team always uses pnpm, has no
-structured way to tell the agent "remember this for next time" and have it
-survive session boundaries and compaction.
+they are not designed as a durable store of curated facts. AGENTS.md offers one
+form of persistence — a user can write "tests require local Redis" there and
+the agent will see it in every future session — but it is repo-committed
+(public), loaded in full into every prompt (cost grows with size), per-repo
+only, and has no lifecycle management.
+
+The memory extension complements AGENTS.md with lower-friction writes
+(conversational "remember this" rather than manual file editing), user-local
+privacy, cross-project scope, on-demand retrieval that does not grow prompt
+cost, and per-entry lifecycle tracking.
 
 In v1, the extension gives the user a way to persist high-signal notes for the
 agent and gives the agent a way to search for them. The design is shaped so
@@ -43,6 +49,32 @@ to tell the agent in a way that persists across sessions. The user writes;
 the agent indexes and retrieves. This is a curated notebook with search, not
 autonomous knowledge capture — but it establishes the storage model and
 retrieval tools that later versions build on.
+
+### Adoption risk of explicit-write-only v1
+
+All three reference systems (Claude Code, Hermes, OpenClaw) converge on
+agent-initiated writing as the primary capture path. V1 defers autonomous
+capture entirely — the user must say "remember this" for every write. This
+creates a bootstrap problem: a memory store that is empty most of the time does
+not demonstrate its value, and users who rarely say "remember this" see no
+benefit.
+
+The v1 bet is that the storage model and retrieval tools are the hard parts,
+and that writing automation is comparatively easy to layer on later. This is
+defensible — the user who installs a memory extension is already invested in
+curating memory — but the risk should be stated plainly:
+
+- If v1 adoption is low because of write friction, the extension may not
+  survive to v1.1.
+- The path to autonomous capture (`/dream`, pre-compaction flush) depends on
+  Pi exposing an extension LLM call API whose timeline is unknown and outside
+  this project's control.
+
+If v1 adoption proves insufficient, a lightweight fallback exists: the agent
+can write directly via `memory_write` during conversation without LLM-backed
+maintenance. This is weaker than `/dream` (no deduplication, no promotion, no
+lineage tracking) but does not depend on any external API and could be explored
+before the full maintenance implementation.
 
 ## Research Summary
 
@@ -232,8 +264,10 @@ agent independently learns the same preferences. The global layer is therefore
 load-bearing, not optional.
 
 Search merges both scopes, with project entries taking precedence on conflict.
-Writes default to project scope for factual findings and global scope for
-stated user preferences, but the agent can target either explicitly.
+Writes default to project scope (`memory_write` defaults `scope` to
+`project`). The system prompt contract directs the agent to set
+`scope: "global"` explicitly for personal preferences that apply across
+projects.
 
 Concurrent writes to global memory from multiple Pi sessions are a known v1
 limitation. Atomic rename prevents partial writes but not lost appends when two
@@ -394,10 +428,10 @@ of the repo store rather than changing the base identity model.
 ### Orientation Summary (No `MEMORY.md` in v1)
 
 The `before_agent_start` hook needs a one-line orientation summary — topic
-count, recent inbox count (~30 tokens) — to give the agent a signal that
-relevant memory exists without loading memory content. This summary is derived
-at runtime from filesystem state: glob topic files, count inbox entries, format
-the line. No maintained index file is needed.
+count (~30 tokens) — to give the agent a signal that relevant memory exists
+without loading memory content. This summary is derived at runtime from
+filesystem state: glob topic files and format the line. No maintained index
+file is needed.
 
 A persistent `MEMORY.md` index becomes useful when the corpus grows large enough
 to need a human-browsable table of contents or when `/dream` maintenance needs a
@@ -444,15 +478,12 @@ Characteristics:
 - Not injected into the prompt by default. Found via search or maintenance.
 - Safe to summarize and archive later.
 
-In v1, most explicit user-directed memories will route directly to topic files
-because they express standing preferences or conventions. The inbox exists
-primarily as scaffolding for future autonomous capture. It costs nothing to
-maintain the directory structure, and having it from day one avoids a storage
-migration later. Implementers should not invest in inbox-specific features
-(e.g., inbox-aware search ranking, age-based deprioritization) until the inbox
-has real content. Because `/dream` is deferred (no extension LLM call API),
-inbox promotion has no automated path in v1; the only way an inbox entry gets
-promoted is manual editing or a future maintenance pass.
+The inbox exists as scaffolding for future autonomous capture. V1 creates the
+directory structure (it costs nothing and avoids a storage migration later) but
+does not implement inbox writes, inbox-aware search ranking, or age-based
+deprioritization. All v1 writes go to topic files. When autonomous capture
+arrives (v1.2), it writes to the inbox; `/dream` maintenance (v1.1) adds the
+promotion path from inbox to topics.
 
 ### `topics/*.md`
 
@@ -494,8 +525,11 @@ remain navigation aids, not long-lived identity.
 V1 entry metadata fields:
 
 - `ID`: a `mem_` prefix followed by a ULID (26 characters of Crockford
-  Base32) — stable opaque selector unique within the project memory root
-  (required). Example: `mem_01JW2YCP4J4P7D9M9YQX4G8P4H`.
+  Base32) — stable opaque selector unique across all scopes (required).
+  Example: `mem_01JW2YCP4J4P7D9M9YQX4G8P4H`. ULIDs are practically globally
+  unique, so collisions are not a real concern, but `/forget` and future
+  lineage operations may need to resolve IDs across both global and project
+  memory.
 - `Status`: `active | invalid` (required)
 - `Updated`: date (required for topic entries)
 
@@ -508,7 +542,8 @@ or interpreted until maintenance and autonomous capture exist:
 - `Review-after`: date (for time-sensitive facts)
 
 The parser should ignore unknown metadata fields so hand-added fields do not
-break anything.
+break anything. New metadata fields added in future versions have no effect on
+entries that predate them; the parser treats missing fields as unset.
 
 `Status` is first-class so stale memories are a data problem, not only a
 retrieval problem. In v1, entries are either `active` or `invalid` (set by
@@ -526,16 +561,68 @@ The files above are organized for humans. Retrieval should operate on parsed
 memory entries:
 
 - One topic entry = one heading section in `topics/*.md`.
-- One inbox entry = one timestamped heading section in `inbox/YYYY-MM-DD.md`.
+- One inbox entry (post-v1) = one timestamped heading section in
+  `inbox/YYYY-MM-DD.md`.
+
+In v1, retrieval covers topic entries only. The inbox directory exists but
+contains no entries until autonomous capture is enabled (v1.2).
 
 Each parsed entry carries the data retrieval actually needs: stable `ID`, file
-path, heading, body, status, dates, and whether it came from a topic file or
-the inbox.
+path, heading, body, status, and dates.
 
 This distinction matters even if the v1 implementation uses simple file
 operations. It matters even more for future indexed backends such as QMD,
 because they index documents and chunks, not Pi's memory-state semantics. Pi
 therefore needs its own entry parser either way.
+
+### Entry parser specification
+
+The entry parser sits between raw Markdown and every operation — search, write,
+`/forget`, maintenance. The rules below define what the parser must handle.
+
+**Entry boundaries.** A level-2 heading (`##`) that is not inside a fenced code
+block starts a new entry. The entry extends to the next such heading or the end
+of the file. Headings at other levels inside the entry body are part of that
+entry's content, not new entry boundaries. Headings inside fenced code blocks
+(between `` ``` `` fences) must not be treated as boundaries.
+
+**File preamble.** Text before the first `##` heading — including any YAML
+frontmatter delimited by `---` and the level-1 topic title — is file-level
+metadata, not an entry. The parser should preserve it on write but not return it
+as a search result.
+
+**Metadata region.** Zero or more consecutive lines starting with `- `
+immediately after the heading line (blank lines between the heading and the
+first metadata line are allowed). The metadata region ends at the first
+non-blank line that does not start with `- `. A line matching `- ` that does
+not contain `: ` (colon followed by a space) is treated as body content, not
+metadata — this terminates the metadata region.
+
+**Key-value parsing.** Each metadata line is parsed as `- Key: Value` where the
+key is the text before the first `: ` and the value is the trimmed remainder of
+the line. Both key and value are trimmed of leading/trailing whitespace.
+`- Status:active` (no space after colon) does not parse as metadata.
+
+**Body.** Everything after the metadata region until the next entry boundary.
+
+**Robustness rules:**
+
+- Missing `ID`: the parser assigns a synthetic ID derived from the file path and
+  heading text, logs a warning, and includes the entry in results. Mutations
+  targeting the entry by this synthetic ID should backfill a proper ULID-based
+  `ID` on write.
+- Missing `Status`: the parser defaults to `active` and logs a warning.
+- Missing `Updated`: acceptable for inbox entries (the date is in the filename);
+  for topic entries, the parser defaults to the file's last-modified date and
+  logs a warning.
+- Unknown metadata fields: ignored (already stated in the metadata section, but
+  restated here for completeness).
+- Duplicate IDs within a file: the parser keeps only the last entry with that ID
+  and logs a warning.
+- Duplicate IDs across files: the parser prefers the entry from the more
+  recently modified file.
+- Empty entries (heading with no metadata or body): valid — the parser returns
+  them with an empty body.
 
 ## Retrieval Model
 
@@ -575,21 +662,55 @@ QMD is attractive, but making it a default dependency in v1 is the wrong trade:
 1. Search both global and project memory, merging results into a single ranked
    list. When entries from both scopes match, project entries take precedence
    on conflict (e.g. a project-scoped "use npm" supersedes a global "use pnpm").
-2. Search parsed topic entries and recent inbox entries.
+2. In v1, search parsed topic entries only. When inbox writes exist (post-v1),
+   also search recent inbox entries, ranked below topic entries and
+   deprioritized by age.
 3. Use heading boundaries as entry boundaries, not fixed character windows.
 4. Exclude entries with `Status: invalid` by default. When `promoted` and
    `superseded` statuses exist (post-v1), exclude `promoted` and down-rank
    `superseded` unless the query asks for history.
-5. Prefer active topic entries first, then recent active inbox notes.
+5. Return at most `max_results` entries (default 10). Results are ranked and
+   truncated, not exhaustive. The caller can override the limit but the
+   default should be low enough that a broad query does not flood the context.
 6. Return results with stable `ID`, exact file path, heading, status, dates, a
-   bounded excerpt, the current line span for convenience, and the scope
-   (global or project). Dates should include a human-readable relative age
-   (e.g. "2026-03-29 (3 days ago)") so that staleness is immediately visible
-   in the result. An entry updated 90 days ago should read "(3 months ago)."
-   This is trivial to compute and makes the agent naturally more skeptical of
-   old entries without any prompt-side cost.
+   bounded excerpt (up to 300 characters of body text per entry), the current
+   line span for convenience, and the scope (global or project). Dates should
+   include a human-readable relative age (e.g. "2026-03-29 (3 days ago)") so
+   that staleness is immediately visible in the result. An entry updated 90
+   days ago should read "(3 months ago)." This is trivial to compute and makes
+   the agent naturally more skeptical of old entries without any prompt-side
+   cost.
 7. Provide enough inline context that the agent can usually judge relevance
    without an immediate follow-up `read`.
+
+### Matching semantics (v1)
+
+V1 uses lexical matching with the following baseline rules:
+
+1. **Case-insensitive.** All comparisons are case-folded.
+2. **Word splitting.** The query string is split into words on whitespace and
+   punctuation boundaries. Each word is matched independently.
+3. **Word-boundary matching.** A query word matches if it appears at a word
+   boundary in the target text — not as an arbitrary substring. "pnpm" matches
+   "use pnpm" but not "xpnpmx". Standard word-boundary rules apply (transition
+   between alphanumeric and non-alphanumeric characters).
+4. **All-words requirement.** An entry matches only if every query word matches
+   somewhere in the entry (heading or body). This is an AND, not an OR.
+5. **Heading bonus.** Entries where one or more query words match in the heading
+   are ranked above entries where all matches are body-only.
+6. **Recency tiebreaker.** Among entries with the same heading/body match
+   profile, more recently updated entries rank higher.
+7. **Scoring.** The ranking function combines: (a) number of query words
+   matching in the heading, (b) number of query words matching in the body,
+   and (c) recency. The exact weights are an implementation detail, but heading
+   matches should dominate over body-only matches, and recency should break
+   ties rather than override relevance.
+
+This means a user who writes "remember: always use pnpm" and later searches
+"package manager" will get no results — "pnpm" and "package manager" share no
+lexical overlap. This is a known limitation of v1 lexical search. The design
+accepts it: the user can search "pnpm" and find the entry. QMD-backed semantic
+search (post-v1) addresses the vocabulary mismatch problem.
 
 ### Future: indexed retrieval via QMD or equivalent
 
@@ -601,8 +722,9 @@ index behind the same `memory_search` interface:
   stable `ID`.
 - QMD is a strong candidate backend because it already provides local BM25,
   vector search, reranking, path context, and an embeddable SDK.
-- Pi must continue to enforce `Status`, history requests, and inbox recency
-  itself before or after backend retrieval.
+- Pi must continue to enforce `Status` and history requests itself before or
+  after backend retrieval. When inbox entries exist (post-v1), inbox recency
+  ranking is also Pi's responsibility.
 - Optional hybrid lexical + semantic retrieval can arrive later without
   changing the user-facing model.
 - The user-facing tool should not change when the retrieval backend changes,
@@ -622,9 +744,10 @@ protected-path sandbox.
 ### Best-effort managed memory boundary
 
 `memory_write` should be the primary model-facing write tool for managed
-memory. Other extension-owned mutations such as `/remember`, `/forget`, inbox
-promotion (deferred), invalidation, and maintenance (deferred) should reuse
-the same internal write path rather than writing files ad hoc.
+memory. `/remember` is agent-mediated and routes through `memory_write`. Other
+extension-owned mutations such as `/forget`, invalidation, inbox promotion
+(deferred), and maintenance (deferred) should reuse the same internal write
+path rather than writing files ad hoc.
 
 That write path should resolve and operate on stable entry IDs. Query-driven
 flows such as `/forget <query>` or duplicate merging may use search to find
@@ -654,8 +777,11 @@ All managed-path mutations should:
 2. Reject path traversal or symlink escapes outside the managed memory root.
 3. Filter obvious secrets and other disallowed content before persisting.
 4. Use atomic filesystem operations (write to a temp file in the same
-   directory, then rename) to avoid partial writes visible to concurrent
-   reads.
+   directory, then rename) for concurrent-process safety — no partial reads
+   by concurrent Pi sessions. This is not a crash-durability guarantee
+   (`rename(2)` without `fsync` on the parent directory is not guaranteed to
+   persist after a system crash), but data loss on crash is acceptable for a
+   memory extension since the user can re-state the memory.
 
 Manual human edits outside the model tool loop remain allowed, and unmanaged
 mutations may still happen outside the managed write path. On the next access,
@@ -666,11 +792,9 @@ files.
 
 In v1, `memory_write` is for explicit user-directed persistence only. When the
 user says a variant of "remember this", "always do X", "never do Y", or "keep
-in mind that...", the extension should write a durable memory. Explicit user
-requests go directly to a topic file when they express a standing preference or
-convention, and to the inbox otherwise. In practice, most explicit requests are
-standing preferences, so the inbox will see little v1 traffic (see the
-scaffolding note under `inbox/YYYY-MM-DD.md` above).
+in mind that...", the extension should write a durable memory. All v1 writes
+go to topic files. The `topic` parameter is required; `memory_write` creates
+the topic file on demand if it does not already exist.
 
 The model should not treat "this seems useful later" as sufficient reason to
 persist memory on its own in v1. If the user did not ask to remember
@@ -697,13 +821,24 @@ and the reserved lineage fields remain unused until maintenance and autonomous
 capture exist. Future versions can add explicit supersession once
 `superseded`, `Superseded-by`, and related workflows are active.
 
+### Entry size limit
+
+`memory_write` rejects entries whose body text exceeds 2,000 characters with a
+clear error message. The heading and metadata do not count toward this limit.
+This prevents a single write from creating an outsized entry that dominates
+search excerpts and consumes disproportionate context. Entries approaching this
+limit should be split into multiple entries or summarized before writing. The
+limit applies to the managed write path; hand-edited files are not rejected by
+the parser but oversized entries are truncated in search excerpts.
+
 ### Heading extraction from `content`
 
-The first level-2 heading (for example, `## Use pnpm, not npm`) in `content`
-becomes the entry heading. If `content` contains no level-2 heading, the
-extension derives a heading from the first sentence. The heading is the
-primary human-readable label and the text `memory_search` matches against; the
-body is everything after it.
+Each `memory_write` call creates exactly one entry. The first level-2 heading
+(for example, `## Use pnpm, not npm`) in `content` becomes the entry heading;
+subsequent headings in the same `content` are part of the entry body. If
+`content` contains no level-2 heading, the extension derives a heading from the
+first sentence. The heading is the primary human-readable label and the text
+`memory_search` matches against; the body is everything after it.
 
 ### Future: opt-in autonomous capture
 
@@ -836,13 +971,15 @@ prompt. Pi documents this hook as "Before LLM call," so anything inserted here
 must be treated as recurring prompt cost, not as a once-per-session cost. The
 contract carries two things:
 
-1. **A one-line orientation summary** derived at runtime from filesystem state
-   — topic count and recent inbox count (~30 tokens). The extension globs topic
-   files and counts inbox entries to produce this; no index file is read. This
-   gives the agent enough signal to decide whether `memory_search` is worth
-   calling without loading memory content. Example: `Memory: 3 topics (build,
-   testing, preferences), 2 recent inbox notes. Use memory_search to find
-   specific memories.`
+1. **A one-line orientation summary** derived from filesystem state — topic
+   count (~30 tokens). The extension globs topic files to produce this; no
+   index file is read. This gives the agent enough signal to decide whether
+   `memory_search` is worth calling without loading memory content. Example:
+   `Memory: 3 topics (build, testing, preferences). Use memory_search to find
+   specific memories.` The orientation summary should be computed once at
+   `session_start` and cached in memory, not recomputed from the filesystem on
+   every `before_agent_start` call. The cache is invalidated when
+   `memory_write` modifies topic files.
 2. **The decision policy** — when to search, when to write, and how to weigh
    memory against current sources.
 
@@ -854,6 +991,11 @@ The decision policy tells the agent:
    or recent tool results.
 3. Not to use `memory_search` for routine code inspection, facts that can be
    verified directly from files, or ephemeral details about the current turn.
+   When querying memory, to prefer `memory_search` over raw file tools
+   (`grep`, `glob`, `read`) targeting the memory root — `memory_search`
+   enforces status filtering, scope merging, and ranking that raw reads
+   bypass. Raw reads are fine for follow-up inspection of a specific file
+   after `memory_search` returns a path.
 4. To prefer at most one targeted `memory_search` unless the first result makes
    a follow-up query necessary.
 5. To treat memory as advisory: if memory conflicts with the current user
@@ -868,6 +1010,12 @@ The decision policy tells the agent:
    constraints, or findings likely to matter in a future session.
 8. Not to write transient task state, unresolved guesses, checkout-local
    branch/worktree quirks, summaries of obvious file changes, or secrets.
+9. To prefer existing topics from the orientation summary when choosing a
+   `topic` for `memory_write`. Create a new topic only when no existing one
+   fits.
+10. For personal preferences that apply across projects, to set
+    `scope: "global"`. For project-specific facts, use the default `project`
+    scope.
 
 The system prompt should carry the memory policy and a minimal orientation
 summary, not memory contents. The one-line summary derived from filesystem state
@@ -883,8 +1031,8 @@ writes.
 
 | Hook | Purpose |
 |------|---------|
-| `session_start` | Resolve the repo-scoped project ID and memory root. Ensure directory structure exists. |
-| `before_agent_start` | Inject the orientation summary (derived from filesystem state) and the memory decision contract into the system prompt. |
+| `session_start` | Resolve the repo-scoped project ID and memory root. Ensure directory structure exists. Compute and cache the orientation summary from filesystem state. |
+| `before_agent_start` | Inject the cached orientation summary and the memory decision contract into the system prompt. |
 | `tool_call` | Best-effort interception of generic mutations targeting the managed memory root while allowing reads. |
 
 `session_shutdown` and `session_before_compact` remain plausible later hooks
@@ -897,15 +1045,15 @@ Maintenance section).
 
 | Tool | Purpose |
 |------|---------|
-| `memory_search` | Query durable memory. Parameters: `query` (required — natural-language or keyword search string), `scope` (optional — `global`, `project`, or `all`; defaults to `all`; controls whether to search global memory, project memory, or both). Returns ranked entry results with IDs, excerpts, current line spans, paths, headings, status, dates with relative age, and scope. |
-| `memory_write` | Create an explicit user-directed memory note through the managed write path. Parameters: `content` (required — the first level-2 heading becomes the entry heading; if absent, the extension derives one from the first sentence), `topic` (optional — routes to topic file; omit for inbox), `scope` (optional — `global` or `project`; defaults to `project`). |
+| `memory_search` | Query durable memory. Parameters: `query` (required — natural-language or keyword search string), `scope` (optional — `global`, `project`, or `all`; defaults to `all`; controls whether to search global memory, project memory, or both), `max_results` (optional — positive integer; defaults to 10; caps the number of returned entries). Returns ranked entry results with IDs, bounded excerpts (up to 300 characters of body), current line spans, paths, headings, status, dates with relative age, and scope. |
+| `memory_write` | Create an explicit user-directed memory note through the managed write path. Parameters: `content` (required — the first level-2 heading becomes the entry heading; if absent, the extension derives one from the first sentence), `topic` (required — routes to topic file; the file is created on demand if it does not exist), `scope` (optional — `global` or `project`; defaults to `project`). |
 
 ### Commands
 
 | Command | Purpose |
 |---------|---------|
 | `/memory` | Show memory status: file count, last modified, storage location, and scope policy. |
-| `/remember <text>` | Shortcut for explicit durable write. |
+| `/remember <text>` | Agent-mediated shortcut for explicit durable write. The command injects a prompt directing the agent to persist `<text>` via `memory_write`. The agent decides `topic` and `scope`. |
 | `/forget <query>` | Resolve matching memories to entry IDs, then mark those entries as invalid. If the query matches multiple entries, `/forget` presents the matches and asks the user to confirm which entries to invalidate. A single match is also confirmed before invalidation. In non-interactive mode, it reports the matching entry IDs without invalidating any. |
 
 ## Prompt Behavior
@@ -914,11 +1062,11 @@ Pi does not currently expose a documented session-only prompt hook. The design
 should therefore treat prompt injection as a recurring cost and keep it minimal.
 Instead:
 
-1. At `before_agent_start`, inject the orientation summary and the narrow
-   memory decision contract. The orientation summary is a single line derived
-   from filesystem state (~30 tokens) that tells the agent what topics and
-   recent notes exist without loading memory content.
-2. Leave topic files and inbox notes on disk for on-demand use.
+1. At `before_agent_start`, inject the cached orientation summary and the
+   narrow memory decision contract. The orientation summary is a single line
+   (~30 tokens) computed at `session_start` and invalidated on `memory_write`,
+   telling the agent what topics exist without loading memory content.
+2. Leave topic files on disk for on-demand use.
 3. Use `memory_search` only when the task appears to require prior-session
    facts.
 4. If `memory_search` returns a relevant excerpt, entry ID, and current line
@@ -948,13 +1096,14 @@ This is the area where most current designs are weakest.
   traceability and link to their replacements via `Superseded-by`.
 - Entries with `Review-after` dates surface in maintenance reports (post-v1)
   when past due.
-- Inbox notes are naturally deprioritized by age in search results.
+- When inbox writes exist (post-v1), inbox notes are naturally deprioritized
+  by age in search results.
 
 ### Why both status and recency matter
 
-Recency alone cannot invalidate a wrong evergreen fact. Status alone cannot keep
-months of dated inbox notes from crowding search results. The extension needs
-both dimensions.
+Recency alone cannot invalidate a wrong evergreen fact. When inbox entries exist
+(post-v1), status alone cannot keep months of dated inbox notes from crowding
+search results. The extension needs both dimensions.
 
 ## Settings
 
@@ -1005,10 +1154,11 @@ Ship the smallest version that has the right shape:
    two scopes: `global/` for cross-project user preferences and
    `projects/<project-id>/` keyed by a collision-resistant project identity
    derived from repo identity rather than worktree path.
-2. `inbox/` + `topics/` in both scopes, with stable per-entry IDs and the
-   minimal v1 metadata schema (`ID`, `Status`, and `Updated` for topic
-   entries). Same entry format everywhere. Orientation summary derived at
-   runtime from filesystem state — no `MEMORY.md` index in v1.
+2. `inbox/` + `topics/` directory structure in both scopes. V1 writes only to
+   `topics/`; `inbox/` is created as scaffolding for future autonomous capture.
+   Stable per-entry IDs with the minimal v1 metadata schema (`ID`, `Status`,
+   and `Updated` for topic entries). Orientation summary derived at runtime
+   from filesystem state — no `MEMORY.md` index in v1.
 3. Narrow recurrent system prompt contract with no memory-content preload.
 4. `memory_search` and create-only `memory_write` tools.
 5. Direct entry-aware file search, no index.
@@ -1071,8 +1221,7 @@ Do not require in v1:
 2. Should promotion from inbox to topics happen only during `/dream`
    maintenance (post-v1), or also automatically when a note is recalled
    multiple times by `memory_search`? Recall-driven promotion is appealing but
-   adds bookkeeping complexity. In v1 without maintenance, inbox notes
-   accumulate with no triage path except manual `/forget` or hand-editing.
+   adds bookkeeping complexity.
 
 3. If Pi later adds an extension LLM call API and automatic maintenance
    triggers, what should the contract be for selecting a maintenance model and
