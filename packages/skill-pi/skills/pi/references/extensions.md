@@ -65,18 +65,27 @@ export default function (pi: ExtensionAPI) {
 
 Useful session events:
 
-- `session_directory`
 - `session_start`
 - `session_before_switch`
-- `session_switch`
 - `session_before_fork`
-- `session_fork`
 - `session_before_compact`
 - `session_compact`
 - `session_before_tree`
 - `session_tree`
 - `session_shutdown`
 - `resources_discover`
+
+Pi 0.65.0 removed the post-transition `session_switch` and `session_fork` events. Handle startup, reload, new, resume, and fork in `session_start` instead:
+
+```typescript
+pi.on("session_start", async (event, ctx) => {
+  if (event.reason === "fork" && event.previousSessionFile && ctx.hasUI) {
+    ctx.ui.notify(`Forked from ${event.previousSessionFile}`, "info");
+  }
+});
+```
+
+Use `event.reason` to distinguish `"startup"`, `"reload"`, `"new"`, `"resume"`, and `"fork"`. For `"new"`, `"resume"`, and `"fork"`, `event.previousSessionFile` points at the session file being replaced.
 
 Useful agent events:
 

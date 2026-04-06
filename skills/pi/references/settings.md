@@ -46,6 +46,7 @@ Edit JSON directly or use `/settings` for common interactive options.
 
 - `doubleEscapeAction`: `"tree"`, `"fork"`, or `"none"`
 - `treeFilterMode`: `"default"`, `"no-tools"`, `"user-only"`, `"labeled-only"`, or `"all"`
+- In `/tree`, `Shift+T` toggles timestamps on entry labels
 
 ## Compaction, Branch Summary, Retry
 
@@ -119,11 +120,7 @@ Notes:
 }
 ```
 
-Precedence for session storage is:
-
-1. `--session-dir`
-2. `sessionDir` in settings
-3. Extension `session_directory` hooks
+When multiple sources specify a session directory, `--session-dir` takes precedence over `sessionDir` in settings. Pi 0.65.0 removed the old `session_directory` extension/settings hook.
 
 ## Resources
 

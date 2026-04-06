@@ -1,6 +1,6 @@
 # SDK
 
-The SDK embeds Pi in Node.js applications via `createAgentSession()`.
+The SDK embeds Pi in Node.js applications via `createAgentSession()`. Use `createAgentSessionRuntime()` when you need `/new`, `/resume`, `/fork`, or import-style session replacement.
 
 ## Installation
 
@@ -99,12 +99,62 @@ await session.followUp("Summarize the changes afterward");
 
 `prompt()` expands file-based prompt templates. During active streaming, calling it without `streamingBehavior` throws.
 
+## Session Runtime
+
+Pi 0.65.0 moved session replacement off `AgentSession` and onto `AgentSessionRuntime`. Use the runtime when you need `newSession()`, `switchSession()`, `fork()`, or `importFromJsonl()`.
+
+```typescript
+import {
+  type CreateAgentSessionRuntimeFactory,
+  createAgentSessionFromServices,
+  createAgentSessionRuntime,
+  createAgentSessionServices,
+  getAgentDir,
+  SessionManager,
+} from "@mariozechner/pi-coding-agent";
+
+const createRuntime: CreateAgentSessionRuntimeFactory = async ({
+  cwd,
+  sessionManager,
+  sessionStartEvent,
+}) => {
+  const services = await createAgentSessionServices({ cwd });
+  return {
+    ...(await createAgentSessionFromServices({
+      services,
+      sessionManager,
+      sessionStartEvent,
+    })),
+    services,
+    diagnostics: services.diagnostics,
+  };
+};
+
+const runtime = await createAgentSessionRuntime(createRuntime, {
+  cwd: process.cwd(),
+  agentDir: getAgentDir(),
+  sessionManager: SessionManager.create(process.cwd()),
+});
+
+let session = runtime.session;
+let unsubscribe = session.subscribe(() => {});
+
+await runtime.newSession();
+
+unsubscribe();
+session = runtime.session;
+unsubscribe = session.subscribe(() => {});
+```
+
+Notes:
+
+- `runtime.session` changes after replacement. Re-subscribe to session-local events after `newSession()`, `switchSession()`, `fork()`, or `importFromJsonl()`.
+- Cross-cwd replacement rebuilds cwd-bound services and session configuration.
+- `runtime.diagnostics` carries startup and replacement diagnostics instead of printing or exiting directly.
+
 ## Session Surface
 
 ```typescript
-await session.newSession();
-await session.switchSession("/path/to/session.jsonl");
-await session.fork("entry-id");
 await session.navigateTree("entry-id", { summarize: true });
 await session.compact("Summarize design decisions only");
 
@@ -112,6 +162,8 @@ await session.abort();
 await session.agent.waitForIdle();
 session.dispose();
 ```
+
+Use `runtime.newSession()`, `runtime.switchSession()`, and `runtime.fork()` for session replacement. Keep `navigateTree()` and `compact()` on the live `session`.
 
 Useful state:
 
@@ -155,3 +207,27 @@ session.subscribe((event) => {
 - Override `agentsFiles` to inject virtual `AGENTS.md` content
 - Add custom skills or prompt templates without touching disk
 - Share an event bus between the host app and loaded extensions
+
+## Standalone Custom Tools
+
+Use `defineTool()` when you want a reusable custom tool definition outside `pi.registerTool(...)`:
+
+```typescript
+import { defineTool } from "@mariozechner/pi-coding-agent";
+import { Type } from "@sinclair/typebox";
+
+const myTool = defineTool({
+  name: "my_tool",
+  label: "My Tool",
+  description: "Does something useful",
+  parameters: Type.Object({
+    input: Type.String({ description: "Input value" }),
+  }),
+  async execute(_toolCallId, params) {
+    return {
+      content: [{ type: "text", text: `Result: ${params.input}` }],
+      details: {},
+    };
+  },
+});
+```
