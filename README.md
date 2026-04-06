@@ -1,71 +1,72 @@
 # Pi Monorepo
 
-Monorepo for Pi skills, Pi-installable packages, and shared release tooling.
+[Pi](https://github.com/badlogic/pi-coding-agent) is a minimal terminal coding agent. It ships four tools, four execution modes, and a philosophy: adapt Pi to your workflows, not the other way around. Users extend it with TypeScript extensions, skills, prompt templates, and shareable packages.
+
+This repo builds the pieces that make Pi smarter about itself and the web.
+
+## What's here
+
+**[`skills/pi`](skills/pi/)** -- A skill that gives Pi self-knowledge. Without it, Pi guesses about its own architecture, settings, and extension APIs. With it, Pi reasons from grounded reference documentation instead of plausible fictions. Installable via [Agent Skills](https://skills.sh/) or as a Pi package.
+
+**[`packages/pi-web-search`](packages/pi-web-search/)** -- An extension that adds `web_search` and `web_fetch` tools. Three search backends (Brave, Tavily, Exa) behind a single interface with automatic provider ranking and fallback. Page fetching via Jina Reader.
+
+**[`packages/skill-pi`](packages/skill-pi/)** -- The `pi` skill packaged for `npm`, so `pi install` can fetch it from the registry.
 
 ## Install
 
-Cloning this repo is enough to work on the canonical `pi` skill locally:
-
-- Pi loads `./skills/pi` through `.pi/settings.json`.
-- Other Agent Skills-compatible tools can load the same skill through `.agents/skills/pi`.
-- Extension work in this repo should usually use `pi --extension`, not `pi install`.
-
-If you use `mise`, trust the repo config once and install the pinned local toolchain:
-
 ```bash
-mise trust
-mise install
-```
-
-That provisions the repo's expected `node`, `pnpm`, `actionlint`, and `zizmor` versions.
-
-### User installs
-
-```bash
-# skill via Agent Skills
+# the Pi skill (pick one)
 npx skills add counterposition/pi --skill pi
-
-# skill via Pi package
 pi install npm:@counterposition/skill-pi
 
-# extension via Pi package
+# the web search extension
 pi install npm:@counterposition/pi-web-search
 ```
 
-### Maintainer smoke tests
+---
 
-Use these when validating the local checkout or the publishable package layout before release:
+## Contributing
 
-```bash
-# canonical skill from a local checkout
-npx skills add /absolute/path/to/pi --skill pi --list
+Clone the repo. Pi loads `skills/pi` automatically through `.pi/settings.json` -- no install step needed.
 
-# packaged Pi installs from the monorepo root
-pi install ./packages/skill-pi
-pi install ./packages/pi-web-search
-```
-
-## Repository Layout
-
-- `.pi/settings.json` - project-local Pi config that loads the canonical `pi` skill
-- `.agents/skills/pi` - symlink to `skills/pi` for other agents
-- `skills/` - canonical skill sources for `npx skills add`
-- `packages/` - publishable npm packages for `pi install`
-- `docs/` - architecture, ADRs, publishing, and contributor guides
-- `scripts/` - repo validators and packaging helpers
-
-## Available Packages
-
-- `skills/pi` - canonical Pi skill source
-- `packages/skill-pi` - npm package that ships only the `pi` skill
-- `packages/pi-web-search` - Pi web search extension package
-
-## Workspace Commands
+If you use [mise](https://mise.jdx.dev), trust the repo config once to pin Node, pnpm, and CI linters:
 
 ```bash
-pnpm install
-pnpm run check
-pnpm run pack:check
+mise trust && mise install
 ```
 
-See `docs/architecture.md`, `docs/adding-a-skill.md`, `docs/adding-a-package.md`, and `docs/publishing.md` for the repo conventions.
+### Commands
+
+```bash
+pnpm install          # install dependencies
+pnpm run check        # lint + format + typecheck + test + validate (the full gate)
+pnpm run test         # vitest
+pnpm run lint:fix     # oxlint autofix
+pnpm run sync:skills  # copy canonical skills into packages/ before release
+```
+
+Package-scoped work:
+
+```bash
+pnpm --filter @counterposition/pi-web-search run check
+pnpm --filter @counterposition/pi-web-search exec vitest run tests/providers.test.ts
+```
+
+### Repo structure
+
+```text
+skills/pi/              canonical skill source (loaded by Pi and Agent Skills)
+packages/skill-pi/      npm package wrapping the pi skill
+packages/pi-web-search/ web search extension (TypeScript, vitest tests)
+scripts/                validators and sync utilities
+docs/                   architecture, ADRs, contributor guides
+.pi/settings.json       project-local Pi config
+.agents/skills/pi       symlink for Agent Skills-compatible tools
+```
+
+### Docs
+
+- [`docs/architecture.md`](docs/architecture.md) -- repo layout, package classes, and design rationale
+- [`docs/adding-a-skill.md`](docs/adding-a-skill.md) -- how to add a new skill to this repo
+- [`docs/adding-a-package.md`](docs/adding-a-package.md) -- how to add a new publishable package
+- [`docs/publishing.md`](docs/publishing.md) -- Changesets workflow and release process
