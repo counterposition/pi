@@ -20,8 +20,7 @@ npx skills add counterposition/pi --skill pi
 pi install npm:@counterposition/skill-pi
 ```
 
-<details>
-<summary>Maintainer paths</summary>
+### Maintainer Paths
 
 ```bash
 # from a local checkout
@@ -32,8 +31,6 @@ pi install ./packages/skill-pi
 ```
 
 If you develop inside this repo, Pi already loads the skill via `.pi/settings.json`.
-
-</details>
 
 ## What this covers
 
