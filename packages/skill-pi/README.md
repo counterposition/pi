@@ -1,14 +1,8 @@
 # Pi Skill
 
-> Knowing others is intelligence; knowing yourself is true wisdom.
->
-> — Lao Tzu, _Tao Te Ching_
+Pi's own system prompt already points it at its source documentation. But when you use a different coding agent — Claude Code, OpenCode, Codex CLI, or an IDE agent like Cursor or Windsurf — to work on Pi extensions, skills, packages, or configuration, that agent has no built-in knowledge of Pi's architecture. It will hallucinate APIs, invent settings, and confidently describe extension hooks that don't exist.
 
-A coding agent that cannot reason about its own architecture will invent APIs that don't exist, hallucinate configuration formats, and give confident wrong answers about its own internals. The failure mode is subtle: the answers _sound_ right, because the agent knows how systems like it tend to work. But Pi is specific, and the details matter.
-
-This skill gives Pi self-knowledge. It injects task-specific reference documentation into context so that Pi reasons from grounded facts — about its extensions, settings, providers, sessions, and SDK — rather than from plausible fictions.
-
-Without this skill, Pi guesses about itself. With it, Pi _knows_.
+This skill gives any coding agent grounded knowledge of Pi via the [Agent Skills](https://agentskills.io/home) standard. It injects task-specific reference documentation into context so the agent reasons from facts — about extensions, settings, providers, sessions, and the SDK — rather than from plausible fictions.
 
 ## Install
 
@@ -40,9 +34,9 @@ The reference material lives in `references/` as task-specific documents — not
 
 ## Files
 
-| Path               | Purpose                               |
-| ------------------ | ------------------------------------- |
-| `SKILL.md`         | Trigger rules and routing description |
-| `references/`      | Task-specific Pi reference documents  |
-| `evals/evals.json` | Example evaluation cases              |
-| `LICENSE.md`       | GPLv3 license text                    |
+| Path | Purpose |
+|---|---|
+| `SKILL.md` | Trigger rules and routing description |
+| `references/` | Task-specific Pi reference documents |
+| `evals/evals.json` | Example evaluation cases |
+| `LICENSE.md` | GPLv3 license text |

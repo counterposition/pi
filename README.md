@@ -2,11 +2,11 @@
 
 [Pi](https://github.com/badlogic/pi-coding-agent) is a minimal terminal coding agent. It ships four tools, four execution modes, and a philosophy: adapt Pi to your workflows, not the other way around. Users extend it with TypeScript extensions, skills, prompt templates, and shareable packages.
 
-This repo builds the pieces that make Pi smarter about itself and the web.
+This repo builds the pieces that extend Pi and teach other coding agents about it.
 
 ## What's here
 
-**[`skills/pi`](skills/pi/)** -- A skill that gives Pi self-knowledge. Without it, Pi guesses about its own architecture, settings, and extension APIs. With it, Pi reasons from grounded reference documentation instead of plausible fictions. Installable via [Agent Skills](https://skills.sh/) or as a Pi package.
+**[`skills/pi`](skills/pi/)** -- A skill that gives coding agents grounded knowledge of Pi's architecture, settings, and extension APIs. Pi's own system prompt already points it at its source documentation, but agents like Claude Code, OpenCode, and Codex CLI have no built-in awareness of Pi. This skill bridges that gap via the [Agent Skills](https://agentskills.io/home) standard. Also installable as a Pi package.
 
 **[`packages/pi-web-search`](packages/pi-web-search/)** -- An extension that adds `web_search` and `web_fetch` tools. Three search backends (Brave, Tavily, Exa) behind a single interface with automatic provider ranking and fallback. Page fetching via Jina Reader.
 
