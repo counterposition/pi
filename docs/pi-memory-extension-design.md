@@ -1025,6 +1025,47 @@ injection model or recurrent memory-content injection without core support. The
 prompt is guidance, not the sole enforcement mechanism for managed-memory
 writes.
 
+### Draft injected prompt (subject to tuning)
+
+The initial implementation should ship with a literal prompt draft rather than
+only prose requirements, so prompt review can cover wording and edge cases, not
+just intent. One acceptable starting draft is:
+
+```text
+Durable memory is available through memory_search and memory_write.
+
+{{orientation_summary}}
+
+Use memory_search only when the task may depend on facts from prior sessions
+that are not present in the current conversation, repository state, or recent
+tool output. Do not use memory_search for routine code inspection, facts that
+can be verified directly from files, or ephemeral details about the current
+turn. Prefer memory_search over raw file reads targeting the memory root; use
+raw reads only after memory_search returns a specific path or entry to inspect.
+Prefer at most one targeted memory_search unless the first result makes a
+follow-up query necessary.
+
+Treat memory as advisory. If memory conflicts with the current user message,
+repository state, or fresh tool output, the current source wins. Verify cheap-
+to-check details against the current repository before acting on a memory.
+
+Use memory_write only when the user explicitly asks Pi to remember or persist
+something. Clear examples include "remember this", "keep in mind that...",
+"always use ...", "never do ...", or "/remember ...". Phrases like "good to
+know" or agent-only judgments such as "this might be useful later" are not, by
+themselves, write requests.
+
+When writing, persist only durable preferences, conventions, constraints, or
+findings likely to matter in a future session. Do not write transient task
+state, unresolved guesses, checkout-local branch or worktree quirks, summaries
+of obvious file changes, or secrets.
+
+When choosing a topic for memory_write, prefer an existing topic named in the
+orientation summary. Create a new topic only when no existing topic fits. Use
+scope "global" for personal preferences that apply across projects. Otherwise,
+use the default project scope for repo-specific facts.
+```
+
 ## Pi Extension Architecture
 
 ### Hooks
@@ -1071,6 +1112,24 @@ Instead:
    facts.
 4. If `memory_search` returns a relevant excerpt, entry ID, and current line
    span, let the agent use `read` for deeper inspection only when needed.
+
+The draft prompt should also be reviewed against a few concrete cases before it
+is treated as stable:
+
+- User says `Remember that I prefer terse responses.` The agent should treat
+  this as an explicit write request and call `memory_write` with
+  `scope: "global"`.
+- User says `Keep in mind that this repo uses pnpm.` The agent should treat
+  this as an explicit write request and call `memory_write` with project scope.
+- User says `Good to know that this repo uses pnpm.` The agent should not write
+  memory unless the user separately asks Pi to remember or persist it.
+- The task is routine repository inspection and the needed fact is in the
+  current checkout. The agent should inspect files directly and skip
+  `memory_search`.
+- A memory says to use `npm`, but the current repo contains `pnpm-lock.yaml`
+  and workspace scripts. The agent should trust the current repo, not the old
+  memory, and treat correction as a separate explicit write or invalidation
+  flow.
 
 This directly avoids the failure mode in the literal Cline Memory Bank custom
 instructions: reading all memory files into context at the start of every task
