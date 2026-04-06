@@ -8,6 +8,12 @@
 - Remove the `FIRECRAWL_API_KEY` configuration path.
 - Remove the `preferredFetchProvider` setting.
 
+## 0.2.2
+
+### README
+
+- Expand the README with clearer tool behavior, provider selection and fallback details, configuration guidance, and security notes.
+
 ## 0.2.1
 
 ### Metadata
