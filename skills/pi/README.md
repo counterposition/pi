@@ -1,44 +1,51 @@
 # Pi Skill
 
-Reference skill for the Pi coding agent.
+> Knowing others is intelligence; knowing yourself is true wisdom.
+>
+> — Lao Tzu, *Tao Te Ching*
 
-- Use when working on Pi extensions, skills, settings, packages, SDK usage, providers, sessions, or compaction.
-- Good trigger terms: `.pi/`, `SKILL.md`, `models.json`, `pi-ai`, `pi-tui`, `pi-agent-core`, `pi-coding-agent`.
-- Not for Raspberry Pi hardware or the math constant.
+A coding agent that cannot reason about its own architecture will invent APIs that don't exist, hallucinate configuration formats, and give confident wrong answers about its own internals. The failure mode is subtle: the answers *sound* right, because the agent knows how systems like it tend to work. But Pi is specific, and the details matter.
+
+This skill gives Pi self-knowledge. It injects task-specific reference documentation into context so that Pi reasons from grounded facts — about its extensions, settings, providers, sessions, and SDK — rather than from plausible fictions.
+
+Without this skill, Pi guesses about itself. With it, Pi *knows*.
 
 ## Install
 
 ```bash
-# multi-skill repo
+# as a skill
 npx skills add counterposition/pi --skill pi
 
-# pi install from npm
+# as a Pi package
 pi install npm:@counterposition/skill-pi
 ```
 
-Maintainer smoke tests:
+<details>
+<summary>Maintainer paths</summary>
 
 ```bash
-# canonical skill from a local checkout
+# from a local checkout
 npx skills add /absolute/path/to/pi --skill pi
 
-# packaged Pi install from the monorepo root
+# packaged install from monorepo root
 pi install ./packages/skill-pi
 ```
 
-If you are developing inside this repo, Pi already loads the canonical skill via `.pi/settings.json`, so you usually do not need `pi install`.
+If you develop inside this repo, Pi already loads the skill via `.pi/settings.json`.
 
-## Covers
+</details>
 
-- Pi architecture and package layout
-- Skill authoring and discovery
-- Extensions, tools, and UI hooks
-- Settings, models, providers, and packages
-- Sessions, forks, and compaction
+## What this covers
+
+Pi's architecture and package layout. Skill authoring, discovery, and routing. Extensions, tools, and UI hooks. Settings, models, providers, and packages. Sessions, forks, and compaction. The SDK and RPC interface.
+
+The reference material lives in `references/` as task-specific documents — not a single monolith, but pieces sized for injection into a conversation when relevant.
 
 ## Files
 
-- `SKILL.md` - trigger description and routing
-- `LICENSE.md` - bundled GPLv3 license text
-- `references/` - task-specific Pi docs
-- `evals/evals.json` - example eval cases
+| Path | Purpose |
+|---|---|
+| `SKILL.md` | Trigger rules and routing description |
+| `references/` | Task-specific Pi reference documents |
+| `evals/evals.json` | Example evaluation cases |
+| `LICENSE.md` | GPLv3 license text |
