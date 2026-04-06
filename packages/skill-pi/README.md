@@ -1,25 +1,48 @@
-# Skill Pi Package
+# Pi Skill
 
-Single-skill npm package for installing the `pi` skill with `pi install`.
+> Knowing others is intelligence; knowing yourself is true wisdom.
+>
+> — Lao Tzu, _Tao Te Ching_
 
-Package versions track the Pi coding agent release that the bundled skill
-documentation targets.
+A coding agent that cannot reason about its own architecture will invent APIs that don't exist, hallucinate configuration formats, and give confident wrong answers about its own internals. The failure mode is subtle: the answers _sound_ right, because the agent knows how systems like it tend to work. But Pi is specific, and the details matter.
+
+This skill gives Pi self-knowledge. It injects task-specific reference documentation into context so that Pi reasons from grounded facts — about its extensions, settings, providers, sessions, and SDK — rather than from plausible fictions.
+
+Without this skill, Pi guesses about itself. With it, Pi _knows_.
 
 ## Install
 
 ```bash
+# as a skill
+npx skills add counterposition/pi --skill pi
+
+# as a Pi package
 pi install npm:@counterposition/skill-pi
 ```
 
-Maintainer smoke test from the monorepo root:
+### Maintainer Paths
 
 ```bash
+# from a local checkout
+npx skills add /absolute/path/to/pi --skill pi
+
+# packaged install from monorepo root
 pi install ./packages/skill-pi
 ```
 
-## Contents
+If you develop inside this repo, Pi already loads the skill via `.pi/settings.json`.
 
-- `skills/pi/` - packaged copy of the canonical Pi skill
-- `../../skills/pi` - canonical source used for GitHub-based `npx skills add`
+## What this covers
 
-The packaged skill is synced from the canonical source with `pnpm run sync:skills`.
+Pi's architecture and package layout. Skill authoring, discovery, and routing. Extensions, tools, and UI hooks. Settings, models, providers, and packages. Sessions, forks, and compaction. The SDK and RPC interface.
+
+The reference material lives in `references/` as task-specific documents — not a single monolith, but pieces sized for injection into a conversation when relevant.
+
+## Files
+
+| Path               | Purpose                               |
+| ------------------ | ------------------------------------- |
+| `SKILL.md`         | Trigger rules and routing description |
+| `references/`      | Task-specific Pi reference documents  |
+| `evals/evals.json` | Example evaluation cases              |
+| `LICENSE.md`       | GPLv3 license text                    |
