@@ -1,9 +1,13 @@
 {
   "name": "@counterposition/skill-pi",
-  "version": "0.65.1",
-  "description": "Pi skill package for pi install",
+  "version": "0.65.2",
+  "description": "Pi coding agent reference skill — extensions, settings, providers, SDK/RPC, packages, and .pi/ config",
   "keywords": [
-    "pi-package"
+    "ai-skill",
+    "coding-agent",
+    "pi",
+    "pi-package",
+    "reference"
   ],
   "homepage": "https://github.com/counterposition/pi/tree/main/packages/skill-pi",
   "bugs": {
