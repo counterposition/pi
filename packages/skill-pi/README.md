@@ -2,6 +2,9 @@
 
 Single-skill npm package for installing the `pi` skill with `pi install`.
 
+Package versions track the Pi coding agent release that the bundled skill
+documentation targets.
+
 ## Install
 
 ```bash

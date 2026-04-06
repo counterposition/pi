@@ -105,6 +105,7 @@ Read `references/patterns.md` for copy-paste-ready examples.
 Sessions are append-only JSONL files with a tree structure (entries linked by `id`/`parentId`). This allows branching without modifying history. Key operations:
 
 - **`/tree`** — Navigate the session tree, jump to any point
+- **`Shift+T` in `/tree`** — Toggle timestamps on tree entry labels
 - **`/compact`** — Manually trigger context compaction
 - **`/fork`** — Branch from a specific point
 - **Auto-compaction** — Triggers when `contextTokens > contextWindow - reserveTokens`
