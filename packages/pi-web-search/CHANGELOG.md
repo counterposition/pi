@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0
+
+### Minor Changes
+
+- c7f645a: # pi-web-search minor release
+
+  Improve `web_search` result formatting to use less context while preserving key filters, provider notes, and one high-value inline content excerpt for thorough searches.
+
 ## 0.3.0
 
 ### Minor Changes
