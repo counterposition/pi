@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0
+
+### Minor Changes
+
+- a86b338: # pi-web-search
+
+  Fix Brave web search handling when successful responses omit a `web` block, and constrain Brave requests to web results so the adapter receives the response shape it expects.
+
 ## Unreleased
 
 ### Changed
