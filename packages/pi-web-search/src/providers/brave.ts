@@ -51,7 +51,19 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 function parseResults(payload: unknown): SearchResult[] {
-  if (!isObject(payload) || !isObject(payload.web) || !Array.isArray(payload.web.results)) {
+  if (!isObject(payload)) {
+    throw new ProviderError({
+      provider: "brave",
+      message: "Brave returned unexpected response shape.",
+      transient: false,
+    });
+  }
+
+  if (payload.web == null) {
+    return [];
+  }
+
+  if (!isObject(payload.web) || !Array.isArray(payload.web.results)) {
     throw new ProviderError({
       provider: "brave",
       message: "Brave returned unexpected response shape.",
@@ -103,6 +115,7 @@ function buildUrl(args: {
   const url = new URL(BRAVE_SEARCH_URL);
   url.searchParams.set("q", args.domain ? addSiteConstraint(args.query, args.domain) : args.query);
   url.searchParams.set("count", String(Math.min(Math.max(args.maxResults, 1), MAX_BRAVE_RESULTS)));
+  url.searchParams.set("result_filter", "web");
 
   const freshness = freshnessToBrave(args.freshness);
   if (freshness) {
