@@ -181,8 +181,7 @@ export default function (pi: ExtensionAPI) {
           default: FETCH_DEFAULT_MAX_CHARS,
           minimum: 1_000,
           maximum: 20_000,
-          description:
-            `Maximum characters to return from the cleaned page content (default: ${FETCH_DEFAULT_MAX_CHARS}).`,
+          description: `Maximum characters to return from the cleaned page content (default: ${FETCH_DEFAULT_MAX_CHARS}).`,
         }),
       ),
     }),

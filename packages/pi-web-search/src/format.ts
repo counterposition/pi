@@ -211,7 +211,9 @@ function collectSearchNotes(args: FormatSearchResultsArgs): string[] {
   if (domainNote) notes.push(domainNote);
 
   if (args.requestedDepth !== args.servedDepth) {
-    notes.push(`Depth: requested ${args.requestedDepth}, served ${args.servedDepth} (no content-capable provider)`);
+    notes.push(
+      `Depth: requested ${args.requestedDepth}, served ${args.servedDepth} (no content-capable provider)`,
+    );
   }
 
   return [...new Set(notes)];

@@ -220,9 +220,7 @@ async function searchForDomains(args: {
   }
 
   if (failures.length > 0) {
-    notes.push(
-      `Domains: ${args.domains.join(", ")} (fanout merge, partial — some queries failed)`,
-    );
+    notes.push(`Domains: ${args.domains.join(", ")} (fanout merge, partial — some queries failed)`);
   }
 
   return {

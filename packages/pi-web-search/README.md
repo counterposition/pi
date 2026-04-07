@@ -19,13 +19,13 @@ pi install npm:@counterposition/pi-web-search
 
 Returns titles, URLs, snippets, and dates. Parameters:
 
-| Parameter     | Description                                                                                      |
-| ------------- | ------------------------------------------------------------------------------------------------ |
-| `query`       | Search query.                                                                                    |
+| Parameter     | Description                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------------------- |
+| `query`       | Search query.                                                                                                  |
 | `depth`       | `basic` (default) returns snippets. `thorough` uses content-capable search and may include one inline excerpt. |
-| `freshness`   | Optional recency filter: `day`, `week`, `month`, or `year`.                                      |
-| `domains`     | Optional allowlist of bare hostnames to restrict results (max 10).                               |
-| `max_results` | 1--20, default 5.                                                                                |
+| `freshness`   | Optional recency filter: `day`, `week`, `month`, or `year`.                                                    |
+| `domains`     | Optional allowlist of bare hostnames to restrict results (max 10).                                             |
+| `max_results` | 1--20, default 5.                                                                                              |
 
 ### `web_fetch`
 
