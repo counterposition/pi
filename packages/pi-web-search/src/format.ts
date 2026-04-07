@@ -216,9 +216,7 @@ function collectSearchNotes(args: FormatSearchResultsArgs): string[] {
   if (domainNote) notes.push(domainNote);
 
   if (args.requestedDepth !== args.servedDepth) {
-    notes.push(
-      `Requested ${args.requestedDepth} search degraded to ${args.servedDepth} because no content-capable provider was available.`,
-    );
+    notes.push(`Depth: requested ${args.requestedDepth}, served ${args.servedDepth} (no content-capable provider)`);
   }
 
   return [...new Set(notes)];
@@ -258,7 +256,7 @@ function renderSearchDocument(args: {
   if (args.notes.length > 0) {
     lines.push("");
     for (const note of args.notes) {
-      lines.push(`Note: ${note}`);
+      lines.push(note);
     }
   }
 
@@ -293,11 +291,11 @@ function formatFreshnessNote(
 
   switch (appliedFilters?.freshness) {
     case "native":
-      return `Freshness filter "${freshness}" was applied natively by the provider.`;
+      return `Freshness: ${freshness} (native)`;
     case "approximate":
-      return `Freshness filter "${freshness}" was applied approximately by the provider.`;
+      return `Freshness: ${freshness} (approximate)`;
     default:
-      return `Freshness filter "${freshness}" was requested.`;
+      return `Freshness: ${freshness} (requested)`;
   }
 }
 
@@ -309,13 +307,13 @@ function formatDomainNote(
 
   switch (appliedFilters?.domains) {
     case "native":
-      return `Domain filter was applied natively for ${domains.join(", ")}.`;
+      return `Domains: ${domains.join(", ")} (native)`;
     case "query_rewrite":
-      return `Domain filter was approximated with a site: query rewrite for ${domains.join(", ")}.`;
+      return `Domains: ${domains.join(", ")} (query rewrite)`;
     case "fanout_merge":
-      return `Domain filter was approximated by running one query per domain and merging results for ${domains.join(", ")}.`;
+      return `Domains: ${domains.join(", ")} (fanout merge)`;
     default:
-      return `Domain filter requested for ${domains.join(", ")}.`;
+      return `Domains: ${domains.join(", ")} (requested)`;
   }
 }
 

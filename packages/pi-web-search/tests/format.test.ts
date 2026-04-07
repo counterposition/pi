@@ -3,6 +3,34 @@ import { describe, expect, it } from "vitest";
 import { formatFetchContent, formatSearchResults, paginateContent } from "../src/format.js";
 
 describe("formatSearchResults", () => {
+  it("renders compact filter notes without the Note prefix", () => {
+    const text = formatSearchResults({
+      provider: "brave",
+      requestedDepth: "thorough",
+      servedDepth: "basic",
+      freshness: "week",
+      domains: ["docs.python.org"],
+      appliedFilters: {
+        freshness: "native",
+        domains: "query_rewrite",
+      },
+      notes: ["Provider: fallback"],
+      results: [
+        {
+          title: "Result 1",
+          url: "https://example.com/1",
+          snippet: "alpha snippet",
+        },
+      ],
+    });
+
+    expect(text).toContain("Provider: fallback");
+    expect(text).toContain("Freshness: week (native)");
+    expect(text).toContain("Domains: docs.python.org (query rewrite)");
+    expect(text).toContain("Depth: requested thorough, served basic (no content-capable provider)");
+    expect(text).not.toContain("Note:");
+  });
+
   it("omits snippets for thorough results that include content blocks", () => {
     const text = formatSearchResults({
       provider: "tavily",
@@ -68,7 +96,7 @@ describe("formatSearchResults", () => {
     });
 
     expect(text.length).toBeLessThanOrEqual(12_000);
-    expect(text).toMatch(/degraded to basic/i);
+    expect(text).toMatch(/Depth: requested thorough, served basic/i);
     expect(text).toMatch(/use web_fetch/i);
   });
 });

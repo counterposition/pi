@@ -119,12 +119,8 @@ function buildAppliedFilters(args: SearchProviderArgs): AppliedFilters | undefin
 function buildNotes(args: SearchProviderArgs, results: SearchResult[]): string[] | undefined {
   const notes: string[] = [];
 
-  if (args.includeContent) {
-    notes.push("Tavily returned content-enriched search results.");
-  }
-
   if (args.freshness && !results.some((result) => result.publishedAt)) {
-    notes.push("Tavily did not return publish dates for all results.");
+    notes.push("Dates: partial (missing publish dates)");
   }
 
   return notes.length > 0 ? notes : undefined;

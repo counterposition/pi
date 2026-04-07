@@ -8,7 +8,6 @@ import {
   truncateSnippet,
 } from "../provider-utils.js";
 import type {
-  AppliedFilters,
   ProviderSearchResponse,
   SearchCapability,
   SearchFreshness,
@@ -69,16 +68,16 @@ export function createExaProvider(apiKey: string): SearchProvider {
       });
 
       const results = normalizeResults(response.results, args.includeContent, args.maxResults);
-      const appliedFilters: AppliedFilters | undefined = {
-        freshness: args.freshness ? "native" : undefined,
-        domains: args.domains?.length ? "native" : undefined,
-      };
 
       return {
         results,
         appliedFilters:
-          appliedFilters.freshness || appliedFilters.domains ? appliedFilters : undefined,
-        notes: buildNotes(args),
+          args.freshness || args.domains?.length
+            ? {
+                freshness: args.freshness ? "native" : undefined,
+                domains: args.domains?.length ? "native" : undefined,
+              }
+            : undefined,
       };
     },
   };
@@ -186,24 +185,6 @@ function extractSnippet(entry: ExaResult): string {
   }
 
   return "";
-}
-
-function buildNotes(args: SearchProviderArgs): string[] {
-  const notes: string[] = [];
-
-  if (args.freshness) {
-    notes.push(`Exa applied freshness natively for "${args.freshness}" queries.`);
-  }
-
-  if (args.domains?.length) {
-    notes.push(`Exa applied domain filtering natively for ${args.domains.join(", ")}.`);
-  }
-
-  if (args.includeContent) {
-    notes.push("Exa returned extracted page content for this request.");
-  }
-
-  return notes;
 }
 
 function freshnessToStartPublishedDate(freshness: SearchFreshness | undefined): string | undefined {

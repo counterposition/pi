@@ -175,7 +175,6 @@ async function searchForDomains(args: {
         freshness: args.freshness ? "native" : undefined,
         domains: "query_rewrite",
       },
-      notes: [`Brave applied the domain filter with a site: rewrite for ${args.domains[0]}.`],
     };
   }
 
@@ -232,7 +231,7 @@ async function searchForDomains(args: {
       freshness: args.freshness ? "native" : undefined,
       domains: "fanout_merge",
     },
-    notes,
+    notes: notes.length > 0 ? notes : undefined,
   };
 }
 
@@ -274,9 +273,6 @@ export function createBraveProvider(apiKey: string): SearchProvider {
         return {
           results: dedupeResultsByUrl(response.results, args.maxResults),
           appliedFilters: args.freshness ? { freshness: "native" } : undefined,
-          notes: args.freshness
-            ? ["Brave applied the requested freshness filter natively."]
-            : undefined,
         };
       } catch (error) {
         if (isAbortError(error) || args.signal.aborted) {
