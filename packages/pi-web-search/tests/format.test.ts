@@ -67,7 +67,7 @@ describe("formatSearchResults", () => {
     expect(secondBlock).not.toContain("Content:");
   });
 
-  it("omits the basic fetch hint from basic search output", () => {
+  it("enforces budget and omits the basic fetch hint", () => {
     const text = formatSearchResults({
       provider: "tavily",
       requestedDepth: "thorough",

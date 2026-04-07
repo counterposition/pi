@@ -221,7 +221,7 @@ async function searchForDomains(args: {
 
   if (failures.length > 0) {
     notes.push(
-      `Brave could not complete all per-domain searches for ${args.domains.join(", ")}; results may be incomplete.`,
+      `Domains: ${args.domains.join(", ")} (fanout merge, partial — some queries failed)`,
     );
   }
 
