@@ -34,9 +34,9 @@ The reference material lives in `references/` as task-specific documents — not
 
 ## Files
 
-| Path | Purpose |
-|---|---|
-| `SKILL.md` | Trigger rules and routing description |
-| `references/` | Task-specific Pi reference documents |
-| `evals/evals.json` | Example evaluation cases |
-| `LICENSE.md` | GPLv3 license text |
+| Path               | Purpose                               |
+| ------------------ | ------------------------------------- |
+| `SKILL.md`         | Trigger rules and routing description |
+| `references/`      | Task-specific Pi reference documents  |
+| `evals/evals.json` | Example evaluation cases              |
+| `LICENSE.md`       | GPLv3 license text                    |
