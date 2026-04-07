@@ -1,6 +1,6 @@
 {
   "name": "@counterposition/pi-web-search",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Multi-provider web search and markdown page fetch for Pi",
   "keywords": [
     "brave-search",
