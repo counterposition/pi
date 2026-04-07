@@ -231,10 +231,6 @@ function renderBaseResultBlock(
 ): string {
   const lines = [`### ${rank}. ${result.title}`, `URL: ${result.url}`];
 
-  if (result.sourceDomain) {
-    lines.push(`Source: ${result.sourceDomain}`);
-  }
-
   const normalizedDate = normalizeIsoDate(result.publishedAt);
   if (normalizedDate) {
     lines.push(`Published: ${normalizedDate.slice(0, 10)}`);

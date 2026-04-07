@@ -31,9 +31,11 @@ describe("formatSearchResults", () => {
 
     expect(firstBlock).toContain("### 1. Result 1");
     expect(firstBlock).toContain("Content:");
+    expect(firstBlock).not.toContain("Source:");
     expect(firstBlock).not.toContain("Snippet:");
     expect(secondBlock).toContain("### 2. Result 2");
     expect(secondBlock).toContain("Snippet:");
+    expect(secondBlock).not.toContain("Source:");
     expect(secondBlock).not.toContain("Content:");
   });
 
