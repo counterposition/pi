@@ -9,30 +9,31 @@ import type {
 
 const SEARCH_OUTPUT_BUDGET = 12_000;
 const SEARCH_CONTENT_EXCERPT_LIMIT = 1_500;
-const FETCH_DEFAULT_MAX_CHARS = 12_000;
+export const FETCH_DEFAULT_MAX_CHARS = 8_000;
 const MIN_CONTENT_BLOCK_CHARS = 200;
+const THOROUGH_INLINE_CONTENT_RESULT_LIMIT = 1;
 
 export function formatSearchResults(args: FormatSearchResultsArgs): string {
   const notes = collectSearchNotes(args);
-  const resultBlocks = args.results.map((result, index) =>
-    renderBaseResultBlock(result, index + 1),
-  );
-
   const topContentCandidates = args.results
-    .slice(0, 3)
+    .slice(0, THOROUGH_INLINE_CONTENT_RESULT_LIMIT)
     .map((result, index) => ({ index, content: result.content?.trim() }))
     .filter((entry): entry is { index: number; content: string } => Boolean(entry.content));
 
   const contentMap = new Map<number, string>();
   let omittedCount = 0;
 
+  const renderResultBlocks = (contentMap: Map<number, string>): string[] =>
+    args.results.map((result, index) =>
+      renderBaseResultBlock(result, index + 1, { omitSnippet: contentMap.has(index) }),
+    );
+
   let text = renderSearchDocument({
     provider: args.provider,
     servedDepth: args.servedDepth,
     notes,
-    resultBlocks,
+    resultBlocks: renderResultBlocks(contentMap),
     contentMap,
-    basicHint: args.servedDepth === "basic",
     omissionNote: undefined,
   });
 
@@ -40,14 +41,14 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
     const baseExcerpt = truncateSnippet(candidate.content, SEARCH_CONTENT_EXCERPT_LIMIT);
     const tentativeMap = new Map(contentMap);
     tentativeMap.set(candidate.index, baseExcerpt);
+    const tentativeBlocks = renderResultBlocks(tentativeMap);
 
     const tentativeText = renderSearchDocument({
       provider: args.provider,
       servedDepth: args.servedDepth,
       notes,
-      resultBlocks,
+      resultBlocks: tentativeBlocks,
       contentMap: tentativeMap,
-      basicHint: args.servedDepth === "basic",
       omissionNote: undefined,
     });
 
@@ -71,26 +72,26 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
     }
 
     contentMap.set(candidate.index, trimmedExcerpt);
+    const updatedBlocks = renderResultBlocks(contentMap);
     text = renderSearchDocument({
       provider: args.provider,
       servedDepth: args.servedDepth,
       notes,
-      resultBlocks,
+      resultBlocks: updatedBlocks,
       contentMap,
-      basicHint: args.servedDepth === "basic",
       omissionNote: undefined,
     });
 
     if (text.length > SEARCH_OUTPUT_BUDGET) {
       contentMap.delete(candidate.index);
       omittedCount += 1;
+      const revertedBlocks = renderResultBlocks(contentMap);
       text = renderSearchDocument({
         provider: args.provider,
         servedDepth: args.servedDepth,
         notes,
-        resultBlocks,
+        resultBlocks: revertedBlocks,
         contentMap,
-        basicHint: args.servedDepth === "basic",
         omissionNote: undefined,
       });
     }
@@ -110,9 +111,8 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
     provider: args.provider,
     servedDepth: args.servedDepth,
     notes,
-    resultBlocks,
+    resultBlocks: renderResultBlocks(contentMap),
     contentMap,
-    basicHint: args.servedDepth === "basic",
     omissionNote,
   });
 
@@ -121,9 +121,8 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
       provider: args.provider,
       servedDepth: args.servedDepth,
       notes,
-      resultBlocks,
+      resultBlocks: renderResultBlocks(contentMap),
       contentMap,
-      basicHint: false,
       omissionNote,
     });
   }
@@ -213,23 +212,27 @@ function collectSearchNotes(args: FormatSearchResultsArgs): string[] {
 
   if (args.requestedDepth !== args.servedDepth) {
     notes.push(
-      `Requested ${args.requestedDepth} search degraded to ${args.servedDepth} because no content-capable provider was available.`,
+      `Depth: requested ${args.requestedDepth}, served ${args.servedDepth} (no content-capable provider)`,
     );
   }
 
   return [...new Set(notes)];
 }
 
-function renderBaseResultBlock(result: SearchResult, rank: number): string {
+function renderBaseResultBlock(
+  result: SearchResult,
+  rank: number,
+  options?: { omitSnippet?: boolean },
+): string {
   const lines = [`### ${rank}. ${result.title}`, `URL: ${result.url}`];
-
-  if (result.sourceDomain) {
-    lines.push(`Source: ${result.sourceDomain}`);
-  }
 
   const normalizedDate = normalizeIsoDate(result.publishedAt);
   if (normalizedDate) {
     lines.push(`Published: ${normalizedDate.slice(0, 10)}`);
+  }
+
+  if (options?.omitSnippet) {
+    return lines.join("\n");
   }
 
   lines.push(`Snippet: ${truncateSnippet(result.snippet || "", 320) || "[No snippet available]"}`);
@@ -242,7 +245,6 @@ function renderSearchDocument(args: {
   notes: string[];
   resultBlocks: string[];
   contentMap: Map<number, string>;
-  basicHint: boolean;
   omissionNote?: string;
 }): string {
   const lines = [`## Search Results (via ${providerLabel(args.provider)}, ${args.servedDepth})`];
@@ -250,7 +252,7 @@ function renderSearchDocument(args: {
   if (args.notes.length > 0) {
     lines.push("");
     for (const note of args.notes) {
-      lines.push(`Note: ${note}`);
+      lines.push(note);
     }
   }
 
@@ -270,10 +272,6 @@ function renderSearchDocument(args: {
     lines.push("", args.omissionNote);
   }
 
-  if (args.basicHint) {
-    lines.push("", "_Use web_fetch on any URL above to read the full page content._");
-  }
-
   return lines.join("\n");
 }
 
@@ -285,11 +283,11 @@ function formatFreshnessNote(
 
   switch (appliedFilters?.freshness) {
     case "native":
-      return `Freshness filter "${freshness}" was applied natively by the provider.`;
+      return `Freshness: ${freshness} (native)`;
     case "approximate":
-      return `Freshness filter "${freshness}" was applied approximately by the provider.`;
+      return `Freshness: ${freshness} (approximate)`;
     default:
-      return `Freshness filter "${freshness}" was requested.`;
+      return `Freshness: ${freshness} (requested)`;
   }
 }
 
@@ -301,13 +299,13 @@ function formatDomainNote(
 
   switch (appliedFilters?.domains) {
     case "native":
-      return `Domain filter was applied natively for ${domains.join(", ")}.`;
+      return `Domains: ${domains.join(", ")} (native)`;
     case "query_rewrite":
-      return `Domain filter was approximated with a site: query rewrite for ${domains.join(", ")}.`;
+      return `Domains: ${domains.join(", ")} (query rewrite)`;
     case "fanout_merge":
-      return `Domain filter was approximated by running one query per domain and merging results for ${domains.join(", ")}.`;
+      return `Domains: ${domains.join(", ")} (fanout merge)`;
     default:
-      return `Domain filter requested for ${domains.join(", ")}.`;
+      return `Domains: ${domains.join(", ")} (requested)`;
   }
 }
 

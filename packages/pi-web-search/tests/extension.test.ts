@@ -11,7 +11,7 @@ const state = vi.hoisted(() => ({
       preferredBasicProvider: null,
       preferredThoroughProvider: null,
     },
-    warnings: [],
+    warnings: [] as string[],
   },
   providers: {
     search: {},
@@ -126,6 +126,46 @@ describe("web-search extension", () => {
     expect(result.details.resultCount).toBe(1);
   });
 
+  it("keeps config warnings out of content and includes them in details", async () => {
+    const warning = "Ignoring webSearch.apiKeys in project settings.";
+    const provider = makeSearchProvider("brave", async () => ({
+      results: [
+        {
+          title: "Docs",
+          url: "https://example.com/docs",
+          snippet: "Result snippet",
+          sourceDomain: "example.com",
+        },
+      ],
+    }));
+
+    state.config.warnings = [warning];
+    state.providers = {
+      search: {
+        brave: provider,
+      },
+      fetch: {
+        jina: makeFetchProvider("jina", async () => "unused"),
+      },
+      hasAnySearchProvider: true,
+    };
+    state.resolveSearchProviders.mockReturnValue({
+      providers: [provider],
+      servedDepth: "basic",
+      notes: [],
+    });
+
+    const tools = registerTools();
+    const result = await tools.web_search.execute(
+      "tool-5",
+      { query: "docs query" },
+      new AbortController().signal,
+    );
+
+    expect(result.content[0].text).not.toContain(warning);
+    expect(result.details.warnings).toEqual([warning]);
+  });
+
   it("fetches through Jina and serves later pages from cache", async () => {
     const fetchImpl = vi.fn(async () => "A".repeat(13_000));
     const jina = makeFetchProvider("jina", fetchImpl);
@@ -159,6 +199,28 @@ describe("web-search extension", () => {
     expect(second.details.provider).toBe("jina");
     expect(second.details.offset).toBe(first.details.nextOffset);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the smaller default fetch chunk size when max_chars is omitted", async () => {
+    const fetchImpl = vi.fn(async () => "A".repeat(13_000));
+    const jina = makeFetchProvider("jina", fetchImpl);
+
+    state.providers = {
+      search: {},
+      fetch: { jina },
+      hasAnySearchProvider: false,
+    };
+
+    const tools = registerTools();
+    const result = await tools.web_fetch.execute(
+      "tool-6",
+      { url: "https://example.com/page" },
+      new AbortController().signal,
+    );
+
+    expect(result.details.returnedChars).toBe(8_000);
+    expect(result.details.nextOffset).toBe(8_000);
+    expect(result.details.hasMore).toBe(true);
   });
 
   it("propagates provider errors from Jina", async () => {

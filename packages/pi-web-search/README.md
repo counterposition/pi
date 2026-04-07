@@ -19,17 +19,17 @@ pi install npm:@counterposition/pi-web-search
 
 Returns titles, URLs, snippets, and dates. Parameters:
 
-| Parameter     | Description                                                                                      |
-| ------------- | ------------------------------------------------------------------------------------------------ |
-| `query`       | Search query.                                                                                    |
-| `depth`       | `basic` (default) returns snippets. `thorough` returns extracted page content alongside results. |
-| `freshness`   | Optional recency filter: `day`, `week`, `month`, or `year`.                                      |
-| `domains`     | Optional allowlist of bare hostnames to restrict results (max 10).                               |
-| `max_results` | 1--20, default 5.                                                                                |
+| Parameter     | Description                                                                                                    |
+| ------------- | -------------------------------------------------------------------------------------------------------------- |
+| `query`       | Search query.                                                                                                  |
+| `depth`       | `basic` (default) returns snippets. `thorough` uses content-capable search and may include one inline excerpt. |
+| `freshness`   | Optional recency filter: `day`, `week`, `month`, or `year`.                                                    |
+| `domains`     | Optional allowlist of bare hostnames to restrict results (max 10).                                             |
+| `max_results` | 1--20, default 5.                                                                                              |
 
 ### `web_fetch`
 
-Fetches a URL through Jina Reader and returns the page content as markdown. Long pages are paginated: use `offset` and `max_chars` to page through content in 12,000-character windows (up to 20,000 per call). Fetched pages are cached in an LRU cache (20 entries, 5-minute TTL) so repeated reads of the same URL within a session are free.
+Fetches a URL through Jina Reader and returns the page content as markdown. Long pages are paginated: use `offset` and `max_chars` to page through content in 8,000-character windows by default (up to 20,000 per call). Fetched pages are cached in an LRU cache (20 entries, 5-minute TTL) so repeated reads of the same URL within a session are free.
 
 ## Providers
 
@@ -59,7 +59,7 @@ Set at least one search provider key. Keys can be set as environment variables o
 | `EXA_API_KEY`    | [Exa](https://dashboard.exa.ai/api-keys)                        | For thorough searches                               |
 | `JINA_API_KEY`   | [Jina Reader](https://jina.ai/api-dashboard/key-manager)        | Optional (works without a key at lower rate limits) |
 
-**Recommended minimum:** `BRAVE_API_KEY` plus either `TAVILY_API_KEY` or `EXA_API_KEY`. Brave covers basic and freshness-filtered searches. Tavily or Exa covers thorough searches that need extracted page content. With only one provider, thorough searches may silently degrade to basic.
+**Recommended minimum:** `BRAVE_API_KEY` plus either `TAVILY_API_KEY` or `EXA_API_KEY`. Brave covers basic and freshness-filtered searches. Tavily or Exa covers thorough searches that need content-capable discovery. With only one provider, thorough searches may silently degrade to basic.
 
 ### Settings
 

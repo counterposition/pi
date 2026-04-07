@@ -3,7 +3,70 @@ import { describe, expect, it } from "vitest";
 import { formatFetchContent, formatSearchResults, paginateContent } from "../src/format.js";
 
 describe("formatSearchResults", () => {
-  it("includes budget omission notes and the basic fetch hint", () => {
+  it("renders compact filter notes without the Note prefix", () => {
+    const text = formatSearchResults({
+      provider: "brave",
+      requestedDepth: "thorough",
+      servedDepth: "basic",
+      freshness: "week",
+      domains: ["docs.python.org"],
+      appliedFilters: {
+        freshness: "native",
+        domains: "query_rewrite",
+      },
+      notes: ["Provider: fallback"],
+      results: [
+        {
+          title: "Result 1",
+          url: "https://example.com/1",
+          snippet: "alpha snippet",
+        },
+      ],
+    });
+
+    expect(text).toContain("Provider: fallback");
+    expect(text).toContain("Freshness: week (native)");
+    expect(text).toContain("Domains: docs.python.org (query rewrite)");
+    expect(text).toContain("Depth: requested thorough, served basic (no content-capable provider)");
+    expect(text).not.toContain("Note:");
+  });
+
+  it("limits thorough inline content to the top result", () => {
+    const text = formatSearchResults({
+      provider: "tavily",
+      requestedDepth: "thorough",
+      servedDepth: "thorough",
+      notes: [],
+      results: [
+        {
+          title: "Result 1",
+          url: "https://example.com/1",
+          snippet: "alpha snippet",
+          content: "alpha content ".repeat(40),
+        },
+        {
+          title: "Result 2",
+          url: "https://example.com/2",
+          snippet: "beta snippet",
+          content: "beta content ".repeat(40),
+        },
+      ],
+    });
+    const firstBlock = text.slice(
+      text.indexOf("### 1. Result 1"),
+      text.indexOf("\n\n---\n\n### 2. Result 2"),
+    );
+    const secondBlock = text.slice(text.indexOf("### 2. Result 2"));
+
+    expect(firstBlock).toContain("### 1. Result 1");
+    expect(firstBlock).toContain("Content:");
+    expect(firstBlock).not.toContain("Snippet:");
+    expect(secondBlock).toContain("### 2. Result 2");
+    expect(secondBlock).toContain("Snippet:");
+    expect(secondBlock).not.toContain("Content:");
+  });
+
+  it("enforces budget and omits the basic fetch hint", () => {
     const text = formatSearchResults({
       provider: "tavily",
       requestedDepth: "thorough",
@@ -32,8 +95,8 @@ describe("formatSearchResults", () => {
     });
 
     expect(text.length).toBeLessThanOrEqual(12_000);
-    expect(text).toMatch(/degraded to basic/i);
-    expect(text).toMatch(/use web_fetch/i);
+    expect(text).toMatch(/Depth: requested thorough, served basic/i);
+    expect(text).not.toContain("Use web_fetch on any URL above to read the full page content.");
   });
 });
 
