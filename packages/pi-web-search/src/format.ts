@@ -33,7 +33,6 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
     notes,
     resultBlocks: renderResultBlocks(contentMap),
     contentMap,
-    basicHint: args.servedDepth === "basic",
     omissionNote: undefined,
   });
 
@@ -49,7 +48,6 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
       notes,
       resultBlocks: tentativeBlocks,
       contentMap: tentativeMap,
-      basicHint: args.servedDepth === "basic",
       omissionNote: undefined,
     });
 
@@ -80,7 +78,6 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
       notes,
       resultBlocks: updatedBlocks,
       contentMap,
-      basicHint: args.servedDepth === "basic",
       omissionNote: undefined,
     });
 
@@ -94,7 +91,6 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
         notes,
         resultBlocks: revertedBlocks,
         contentMap,
-        basicHint: args.servedDepth === "basic",
         omissionNote: undefined,
       });
     }
@@ -116,7 +112,6 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
     notes,
     resultBlocks: renderResultBlocks(contentMap),
     contentMap,
-    basicHint: args.servedDepth === "basic",
     omissionNote,
   });
 
@@ -127,7 +122,6 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
       notes,
       resultBlocks: renderResultBlocks(contentMap),
       contentMap,
-      basicHint: false,
       omissionNote,
     });
   }
@@ -248,7 +242,6 @@ function renderSearchDocument(args: {
   notes: string[];
   resultBlocks: string[];
   contentMap: Map<number, string>;
-  basicHint: boolean;
   omissionNote?: string;
 }): string {
   const lines = [`## Search Results (via ${providerLabel(args.provider)}, ${args.servedDepth})`];
@@ -274,10 +267,6 @@ function renderSearchDocument(args: {
 
   if (args.omissionNote) {
     lines.push("", args.omissionNote);
-  }
-
-  if (args.basicHint) {
-    lines.push("", "_Use web_fetch on any URL above to read the full page content._");
   }
 
   return lines.join("\n");

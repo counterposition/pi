@@ -67,7 +67,7 @@ describe("formatSearchResults", () => {
     expect(secondBlock).not.toContain("Content:");
   });
 
-  it("includes budget omission notes and the basic fetch hint", () => {
+  it("omits the basic fetch hint from basic search output", () => {
     const text = formatSearchResults({
       provider: "tavily",
       requestedDepth: "thorough",
@@ -97,7 +97,7 @@ describe("formatSearchResults", () => {
 
     expect(text.length).toBeLessThanOrEqual(12_000);
     expect(text).toMatch(/Depth: requested thorough, served basic/i);
-    expect(text).toMatch(/use web_fetch/i);
+    expect(text).not.toContain("Use web_fetch on any URL above to read the full page content.");
   });
 });
 
