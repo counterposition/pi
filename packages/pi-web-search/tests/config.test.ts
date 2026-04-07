@@ -78,6 +78,18 @@ describe("resolveSearchProviders", () => {
     expect(resolution.providers.map((provider) => provider.name)[0]).toBe("exa");
     expect(resolution.servedDepth).toBe("thorough");
   });
+
+  it("does not leak config warnings into resolution notes", () => {
+    const brave = makeProvider("brave", ["search"]);
+    const config = makeConfig({
+      BRAVE_API_KEY: "brave-test",
+    });
+    config.warnings = ["Ignoring webSearch.apiKeys in project settings."];
+
+    const resolution = resolveSearchProviders({ depth: "basic" }, { brave }, config);
+
+    expect(resolution.notes).toEqual([]);
+  });
 });
 
 describe("loadConfig", () => {

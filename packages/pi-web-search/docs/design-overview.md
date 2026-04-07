@@ -92,7 +92,7 @@ Current search providers:
 At a high level:
 
 - `basic` means fast search oriented around snippets and links.
-- `thorough` means content-capable search when available.
+- `thorough` means content-capable search when available, with at most one inline content excerpt.
 - `freshness` biases selection toward providers that can reason about recency.
 - `domains` biases selection toward providers that can constrain or approximate domain filtering.
 
@@ -105,7 +105,7 @@ Important behaviors:
 - Always registered.
 - Uses Jina as the single fetch backend.
 - Works without a Jina API key for some public pages, subject to rate limits and blocking.
-- Supports `offset` and `max_chars` for pagination.
+- Supports `offset` and `max_chars` for pagination, defaulting to 8,000 characters per chunk.
 - Reuses a session-local page cache so later chunks do not refetch the same page.
 - Returns provider and pagination details so the agent can continue reading deterministically.
 
@@ -145,7 +145,7 @@ Useful configuration values:
 - `EXA_API_KEY`
 - `JINA_API_KEY`
 
-For the best experience, configure at least two search provider keys: one basic-capable provider and one content-capable provider. **The recommended pair is Brave plus either Exa or Tavily**. Brave is the default first choice for basic and freshness-filtered searches but cannot extract page content. Exa and Tavily can both serve thorough searches that return content alongside results. Without a content-capable provider key, thorough searches degrade to basic. Configuring all three search keys adds fallback resilience but is not necessary for full functionality.
+For the best experience, configure at least two search provider keys: one basic-capable provider and one content-capable provider. **The recommended pair is Brave plus either Exa or Tavily**. Brave is the default first choice for basic and freshness-filtered searches but cannot enrich results with extracted page content. Exa and Tavily can both serve thorough searches that use extracted content to improve discovery and may include a short inline excerpt. Without a content-capable provider key, thorough searches degrade to basic. Configuring all three search keys adds fallback resilience but is not necessary for full functionality.
 
 Useful non-secret settings:
 

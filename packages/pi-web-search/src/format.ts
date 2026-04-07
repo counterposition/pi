@@ -9,13 +9,14 @@ import type {
 
 const SEARCH_OUTPUT_BUDGET = 12_000;
 const SEARCH_CONTENT_EXCERPT_LIMIT = 1_500;
-const FETCH_DEFAULT_MAX_CHARS = 12_000;
+export const FETCH_DEFAULT_MAX_CHARS = 8_000;
 const MIN_CONTENT_BLOCK_CHARS = 200;
+const THOROUGH_INLINE_CONTENT_RESULT_LIMIT = 1;
 
 export function formatSearchResults(args: FormatSearchResultsArgs): string {
   const notes = collectSearchNotes(args);
   const topContentCandidates = args.results
-    .slice(0, 3)
+    .slice(0, THOROUGH_INLINE_CONTENT_RESULT_LIMIT)
     .map((result, index) => ({ index, content: result.content?.trim() }))
     .filter((entry): entry is { index: number; content: string } => Boolean(entry.content));
 

@@ -31,7 +31,7 @@ describe("formatSearchResults", () => {
     expect(text).not.toContain("Note:");
   });
 
-  it("omits snippets for thorough results that include content blocks", () => {
+  it("limits thorough inline content to the top result", () => {
     const text = formatSearchResults({
       provider: "tavily",
       requestedDepth: "thorough",
@@ -48,6 +48,7 @@ describe("formatSearchResults", () => {
           title: "Result 2",
           url: "https://example.com/2",
           snippet: "beta snippet",
+          content: "beta content ".repeat(40),
         },
       ],
     });
@@ -59,11 +60,9 @@ describe("formatSearchResults", () => {
 
     expect(firstBlock).toContain("### 1. Result 1");
     expect(firstBlock).toContain("Content:");
-    expect(firstBlock).not.toContain("Source:");
     expect(firstBlock).not.toContain("Snippet:");
     expect(secondBlock).toContain("### 2. Result 2");
     expect(secondBlock).toContain("Snippet:");
-    expect(secondBlock).not.toContain("Source:");
     expect(secondBlock).not.toContain("Content:");
   });
 

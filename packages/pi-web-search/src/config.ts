@@ -131,7 +131,7 @@ export function resolveSearchProviders(
       : config.settings.preferredThoroughProvider;
 
   const providersInOrder: SearchProvider[] = [];
-  const notes: string[] = [...config.warnings];
+  const notes: string[] = [];
   const ranking = rankingFor(args.depth, args);
 
   if (preferred) {

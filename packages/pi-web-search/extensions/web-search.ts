@@ -2,7 +2,12 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { StringEnum, Type } from "@mariozechner/pi-ai";
 
 import { loadConfig, normalizeDomains, resolveSearchProviders } from "../src/config.js";
-import { formatFetchContent, formatSearchResults, paginateContent } from "../src/format.js";
+import {
+  FETCH_DEFAULT_MAX_CHARS,
+  formatFetchContent,
+  formatSearchResults,
+  paginateContent,
+} from "../src/format.js";
 import { pageCache } from "../src/page-cache.js";
 import { isTransientProviderError } from "../src/provider-utils.js";
 import { initProviders } from "../src/providers/index.js";
@@ -26,7 +31,7 @@ export default function (pi: ExtensionAPI) {
     label: "Web Search",
     description:
       "Search the web for information. Returns titles, URLs, snippets, and dates when available. " +
-      "Set depth to 'thorough' for research that needs content-enriched search and extracted page content. " +
+      "Set depth to 'thorough' for research that needs content-enriched search and a short inline excerpt when available. " +
       "Use freshness for recent information and domains for trusted or site-specific sources. " +
       "Requires at least one configured search provider API key.",
     parameters: Type.Object({
@@ -36,7 +41,7 @@ export default function (pi: ExtensionAPI) {
           default: "basic",
           description:
             "basic (default): fast search that returns snippets. " +
-            "thorough: content-enriched search with extracted page content when available.",
+            "thorough: content-enriched search that may include one inline content excerpt.",
         }),
       ),
       freshness: Type.Optional(
@@ -134,6 +139,7 @@ export default function (pi: ExtensionAPI) {
               requestedDepth: depth,
               servedDepth: resolution.servedDepth,
               degraded: resolution.servedDepth !== depth,
+              warnings: config.warnings,
               freshness: params.freshness ?? null,
               domains: domains ?? [],
               appliedFilters: response.appliedFilters ?? null,
@@ -172,18 +178,18 @@ export default function (pi: ExtensionAPI) {
       ),
       max_chars: Type.Optional(
         Type.Number({
-          default: 12_000,
+          default: FETCH_DEFAULT_MAX_CHARS,
           minimum: 1_000,
           maximum: 20_000,
           description:
-            "Maximum characters to return from the cleaned page content (default: 12000).",
+            `Maximum characters to return from the cleaned page content (default: ${FETCH_DEFAULT_MAX_CHARS}).`,
         }),
       ),
     }),
     async execute(_toolCallId, params, signal) {
       const url = validateFetchUrl(params.url);
       const offset = params.offset ?? 0;
-      const maxChars = params.max_chars ?? 12_000;
+      const maxChars = params.max_chars ?? FETCH_DEFAULT_MAX_CHARS;
       const cached = pageCache.get(url);
 
       let providerName = cached?.provider;
