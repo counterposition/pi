@@ -14,10 +14,6 @@ const MIN_CONTENT_BLOCK_CHARS = 200;
 
 export function formatSearchResults(args: FormatSearchResultsArgs): string {
   const notes = collectSearchNotes(args);
-  const resultBlocks = args.results.map((result, index) =>
-    renderBaseResultBlock(result, index + 1),
-  );
-
   const topContentCandidates = args.results
     .slice(0, 3)
     .map((result, index) => ({ index, content: result.content?.trim() }))
@@ -26,11 +22,16 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
   const contentMap = new Map<number, string>();
   let omittedCount = 0;
 
+  const renderResultBlocks = (contentMap: Map<number, string>): string[] =>
+    args.results.map((result, index) =>
+      renderBaseResultBlock(result, index + 1, { omitSnippet: contentMap.has(index) }),
+    );
+
   let text = renderSearchDocument({
     provider: args.provider,
     servedDepth: args.servedDepth,
     notes,
-    resultBlocks,
+    resultBlocks: renderResultBlocks(contentMap),
     contentMap,
     basicHint: args.servedDepth === "basic",
     omissionNote: undefined,
@@ -40,12 +41,13 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
     const baseExcerpt = truncateSnippet(candidate.content, SEARCH_CONTENT_EXCERPT_LIMIT);
     const tentativeMap = new Map(contentMap);
     tentativeMap.set(candidate.index, baseExcerpt);
+    const tentativeBlocks = renderResultBlocks(tentativeMap);
 
     const tentativeText = renderSearchDocument({
       provider: args.provider,
       servedDepth: args.servedDepth,
       notes,
-      resultBlocks,
+      resultBlocks: tentativeBlocks,
       contentMap: tentativeMap,
       basicHint: args.servedDepth === "basic",
       omissionNote: undefined,
@@ -71,11 +73,12 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
     }
 
     contentMap.set(candidate.index, trimmedExcerpt);
+    const updatedBlocks = renderResultBlocks(contentMap);
     text = renderSearchDocument({
       provider: args.provider,
       servedDepth: args.servedDepth,
       notes,
-      resultBlocks,
+      resultBlocks: updatedBlocks,
       contentMap,
       basicHint: args.servedDepth === "basic",
       omissionNote: undefined,
@@ -84,11 +87,12 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
     if (text.length > SEARCH_OUTPUT_BUDGET) {
       contentMap.delete(candidate.index);
       omittedCount += 1;
+      const revertedBlocks = renderResultBlocks(contentMap);
       text = renderSearchDocument({
         provider: args.provider,
         servedDepth: args.servedDepth,
         notes,
-        resultBlocks,
+        resultBlocks: revertedBlocks,
         contentMap,
         basicHint: args.servedDepth === "basic",
         omissionNote: undefined,
@@ -110,7 +114,7 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
     provider: args.provider,
     servedDepth: args.servedDepth,
     notes,
-    resultBlocks,
+    resultBlocks: renderResultBlocks(contentMap),
     contentMap,
     basicHint: args.servedDepth === "basic",
     omissionNote,
@@ -121,7 +125,7 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
       provider: args.provider,
       servedDepth: args.servedDepth,
       notes,
-      resultBlocks,
+      resultBlocks: renderResultBlocks(contentMap),
       contentMap,
       basicHint: false,
       omissionNote,
@@ -220,7 +224,11 @@ function collectSearchNotes(args: FormatSearchResultsArgs): string[] {
   return [...new Set(notes)];
 }
 
-function renderBaseResultBlock(result: SearchResult, rank: number): string {
+function renderBaseResultBlock(
+  result: SearchResult,
+  rank: number,
+  options?: { omitSnippet?: boolean },
+): string {
   const lines = [`### ${rank}. ${result.title}`, `URL: ${result.url}`];
 
   if (result.sourceDomain) {
@@ -230,6 +238,10 @@ function renderBaseResultBlock(result: SearchResult, rank: number): string {
   const normalizedDate = normalizeIsoDate(result.publishedAt);
   if (normalizedDate) {
     lines.push(`Published: ${normalizedDate.slice(0, 10)}`);
+  }
+
+  if (options?.omitSnippet) {
+    return lines.join("\n");
   }
 
   lines.push(`Snippet: ${truncateSnippet(result.snippet || "", 320) || "[No snippet available]"}`);
