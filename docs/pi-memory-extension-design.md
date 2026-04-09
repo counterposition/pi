@@ -95,9 +95,9 @@ curating memory — but the risk should be stated plainly:
 
 If v1 adoption proves insufficient, a lightweight fallback exists: the agent
 can write directly via `memory_write` during conversation without LLM-backed
-maintenance. This is weaker than `/dream` (no deduplication, no promotion, no
-lineage tracking) but does not depend on any external API and could be explored
-before the full maintenance implementation.
+maintenance. This is weaker than `/dream` (no deduplication, no automated
+promotion, no lineage tracking) but does not depend on any external API and
+could be explored before the full maintenance implementation.
 
 ## Research Summary
 
@@ -232,21 +232,27 @@ are:
 
 ## Design Rationale
 
-### Two tools, not three
+### Three tools, not four
 
 Following the same reasoning as pi-web-search: the agent should face a small,
-clear decision surface. Memory has two fundamental operations:
+clear decision surface. Memory has three fundamental operations:
 
 - **I want to find something I learned before.** Use `memory_search`.
 - **I want to write something down for later.** Use `memory_write`.
+- **I want to correct where an existing memory lives.** Use `memory_move`.
 
 A dedicated `memory_get` is unnecessary because the built-in `read` tool
 already serves this purpose. `memory_search` returns enough context to make the
 common case efficient: a bounded excerpt, exact file path, heading, status/date
 metadata, a stable entry ID, and the current line span for convenience. These
 make `read` follow-ups straightforward for deeper inspection or surrounding file
-context. Adding a third memory-specific tool increases prompt overhead and
-routing mistakes without giving the agent a capability it does not already have.
+context.
+
+`memory_move` earns its place because relocation is not equivalent to either
+search or create. Emulating a move with `memory_write` plus `/forget` leaves
+the agent to coordinate a two-file mutation through unrelated surfaces,
+preserve entry identity by convention, and avoid duplicate-ID races on its own.
+Relocation is therefore a real primitive, not just a convenience wrapper.
 
 ### Two tools, not one
 
@@ -769,11 +775,11 @@ protected-path sandbox.
 
 ### Best-effort managed memory boundary
 
-`memory_write` should be the primary model-facing write tool for managed
-memory. `/remember` is agent-mediated and routes through `memory_write`. Other
-extension-owned mutations such as `/forget`, invalidation, inbox promotion
-(deferred), and maintenance (deferred) should reuse the same internal write
-path rather than writing files ad hoc.
+`memory_write` and `memory_move` should be the primary model-facing mutation
+tools for managed memory. `/remember` is agent-mediated and routes through
+`memory_write`. Other extension-owned mutations such as `/forget`,
+invalidation, inbox promotion (deferred), and maintenance (deferred) should
+reuse the same internal write path rather than writing files ad hoc.
 
 That write path should resolve and operate on stable entry IDs. Query-driven
 flows such as `/forget <query>` or duplicate merging may use search to find
@@ -787,15 +793,15 @@ matching is straightforward. Generic reads remain allowed. Bash command
 interception is not included in v1: regex-matching shell strings is inherently
 fragile (variable indirection, heredocs, scripting-language one-liners, and
 symlinks all defeat it), and the real defense against accidental bash writes is
-the system prompt contract directing the agent to use `memory_write`. If real-
-world usage shows agents frequently bypassing via bash, targeted interception
-can be added then.
+the system prompt contract directing the agent to use `memory_write` and
+`memory_move`. If real-world usage shows agents frequently bypassing via bash,
+targeted interception can be added then.
 
 This boundary is policy-backed and best-effort, not a complete sandbox. The
-system prompt tells the agent to use `memory_write`; the `tool_call` hook
-catches common accidents via `write` and `edit`; but if the agent writes to the
-memory root through other means, the extension will re-parse on next access
-rather than crash.
+system prompt tells the agent to use `memory_write` and `memory_move`; the
+`tool_call` hook catches common accidents via `write` and `edit`; but if the
+agent writes to the memory root through other means, the extension will
+re-parse on next access rather than crash.
 
 All managed-path mutations should:
 
@@ -838,14 +844,17 @@ or interpret replacement relationships. If the user decides an old memory is
 wrong, the agent resolves it by ID through `memory_search` and `/forget`
 confirms the match before marking it `invalid`. Even a single match requires
 user confirmation, since the query might have matched the wrong entry. If the
-corrected fact should also be kept, the agent creates a new `memory_write`
-entry separately.
+memory itself is still valid but belongs in a different scope or topic, the
+agent should relocate it with `memory_move` instead of rewriting it as a new
+entry. If the underlying fact changed and the corrected fact should also be
+kept, the agent creates a new `memory_write` entry separately.
 
 This keeps the v1 write surface aligned with the minimal metadata schema:
-`memory_write` stays create-only, `/forget` handles the only built-in mutation,
-and the reserved lineage fields remain unused until maintenance and autonomous
-capture exist. Future versions can add explicit supersession once
-`superseded`, `Superseded-by`, and related workflows are active.
+`memory_write` stays create-only, `memory_move` handles relocation without
+changing meaning, `/forget` handles invalidation, and the reserved lineage
+fields remain unused until maintenance and autonomous capture exist. Future
+versions can add explicit supersession once `superseded`, `Superseded-by`, and
+related workflows are active.
 
 ### Entry size limit
 
@@ -1005,13 +1014,14 @@ contract carries two things:
    specific memories.` The orientation summary should be computed once at
    `session_start` and cached in memory, not recomputed from the filesystem on
    every `before_agent_start` call. The cache is invalidated when
-   `memory_write` modifies topic files.
+   `memory_write` or `memory_move` modifies topic files.
 2. **The decision policy** — when to search, when to write, and how to weigh
    memory against current sources.
 
 The decision policy tells the agent:
 
-1. That durable memory is available via `memory_search` and `memory_write`.
+1. That durable memory is available via `memory_search`, `memory_write`, and
+   `memory_move`.
 2. To use `memory_search` only when the task may depend on facts from prior
    sessions that are not present in the current conversation, repository state,
    or recent tool results.
@@ -1032,14 +1042,17 @@ The decision policy tells the agent:
    contradicts what the agent observes in the current codebase.
 6. To use `memory_write` only when the user explicitly asks Pi to remember or
    persist something.
-7. When writing explicitly, to persist only durable preferences, conventions,
+7. To use `memory_move` when an existing memory belongs in a different scope or
+   topic, rather than writing a duplicate copy and leaving the old entry
+   behind.
+8. When writing explicitly, to persist only durable preferences, conventions,
    constraints, or findings likely to matter in a future session.
-8. Not to write transient task state, unresolved guesses, checkout-local
+9. Not to write transient task state, unresolved guesses, checkout-local
    branch/worktree quirks, summaries of obvious file changes, or secrets.
-9. To prefer existing topics from the orientation summary when choosing a
+10. To prefer existing topics from the orientation summary when choosing a
    `topic` for `memory_write`. Create a new topic only when no existing one
    fits.
-10. For personal preferences that apply across projects, to set
+11. For personal preferences that apply across projects, to set
     `scope: "global"`. For project-specific facts, use the default `project`
     scope.
 
@@ -1058,7 +1071,7 @@ only prose requirements, so prompt review can cover wording and edge cases, not
 just intent. One acceptable starting draft is:
 
 ```text
-Durable memory is available through memory_search and memory_write.
+Durable memory is available through memory_search, memory_write, and memory_move.
 
 {{orientation_summary}}
 
@@ -1080,6 +1093,10 @@ something. Clear examples include "remember this", "keep in mind that...",
 "always use ...", "never do ...", or "/remember ...". Phrases like "good to
 know" or agent-only judgments such as "this might be useful later" are not, by
 themselves, write requests.
+
+Use memory_move when an existing memory belongs in a different scope or topic.
+Do not emulate a move by writing a duplicate copy and leaving the old one
+behind.
 
 When writing, persist only durable preferences, conventions, constraints, or
 findings likely to matter in a future session. Do not write transient task
@@ -1114,6 +1131,7 @@ Maintenance section).
 |------|---------|
 | `memory_search` | Query durable memory. Parameters: `query` (required — natural-language or keyword search string), `scope` (optional — `global`, `project`, or `all`; defaults to `all`; controls whether to search global memory, project memory, or both), `max_results` (optional — positive integer; defaults to 10; caps the number of returned entries). Returns ranked entry results with IDs, bounded excerpts (up to 300 characters of body), current line spans, paths, headings, status, dates with relative age, and scope. |
 | `memory_write` | Create an explicit user-directed memory note through the managed write path. Parameters: `content` (required — the first level-2 heading becomes the entry heading; if absent, the extension derives one from the first sentence), `topic` (required — routes to topic file; the file is created on demand if it does not exist), `scope` (optional — `global` or `project`; defaults to `project`). |
+| `memory_move` | Relocate an existing memory entry without leaving a duplicate behind. Parameters: `entry_id` (required — existing stable entry ID), `scope` (required — destination scope: `global` or `project`), `topic` (optional — destination topic; defaults to the current topic name). Preserves the entry ID when present, backfills one for synthetic entries, appends into the destination topic, and removes the source copy. |
 
 ### Commands
 
@@ -1329,7 +1347,7 @@ Minimum fixture contents:
 | `project/topics/build.md` | 3 entries: one fully populated, one with `Status: invalid`, one missing `ID` (exercises synthetic-ID assignment) |
 | `project/topics/testing.md` | 2 entries: one with an `Updated` date >90 days old, one recent. Exercises recency tiebreaking and relative-age formatting |
 | `project/topics/empty.md` | 1 entry: heading only, no metadata, no body. Exercises the empty-entry rule |
-| `project/topics/codeblocks.md` | 1 entry whose body contains a fenced code block with `## ` inside. Exercises the heading-boundary parser against false positives |
+| `project/topics/codeblocks.md` | 1 entry whose body contains a fenced code block with `##` inside. Exercises the heading-boundary parser against false positives |
 | `project/topics/duplicates.md` | 2 entries with the same `ID`. Exercises the duplicate-ID-within-file rule (last entry wins) |
 | `global/topics/preferences.md` | 2 entries: one that conflicts with a project entry (e.g. "use npm" vs project's "use pnpm"), one unique. Exercises scope-precedence merge |
 
@@ -1390,7 +1408,8 @@ Ship the smallest version that has the right shape:
    and `Updated` for topic entries). Orientation summary derived at runtime
    from filesystem state — no `MEMORY.md` index in v1.
 3. Narrow recurrent system prompt contract with no memory-content preload.
-4. `memory_search` and create-only `memory_write` tools.
+4. `memory_search`, create-only `memory_write`, and relocation-focused
+   `memory_move` tools.
 5. Direct entry-aware file search, no index.
 6. Managed memory boundary with an explicit-write-only policy.
 7. `/memory`, `/remember`, `/forget` commands.
