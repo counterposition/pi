@@ -1,0 +1,66 @@
+{
+  "name": "@counterposition/pi-memory",
+  "version": "0.1.0",
+  "description": "Durable Markdown-backed memory for Pi",
+  "keywords": [
+    "memory",
+    "pi-extension",
+    "pi-memory",
+    "pi-package"
+  ],
+  "homepage": "https://github.com/counterposition/pi/tree/main/packages/pi-memory",
+  "bugs": {
+    "url": "https://github.com/counterposition/pi/issues"
+  },
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/counterposition/pi.git",
+    "directory": "packages/pi-memory"
+  },
+  "files": [
+    "extensions/",
+    "src/",
+    "README.md",
+    "LICENSE.md",
+    "package.json"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "lint": "pnpm run lint:code && pnpm run lint:docs",
+    "lint:code": "oxlint .",
+    "lint:code:fix": "oxlint . --fix",
+    "lint:docs": "markdownlint-cli2 \"README.md\"",
+    "lint:docs:fix": "markdownlint-cli2 --fix \"README.md\"",
+    "format": "oxfmt .",
+    "format:check": "oxfmt . --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test",
+    "pack:check": "pnpm pack --pack-destination ../../.pack"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "markdownlint-cli2": "^0.18.1",
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-ai": "*",
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "pi": {
+    "extensions": [
+      "extensions/memory.ts"
+    ]
+  }
+}
