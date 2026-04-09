@@ -1,5 +1,13 @@
 # Pi Memory Extension Design
 
+> **Status: frozen v1 rationale.** This document captures the reasoning behind
+> the initial `@counterposition/pi-memory` implementation (merged in `cf89b0d`).
+> It is preserved as a historical snapshot and should not be edited except to
+> fix typos or broken links. Post-v1 exploration lives in
+> [`../concerns/`](../concerns/); matured redesigns become sibling design docs
+> in this directory with semantic names (for example,
+> `time-aware-retrieval-design.md`).
+
 ## Table of Contents
 
 - [Purpose](#purpose)
@@ -179,7 +187,7 @@ The most useful public reference points are:
   active at a time, bridged via an `on_memory_write()` callback. A broader
   comparative analysis covering writing models, retrieval strategies, and file
   format differences across Claude Code, OpenClaw, and Hermes is in
-  [docs/research/agent-memory-systems.md](research/agent-memory-systems.md).
+  [docs/research/agent-memory-systems.md](../../../docs/research/agent-memory-systems.md).
 
 Other systems worth noting include Cursor (path-scoped `.mdc` rules with glob
 frontmatter, a four-tier rules system, and an evolving agent memory tool) and

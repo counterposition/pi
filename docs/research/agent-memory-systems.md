@@ -1,7 +1,7 @@
 # Memory for AI Agents
 
 Comparative notes on how leading agent implementations handle durable memory.
-These notes informed the design decisions in [pi-memory-extension-design.md](../pi-memory-extension-design.md).
+These notes informed the design decisions in [packages/pi-memory/docs/v1-design.md](../../packages/pi-memory/docs/v1-design.md).
 
 ## Memory scoping
 
