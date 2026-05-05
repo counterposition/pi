@@ -1,6 +1,6 @@
 {
   "name": "@counterposition/skill-pi",
-  "version": "0.72.0",
+  "version": "0.73.0",
   "description": "Pi coding agent reference skill — extensions, settings, providers, SDK/RPC, packages, and .pi/ config",
   "keywords": [
     "ai-skill",
