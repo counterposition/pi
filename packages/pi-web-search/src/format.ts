@@ -23,9 +23,9 @@ export function formatSearchResults(args: FormatSearchResultsArgs): string {
   const contentMap = new Map<number, string>();
   let omittedCount = 0;
 
-  const renderResultBlocks = (contentMap: Map<number, string>): string[] =>
+  const renderResultBlocks = (includedContentMap: Map<number, string>): string[] =>
     args.results.map((result, index) =>
-      renderBaseResultBlock(result, index + 1, { omitSnippet: contentMap.has(index) }),
+      renderBaseResultBlock(result, index + 1, { omitSnippet: includedContentMap.has(index) }),
     );
 
   let text = renderSearchDocument({
