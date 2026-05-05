@@ -37,6 +37,7 @@ jobs:
         run: pnpm run check
 
       - name: Create release PR or publish packages
+        id: changesets
         uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
         with:
           version: pnpm run version:packages
@@ -44,3 +45,10 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge on release PR
+        if: steps.changesets.outputs.pullRequestNumber != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.changesets.outputs.pullRequestNumber }}
+        run: gh pr merge --auto --squash "$PR_NUMBER"
