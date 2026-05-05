@@ -1,5 +1,15 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { StringEnum, Type } from "@mariozechner/pi-ai";
+import { CustomMessageComponent } from "@mariozechner/pi-coding-agent";
+import type {
+  BeforeAgentStartEvent,
+  BeforeAgentStartEventResult,
+  ExtensionAPI,
+  ExtensionCommandContext,
+  MessageRenderer,
+  ToolCallEvent,
+  ToolCallEventResult,
+} from "@mariozechner/pi-coding-agent";
+import { StringEnum } from "@mariozechner/pi-ai";
+import { Type } from "typebox";
 
 import {
   formatForgetCandidate,
@@ -35,40 +45,31 @@ import type {
   ProjectIdentity,
 } from "../src/types.js";
 
-interface SessionStartEvent {
-  reason?: string;
-}
-
-interface BeforeAgentStartEvent {
-  systemPrompt?: string;
-}
-
-interface ToolCallEvent {
-  toolName: string;
-  input: Record<string, unknown>;
-}
-
-interface PiUI {
-  confirm?: (title: string, body: string) => Promise<boolean>;
-  editor?: (title: string, initialText?: string) => Promise<string | undefined>;
-  input?: (title: string, defaultValue?: string) => Promise<string | undefined>;
-  notify?: (message: string, level?: string) => void;
-  select?: (title: string, options: string[]) => Promise<string | undefined>;
-  setEditorText?: (text: string) => void;
-}
-
-interface ExtensionContext {
-  cwd: string;
-  hasUI?: boolean;
-  ui?: PiUI;
-}
-
 interface RuntimeState {
   cwd: string;
   config: MemoryConfig;
   identity: ProjectIdentity;
   roots: MemoryRoots;
   orientation: OrientationSummary;
+}
+
+type MemoryCommandUi = Partial<
+  Pick<ExtensionCommandContext["ui"], "confirm" | "editor" | "input" | "notify" | "select">
+>;
+
+interface MemoryCommandContext {
+  cwd: string;
+  hasUI?: boolean;
+  ui?: MemoryCommandUi;
+}
+
+const MEMORY_PROMPT_PREFIX =
+  "Durable memory is available through memory_search, memory_write, and memory_move.";
+const MEMORY_COMMAND_MESSAGE_TYPE = "pi-memory-command";
+const MEMORY_COMMAND_MESSAGE_LABEL = "Memory";
+
+interface MemoryCommandDetails {
+  command: string;
 }
 
 type ResolvedCommandText =
@@ -79,20 +80,28 @@ type ResolvedCommandText =
 export default function (pi: ExtensionAPI) {
   let runtime: RuntimeState | null = null;
 
-  pi.on("session_start", async (_event: SessionStartEvent, ctx: ExtensionContext) => {
+  pi.registerMessageRenderer<MemoryCommandDetails>(
+    MEMORY_COMMAND_MESSAGE_TYPE,
+    renderMemoryCommandMessage,
+  );
+
+  pi.on("session_start", async (_event, ctx) => {
     runtime = await initializeRuntime(ctx.cwd);
   });
 
-  pi.on("before_agent_start", async (event: BeforeAgentStartEvent, ctx: ExtensionContext) => {
+  pi.on("before_agent_start", async (event: BeforeAgentStartEvent, ctx) => {
     const currentRuntime = await ensureRuntime(ctx.cwd);
     if (!currentRuntime.config.enabled) return;
 
-    event.systemPrompt = [event.systemPrompt ?? "", buildInjectedPrompt(currentRuntime.orientation)]
-      .filter((value) => value.trim() !== "")
-      .join("\n\n");
+    return {
+      systemPrompt: mergeSystemPrompt(
+        event.systemPrompt,
+        buildInjectedPrompt(currentRuntime.orientation),
+      ),
+    } satisfies BeforeAgentStartEventResult;
   });
 
-  pi.on("tool_call", async (event: ToolCallEvent, ctx: ExtensionContext) => {
+  pi.on("tool_call", async (event: ToolCallEvent, ctx): Promise<ToolCallEventResult | void> => {
     const currentRuntime = await ensureRuntime(ctx.cwd);
     if (!currentRuntime.config.enabled) return;
     if (event.toolName !== "write" && event.toolName !== "edit") return;
@@ -114,10 +123,15 @@ export default function (pi: ExtensionAPI) {
     label: "Memory Search",
     description:
       "Search durable memory across global and project scopes. Returns ranked entry results with IDs, paths, line spans, dates, and excerpts.",
+    promptSnippet:
+      "memory_search: search explicit durable Markdown memory on demand; returns IDs, scopes, dates, paths, and excerpts.",
+    promptGuidelines: [
+      "`memory_search`: Search memory only when prior-session durable facts may matter and the current conversation or repository cannot answer directly.",
+    ],
     parameters: Type.Object({
       query: Type.String({ description: "Natural-language or keyword query." }),
       scope: Type.Optional(
-        StringEnum(["global", "project", "all"], {
+        StringEnum(["global", "project", "all"] as const, {
           default: "all",
           description: "Which memory scope to search. Defaults to all.",
         }),
@@ -162,6 +176,11 @@ export default function (pi: ExtensionAPI) {
     label: "Memory Write",
     description:
       "Persist an explicit durable memory note into a topic file. Use only when the user explicitly asks to remember or persist something.",
+    promptSnippet:
+      "memory_write: store an explicit durable memory note in a managed global or project topic file.",
+    promptGuidelines: [
+      "`memory_write`: Use only for explicit user requests to remember durable preferences, conventions, constraints, or findings; never store secrets or transient task state.",
+    ],
     parameters: Type.Object({
       content: Type.String({
         description:
@@ -171,7 +190,7 @@ export default function (pi: ExtensionAPI) {
         description: "Logical topic name, not a file path.",
       }),
       scope: Type.Optional(
-        StringEnum(["global", "project"], {
+        StringEnum(["global", "project"] as const, {
           default: "project",
           description: "Memory scope. Defaults to project.",
         }),
@@ -205,11 +224,16 @@ export default function (pi: ExtensionAPI) {
     label: "Memory Move",
     description:
       "Move an existing memory entry into a different scope or topic without leaving a duplicate behind.",
+    promptSnippet:
+      "memory_move: relocate an existing memory entry by ID while preserving the managed memory record.",
+    promptGuidelines: [
+      "`memory_move`: Use when an existing memory belongs in a different scope or topic; do not copy it with `memory_write` and leave the old entry behind.",
+    ],
     parameters: Type.Object({
       entry_id: Type.String({
         description: "Existing memory entry ID to move.",
       }),
-      scope: StringEnum(["global", "project"], {
+      scope: StringEnum(["global", "project"] as const, {
         description: "Destination memory scope.",
       }),
       topic: Type.Optional(
@@ -247,39 +271,53 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("memory", {
     description: "Show memory status and storage locations.",
     async handler(_args, ctx) {
-      const resolvedContext = ctx as ExtensionContext;
+      const resolvedContext = ctx as MemoryCommandContext;
       const currentRuntime = await ensureRuntime(resolvedContext.cwd);
       if (!currentRuntime.config.enabled) {
-        return "Memory is disabled in global Pi settings.";
+        emitCommandOutput(pi, "memory", "Memory is disabled in global Pi settings.");
+        return;
       }
 
       const status = await getMemoryStatusSummary(currentRuntime.roots);
-      return formatMemoryStatus({
-        status,
-        orientation: currentRuntime.orientation,
-        identity: currentRuntime.identity,
-        warnings: currentRuntime.config.warnings,
-      });
+      emitCommandOutput(
+        pi,
+        "memory",
+        formatMemoryStatus({
+          status,
+          orientation: currentRuntime.orientation,
+          identity: currentRuntime.identity,
+          warnings: currentRuntime.config.warnings,
+        }),
+      );
     },
   });
 
   pi.registerCommand("remember", {
     description: "Persist an explicit durable memory note.",
     async handler(args, ctx) {
-      const resolvedContext = ctx as ExtensionContext;
+      const resolvedContext = ctx as MemoryCommandContext;
       const currentRuntime = await ensureRuntime(resolvedContext.cwd);
       ensureEnabled(currentRuntime);
 
       const resolvedContent = await resolveRememberContent(args, resolvedContext);
-      if (resolvedContent.kind === "missing") return "Usage: /remember <text>";
-      if (resolvedContent.kind === "cancelled") return "Cancelled.";
+      if (resolvedContent.kind === "missing") {
+        emitCommandOutput(pi, "remember", "Usage: /remember <text>");
+        return;
+      }
+      if (resolvedContent.kind === "cancelled") {
+        emitCommandOutput(pi, "remember", "Cancelled.");
+        return;
+      }
 
       const destination = await resolveRememberDestination(
         resolvedContent.text,
         currentRuntime,
         resolvedContext,
       );
-      if (destination === null) return "Cancelled.";
+      if (destination === null) {
+        emitCommandOutput(pi, "remember", "Cancelled.");
+        return;
+      }
 
       const result = await writeMemoryEntry(currentRuntime.roots, {
         content: resolvedContent.text,
@@ -292,32 +330,38 @@ export default function (pi: ExtensionAPI) {
         `Stored memory ${result.entryId} in ${result.scope} scope ` +
         `under topic "${destination.topic}" at ${result.filePath}.`;
       resolvedContext.ui?.notify?.(message, "info");
-      return message;
+      emitCommandOutput(pi, "remember", message);
     },
   });
 
   pi.registerCommand("forget", {
     description: "Find matching memories and mark one as invalid.",
     async handler(args, ctx) {
-      const resolvedContext = ctx as ExtensionContext;
+      const resolvedContext = ctx as MemoryCommandContext;
       const currentRuntime = await ensureRuntime(resolvedContext.cwd);
       ensureEnabled(currentRuntime);
 
       const resolvedQuery = await resolveForgetQuery(args, resolvedContext);
       if (resolvedQuery.kind === "missing") {
-        return "Usage: /forget <query>";
+        emitCommandOutput(pi, "forget", "Usage: /forget <query>");
+        return;
       }
-      if (resolvedQuery.kind === "cancelled") return "Cancelled.";
+      if (resolvedQuery.kind === "cancelled") {
+        emitCommandOutput(pi, "forget", "Cancelled.");
+        return;
+      }
 
       const loaded = await loadEntries(currentRuntime.roots, "all");
       const results = findForgetCandidates(loaded.entries, resolvedQuery.text);
 
       if (results.length === 0) {
-        return "No matching memories.";
+        emitCommandOutput(pi, "forget", "No matching memories.");
+        return;
       }
 
       if (!resolvedContext.hasUI || !resolvedContext.ui) {
-        return formatForgetCandidates(results);
+        emitCommandOutput(pi, "forget", formatForgetCandidates(results));
+        return;
       }
 
       if (results.length === 1) {
@@ -326,11 +370,17 @@ export default function (pi: ExtensionAPI) {
           "Forget memory?",
           formatForgetCandidate(target),
         );
-        if (!confirmed) return "Cancelled.";
+        if (!confirmed) {
+          emitCommandOutput(pi, "forget", "Cancelled.");
+          return;
+        }
 
         const entry = requireEntry(loaded.entries, target.id);
         const result = await invalidateMemoryEntry(currentRuntime.roots, entry);
-        return `Invalidated ${result.entryId}.`;
+        const message = `Invalidated ${result.entryId}.`;
+        resolvedContext.ui.notify?.(message, "info");
+        emitCommandOutput(pi, "forget", message);
+        return;
       }
 
       const options = results.map(
@@ -341,16 +391,31 @@ export default function (pi: ExtensionAPI) {
         "Cancel",
       ]);
       if (!selection || selection === "Cancel") {
-        return "Cancelled.";
+        emitCommandOutput(pi, "forget", "Cancelled.");
+        return;
       }
 
       const selectedIndex = options.indexOf(selection);
-      if (selectedIndex < 0) return "Cancelled.";
+      if (selectedIndex < 0) {
+        emitCommandOutput(pi, "forget", "Cancelled.");
+        return;
+      }
 
       const target = results[selectedIndex];
+      const confirmed = await resolvedContext.ui.confirm?.(
+        "Forget memory?",
+        formatForgetCandidate(target),
+      );
+      if (!confirmed) {
+        emitCommandOutput(pi, "forget", "Cancelled.");
+        return;
+      }
+
       const entry = requireEntry(loaded.entries, target.id);
       const result = await invalidateMemoryEntry(currentRuntime.roots, entry);
-      return `Invalidated ${result.entryId}.`;
+      const message = `Invalidated ${result.entryId}.`;
+      resolvedContext.ui.notify?.(message, "info");
+      emitCommandOutput(pi, "forget", message);
     },
   });
 
@@ -407,8 +472,11 @@ async function loadEntries(
   };
 }
 
-function extractToolPath(input: Record<string, unknown>): string | null {
-  const candidate = input.file_path ?? input.path;
+function extractToolPath(input: unknown): string | null {
+  if (typeof input !== "object" || input === null) return null;
+
+  const record = input as Record<string, unknown>;
+  const candidate = record.file_path ?? record.path;
   return typeof candidate === "string" && candidate.trim() !== "" ? candidate : null;
 }
 
@@ -432,6 +500,35 @@ function ensureEnabled(runtime: RuntimeState): void {
   if (!runtime.config.enabled) {
     throw new Error("Memory is disabled in global Pi settings.");
   }
+}
+
+function mergeSystemPrompt(basePrompt: string, injectedPrompt: string): string {
+  if (basePrompt.includes(MEMORY_PROMPT_PREFIX)) {
+    return basePrompt;
+  }
+
+  if (basePrompt.trim() === "") {
+    return injectedPrompt;
+  }
+
+  return `${basePrompt.trimEnd()}\n\n${injectedPrompt}`;
+}
+
+const renderMemoryCommandMessage: MessageRenderer<MemoryCommandDetails> = (message) =>
+  new CustomMessageComponent({
+    ...message,
+    customType: MEMORY_COMMAND_MESSAGE_LABEL,
+  });
+
+function emitCommandOutput(pi: ExtensionAPI, command: string, message: string): void {
+  pi.sendMessage({
+    customType: MEMORY_COMMAND_MESSAGE_TYPE,
+    content: message,
+    display: true,
+    details: {
+      command,
+    },
+  });
 }
 
 function requireEntry(entries: ParsedEntry[], entryId: string): ParsedEntry {
@@ -458,7 +555,7 @@ function findForgetCandidates(entries: ParsedEntry[], query: string): MemorySear
 
 async function resolveForgetQuery(
   args: string,
-  ctx: ExtensionContext,
+  ctx: MemoryCommandContext,
 ): Promise<ResolvedCommandText> {
   const trimmed = args.trim();
   if (trimmed !== "") {
@@ -484,7 +581,7 @@ async function resolveForgetQuery(
 
 async function resolveRememberContent(
   args: string,
-  ctx: ExtensionContext,
+  ctx: MemoryCommandContext,
 ): Promise<ResolvedCommandText> {
   const trimmed = args.trim();
   if (trimmed !== "") return { kind: "value", text: trimmed };
@@ -517,7 +614,7 @@ async function resolveRememberContent(
 async function resolveRememberDestination(
   content: string,
   runtime: RuntimeState,
-  ctx: ExtensionContext,
+  ctx: MemoryCommandContext,
 ): Promise<{ scope: MemoryScope; topic: string } | null> {
   const inferredScope: MemoryScope = "project";
   const projectTopics = await getTopicNames(runtime.roots, inferredScope);
@@ -640,7 +737,7 @@ function shouldOfferExistingTopicPicker(
 }
 
 async function promptForNewTopicName(
-  ctx: ExtensionContext,
+  ctx: MemoryCommandContext,
   suggestedTopic: string,
 ): Promise<string | null> {
   const trimmedSuggestion = suggestedTopic.trim();

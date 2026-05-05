@@ -1,16 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-vi.mock("@mariozechner/pi-ai", () => ({
-  Type: {
-    Object: (value: unknown) => value,
-    String: (value?: unknown) => value ?? {},
-    Optional: (value: unknown) => value,
-    Number: (value?: unknown) => value ?? {},
-  },
-  StringEnum: (values: string[], options?: unknown) => ({ values, options }),
-}));
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import memoryExtension from "../extensions/memory.js";
 import { cleanupTempDir, createRuntimeFixtureEnvironment } from "./helpers.js";
@@ -20,7 +11,7 @@ const tempDirs: string[] = [];
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-04-06T00:00:00Z"));
+  vi.setSystemTime(new Date(2026, 3, 6, 12, 0));
 });
 
 afterEach(async () => {
@@ -35,6 +26,12 @@ afterEach(async () => {
 });
 
 describe("memory extension", () => {
+  it("registers a friendly renderer for command messages", () => {
+    const harness = registerExtension();
+
+    expect(harness.messageRenderers.has("pi-memory-command")).toBe(true);
+  });
+
   it("injects the memory contract and cached orientation summary", async () => {
     const environment = await createRuntimeFixtureEnvironment();
     tempDirs.push(environment.tempDir);
@@ -44,12 +41,42 @@ describe("memory extension", () => {
     await callHandler(harness, "session_start", {}, { cwd: environment.cwd, hasUI: false });
 
     const event = { systemPrompt: "Base prompt" };
-    await callHandler(harness, "before_agent_start", event, { cwd: environment.cwd, hasUI: false });
+    const result = await callHandler(harness, "before_agent_start", event, {
+      cwd: environment.cwd,
+      hasUI: false,
+    });
+    const returnedPrompt = getReturnedPrompt(result);
 
-    expect(event.systemPrompt).toContain(
+    expect(event.systemPrompt).toBe("Base prompt");
+    expect(returnedPrompt).toContain("Base prompt");
+    expect(returnedPrompt).toContain(
       "Durable memory is available through memory_search, memory_write, and memory_move.",
     );
-    expect(event.systemPrompt).toContain("Memory: 7 topics");
+    expect(returnedPrompt).toContain("Memory: 7 topics");
+  });
+
+  it("does not append the memory contract twice", async () => {
+    const environment = await createRuntimeFixtureEnvironment();
+    tempDirs.push(environment.tempDir);
+    process.env.PI_CODING_AGENT_DIR = environment.roots.agentDir;
+
+    const harness = registerExtension();
+    await callHandler(harness, "session_start", {}, { cwd: environment.cwd, hasUI: false });
+
+    const first = await callHandler(
+      harness,
+      "before_agent_start",
+      { systemPrompt: "Base prompt" },
+      { cwd: environment.cwd, hasUI: false },
+    );
+    const second = await callHandler(
+      harness,
+      "before_agent_start",
+      { systemPrompt: getReturnedPrompt(first) },
+      { cwd: environment.cwd, hasUI: false },
+    );
+
+    expect(countOccurrences(getReturnedPrompt(second), "Durable memory is available")).toBe(1);
   });
 
   it("allows read tool calls into the managed memory root", async () => {
@@ -66,7 +93,7 @@ describe("memory extension", () => {
       {
         toolName: "read",
         input: {
-          file_path: `${environment.roots.topicDirs.project}/build.md`,
+          path: `${environment.roots.topicDirs.project}/build.md`,
         },
       },
       { cwd: environment.cwd, hasUI: false },
@@ -89,7 +116,7 @@ describe("memory extension", () => {
       {
         toolName: "write",
         input: {
-          file_path: `${environment.roots.topicDirs.project}/build.md`,
+          path: `${environment.roots.topicDirs.project}/build.md`,
         },
       },
       { cwd: environment.cwd, hasUI: false },
@@ -100,7 +127,7 @@ describe("memory extension", () => {
       {
         toolName: "write",
         input: {
-          file_path: `${environment.cwd}/memory-notes.md`,
+          path: `${environment.cwd}/memory-notes.md`,
         },
       },
       { cwd: environment.cwd, hasUI: false },
@@ -128,7 +155,7 @@ describe("memory extension", () => {
       {
         toolName: "write",
         input: {
-          file_path: `${environment.roots.topicDirs.project}/../escape.md`,
+          path: `${environment.roots.topicDirs.project}/../escape.md`,
         },
       },
       { cwd: environment.cwd, hasUI: false },
@@ -141,7 +168,7 @@ describe("memory extension", () => {
     });
   });
 
-  it("returns the full /memory status without falling back to a notification", async () => {
+  it("sends the full /memory status through an explicit command message", async () => {
     const environment = await createRuntimeFixtureEnvironment();
     tempDirs.push(environment.tempDir);
     process.env.PI_CODING_AGENT_DIR = environment.roots.agentDir;
@@ -157,9 +184,11 @@ describe("memory extension", () => {
         notify,
       },
     });
+    const output = getLastCommandOutput(harness);
 
-    expect(String(result)).toContain("Memory is enabled.");
-    expect(String(result)).toContain(`Storage root: ${environment.roots.memoryDir}`);
+    expect(result).toBeUndefined();
+    expect(output).toContain("Memory is enabled.");
+    expect(output).toContain(`Storage root: ${environment.roots.memoryDir}`);
     expect(notify).not.toHaveBeenCalled();
   });
 
@@ -175,13 +204,15 @@ describe("memory extension", () => {
       cwd: environment.cwd,
       hasUI: false,
     });
+    const output = getLastCommandOutput(harness);
     const stored = await fs.readFile(
       path.join(environment.roots.topicDirs.project, "preferences.md"),
       "utf8",
     );
 
-    expect(String(result)).toContain("Stored memory mem_");
-    expect(String(result)).toContain('under topic "preferences"');
+    expect(result).toBeUndefined();
+    expect(output).toContain("Stored memory mem_");
+    expect(output).toContain('under topic "preferences"');
     expect(stored).toContain("## Prefer terse answers");
   });
 
@@ -205,6 +236,7 @@ describe("memory extension", () => {
         notify,
       },
     });
+    const output = getLastCommandOutput(harness);
     const stored = await fs.readFile(
       path.join(environment.roots.topicDirs.project, "testing.md"),
       "utf8",
@@ -212,8 +244,9 @@ describe("memory extension", () => {
 
     expect(editor).toHaveBeenCalledWith("What should Pi remember?", "");
     expect(input).toHaveBeenCalledWith("Topic name:", "testing");
-    expect(String(result)).toContain("Stored memory mem_");
-    expect(String(result)).toContain('under topic "testing"');
+    expect(result).toBeUndefined();
+    expect(output).toContain("Stored memory mem_");
+    expect(output).toContain('under topic "testing"');
     expect(stored).toContain("## Vitest is the default test runner");
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("Stored memory mem_"), "info");
   });
@@ -240,7 +273,8 @@ describe("memory extension", () => {
 
     expect(editor).toHaveBeenCalledWith("What should Pi remember?", "");
     expect(input).toHaveBeenCalledWith("What should Pi remember?", "");
-    expect(result).toBe("Cancelled.");
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toBe("Cancelled.");
   });
 
   it("prompts for an editable new topic when no strong existing match exists", async () => {
@@ -271,7 +305,8 @@ describe("memory extension", () => {
 
     expect(select).not.toHaveBeenCalled();
     expect(input).toHaveBeenCalledWith("Topic name:", "goals");
-    expect(String(result)).toContain('under topic "roadmap"');
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toContain('under topic "roadmap"');
     expect(stored).toContain(
       "## Our long term goal with the pi-memory extension is autonomous memory capture",
     );
@@ -305,7 +340,8 @@ describe("memory extension", () => {
       "Cancel",
     ]);
     expect(input).not.toHaveBeenCalled();
-    expect(String(result)).toContain('under topic "testing"');
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toContain('under topic "testing"');
   });
 
   it("returns to the topic picker when new topic naming is cancelled", async () => {
@@ -335,7 +371,8 @@ describe("memory extension", () => {
 
     expect(select).toHaveBeenCalledTimes(2);
     expect(input).toHaveBeenCalledWith("Topic name:", "test note reset");
-    expect(String(result)).toContain('under topic "testing"');
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toContain('under topic "testing"');
   });
 
   it("keeps a plain usage message for non-interactive empty /remember", async () => {
@@ -351,7 +388,8 @@ describe("memory extension", () => {
       hasUI: false,
     });
 
-    expect(result).toBe("Usage: /remember <text>");
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toBe("Usage: /remember <text>");
   });
 
   it("keeps a plain usage message for non-interactive empty /forget", async () => {
@@ -367,7 +405,8 @@ describe("memory extension", () => {
       hasUI: false,
     });
 
-    expect(result).toBe("Usage: /forget <query>");
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toBe("Usage: /forget <query>");
   });
 });
 
@@ -377,6 +416,8 @@ function registerExtension(): {
     { description: string; handler: (args: string, ctx: unknown) => Promise<unknown> | unknown }
   >;
   handlers: Map<string, Array<(event: unknown, ctx: unknown) => Promise<unknown> | unknown>>;
+  messageRenderers: Map<string, unknown>;
+  messages: TestCommandMessage[];
   tools: Map<
     string,
     {
@@ -410,6 +451,8 @@ function registerExtension(): {
     string,
     { description: string; handler: (args: string, ctx: unknown) => Promise<unknown> | unknown }
   >();
+  const messageRenderers = new Map<string, unknown>();
+  const messages: TestCommandMessage[] = [];
 
   memoryExtension({
     on: vi.fn(
@@ -444,9 +487,15 @@ function registerExtension(): {
         commands.set(name, command);
       },
     ),
-  });
+    registerMessageRenderer: vi.fn((customType: string, renderer: unknown) => {
+      messageRenderers.set(customType, renderer);
+    }),
+    sendMessage: vi.fn((message: TestCommandMessage) => {
+      messages.push(message);
+    }),
+  } as unknown as Parameters<typeof memoryExtension>[0]);
 
-  return { commands, handlers, tools };
+  return { commands, handlers, messageRenderers, messages, tools };
 }
 
 type ExtensionUiSelect = (title: string, options: string[]) => Promise<string | undefined>;
@@ -460,4 +509,32 @@ async function callHandler(
   const handlers = harness.handlers.get(eventName);
   expect(handlers).toHaveLength(1);
   return handlers?.[0](event, ctx);
+}
+
+interface TestCommandMessage {
+  customType: string;
+  content: string | Array<{ type: string }>;
+  display: boolean;
+  details?: unknown;
+}
+
+function getLastCommandOutput(harness: ReturnType<typeof registerExtension>): string {
+  const message = harness.messages.at(-1);
+  expect(message).toMatchObject({
+    customType: "pi-memory-command",
+    display: true,
+  });
+  expect(typeof message?.content).toBe("string");
+  return String(message?.content);
+}
+
+function getReturnedPrompt(result: unknown): string {
+  expect(result).toMatchObject({
+    systemPrompt: expect.any(String),
+  });
+  return (result as { systemPrompt: string }).systemPrompt;
+}
+
+function countOccurrences(value: string, pattern: string): number {
+  return value.split(pattern).length - 1;
 }

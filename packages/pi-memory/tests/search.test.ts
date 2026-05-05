@@ -95,9 +95,7 @@ describe("search", () => {
   });
 
   it("treats updated dates as local calendar days", () => {
-    expect(formatRelativeAge(Date.UTC(2026, 3, 7), new Date(2026, 3, 8, 9, 0))).toBe(
-      "1 day ago",
-    );
+    expect(formatRelativeAge(Date.UTC(2026, 3, 7), new Date(2026, 3, 8, 9, 0))).toBe("1 day ago");
   });
 
   it("truncates results to maxResults and keeps the highest-ranked matches", () => {

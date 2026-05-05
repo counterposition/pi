@@ -82,9 +82,7 @@ export function formatRelativeAge(updatedAt: number, now = new Date()): string {
   const dayMs = 86_400_000;
   const deltaDays = Math.max(
     0,
-    Math.floor(
-      (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - updatedAt) / dayMs,
-    ),
+    Math.floor((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - updatedAt) / dayMs),
   );
 
   if (deltaDays === 0) return "today";

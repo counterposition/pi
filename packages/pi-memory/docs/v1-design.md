@@ -98,8 +98,8 @@ curating memory — but the risk should be stated plainly:
 - If v1 adoption is low because of write friction, the extension may not
   survive to v1.1.
 - The path to autonomous capture (`/dream`, pre-compaction flush) depends on
-  Pi exposing an extension LLM call API whose timeline is unknown and outside
-  this project's control.
+  product decisions around write safety, cost, provenance, and explicit model
+  configuration, not just on technical API availability.
 
 If v1 adoption proves insufficient, a lightweight fallback exists: the agent
 can write directly via `memory_write` during conversation without LLM-backed
@@ -537,6 +537,7 @@ description: Build system conventions and tooling preferences
 # Build
 
 ## Use pnpm, not npm
+
 - ID: mem_01JW2ZZB7N6K4Q2R1P8D5H3C9F
 - Status: active
 - Updated: 2026-03-29
@@ -545,6 +546,7 @@ Always use `pnpm` for package management. The repo uses pnpm workspaces and
 the lockfile is `pnpm-lock.yaml`.
 
 ## Tests require local Redis
+
 - ID: mem_01JW30BK6K3R6N3Y0F2A1M8Q9D
 - Status: active
 - Updated: 2026-03-29
@@ -621,7 +623,7 @@ The entry parser sits between raw Markdown and every operation — search, write
 block starts a new entry. The entry extends to the next such heading or the end
 of the file. Headings at other levels inside the entry body are part of that
 entry's content, not new entry boundaries. Headings inside fenced code blocks
-(between `` ``` `` fences) must not be treated as boundaries.
+(between ` ``` ` fences) must not be treated as boundaries.
 
 **File preamble.** Text before the first `##` heading — including any YAML
 frontmatter delimited by `---` and the level-1 topic title — is file-level
@@ -784,8 +786,9 @@ protected-path sandbox.
 ### Best-effort managed memory boundary
 
 `memory_write` and `memory_move` should be the primary model-facing mutation
-tools for managed memory. `/remember` is agent-mediated and routes through
-`memory_write`. Other extension-owned mutations such as `/forget`,
+tools for managed memory. `/remember` is a direct command shortcut that reuses
+the same managed write path without a model-mediated command flow. Other
+extension-owned mutations such as `/forget`,
 invalidation, inbox promotion (deferred), and maintenance (deferred) should
 reuse the same internal write path rather than writing files ad hoc.
 
@@ -947,26 +950,19 @@ shows it improves recall more than it adds noise.
 
 Dreaming is an optional maintenance pass that runs outside the critical path of
 normal conversation and performs bounded memory hygiene. It is **deferred past
-v1** because the Pi extension API does not currently expose a supported
-mechanism for extensions to make LLM calls. The reference surface
-(`pi.registerTool`, `pi.registerProvider`,
-`ctx.modelRegistry.getApiKeyAndHeaders`, `pi.exec`) provides tool registration,
-provider routing, auth credentials, and shell execution — but no `pi.chat()` or
-`pi.complete()` for extension-initiated model calls.
+v1** for product-risk reasons: it can create or rewrite durable memory without
+the user watching each change, and mistakes would be harder to notice than
+ordinary tool output. Current Pi examples show extension-launched model work is
+technically possible through `@mariozechner/pi-ai` plus
+`ctx.modelRegistry.getApiKeyAndHeaders()`, so the blocker is not impossibility.
 
-An extension could technically make direct provider API calls using
-`ctx.modelRegistry.getApiKeyAndHeaders()` and an HTTP client, as the Custom
-Compaction pattern in Pi's reference docs implies. This is rejected for v1
-because it requires building an undocumented, fragile LLM client inside the
-extension — model selection, error handling, and provider compatibility would
-all be extension-local guesswork rather than supported API.
-
-Without a supported model-call primitive, `/dream` cannot perform the reasoning
-needed for non-trivial promotion, contradiction detection, or semantic
-deduplication.
+V1 still rejects `/dream` because maintenance needs a stricter contract than
+"call a model from an extension": explicit opt-in, explicit maintenance model
+configuration, bounded cost, clear write limits, provenance-preserving edits,
+and a report that makes every changed entry auditable.
 
 This section documents the intended future shape so that implementation can
-begin once Pi exposes the necessary API.
+begin once those product and configuration constraints are designed.
 
 ### What dreaming would do
 
@@ -1009,17 +1005,17 @@ or enable automatic dreaming.
 
 ## System Prompt Contract
 
-The `before_agent_start` hook injects a concise memory contract into the system
-prompt. Pi documents this hook as "Before LLM call," so anything inserted here
-must be treated as recurring prompt cost, not as a once-per-session cost. The
-contract carries two things:
+The `before_agent_start` hook returns a concise memory contract as a
+system-prompt update. Pi documents this hook as "Before LLM call," so anything
+returned here must be treated as recurring prompt cost, not as a
+once-per-session cost. The contract carries two things:
 
 1. **A one-line orientation summary** derived from filesystem state — topic
    count (~30 tokens). The extension globs topic files to produce this; no
    index file is read. This gives the agent enough signal to decide whether
    `memory_search` is worth calling without loading memory content. Example:
    `Memory: 3 topics (build, testing, preferences). Use memory_search to find
-   specific memories.` The orientation summary should be computed once at
+specific memories.` The orientation summary should be computed once at
    `session_start` and cached in memory, not recomputed from the filesystem on
    every `before_agent_start` call. The cache is invalidated when
    `memory_write` or `memory_move` modifies topic files.
@@ -1058,8 +1054,8 @@ The decision policy tells the agent:
 9. Not to write transient task state, unresolved guesses, checkout-local
    branch/worktree quirks, summaries of obvious file changes, or secrets.
 10. To prefer existing topics from the orientation summary when choosing a
-   `topic` for `memory_write`. Create a new topic only when no existing one
-   fits.
+    `topic` for `memory_write`. Create a new topic only when no existing one
+    fits.
 11. For personal preferences that apply across projects, to set
     `scope: "global"`. For project-specific facts, use the default `project`
     scope.
@@ -1121,33 +1117,47 @@ use the default project scope for repo-specific facts.
 
 ### Hooks
 
-| Hook | Purpose |
-|------|---------|
-| `session_start` | Resolve the repo-scoped project ID and memory root. Ensure directory structure exists. Compute and cache the orientation summary from filesystem state. |
-| `before_agent_start` | Inject the cached orientation summary and the memory decision contract into the system prompt. |
-| `tool_call` | Best-effort interception of generic mutations targeting the managed memory root while allowing reads. |
+| Hook                 | Purpose                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session_start`      | Resolve the repo-scoped project ID and memory root. Ensure directory structure exists. Compute and cache the orientation summary from filesystem state. |
+| `before_agent_start` | Return a system-prompt update containing the cached orientation summary and memory decision contract.                                                   |
+| `tool_call`          | Best-effort interception of generic mutations targeting the managed memory root while allowing reads.                                                   |
 
 `session_shutdown` and `session_before_compact` remain plausible later hooks
 for user-opt-in maintenance or autonomous capture, but v1 should not attach
-model-backed maintenance or new durable writes to either lifecycle event. This
-is reinforced by the current lack of an extension LLM call API (see
-Maintenance section).
+model-backed maintenance or new durable writes to either lifecycle event.
 
 ### Tools
 
-| Tool | Purpose |
-|------|---------|
+| Tool            | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `memory_search` | Query durable memory. Parameters: `query` (required — natural-language or keyword search string), `scope` (optional — `global`, `project`, or `all`; defaults to `all`; controls whether to search global memory, project memory, or both), `max_results` (optional — positive integer; defaults to 10; caps the number of returned entries). Returns ranked entry results with IDs, bounded excerpts (up to 300 characters of body), current line spans, paths, headings, status, dates with relative age, and scope. |
-| `memory_write` | Create an explicit user-directed memory note through the managed write path. Parameters: `content` (required — the first level-2 heading becomes the entry heading; if absent, the extension derives one from the first sentence), `topic` (required — routes to topic file; the file is created on demand if it does not exist), `scope` (optional — `global` or `project`; defaults to `project`). |
-| `memory_move` | Relocate an existing memory entry without leaving a duplicate behind. Parameters: `entry_id` (required — existing stable entry ID), `scope` (required — destination scope: `global` or `project`), `topic` (optional — destination topic; defaults to the current topic name). Preserves the entry ID when present, backfills one for synthetic entries, appends into the destination topic, and removes the source copy. |
+| `memory_write`  | Create an explicit user-directed memory note through the managed write path. Parameters: `content` (required — the first level-2 heading becomes the entry heading; if absent, the extension derives one from the first sentence), `topic` (required — routes to topic file; the file is created on demand if it does not exist), `scope` (optional — `global` or `project`; defaults to `project`).                                                                                                                   |
+| `memory_move`   | Relocate an existing memory entry without leaving a duplicate behind. Parameters: `entry_id` (required — existing stable entry ID), `scope` (required — destination scope: `global` or `project`), `topic` (optional — destination topic; defaults to the current topic name). Preserves the entry ID when present, backfills one for synthetic entries, appends into the destination topic, and removes the source copy.                                                                                              |
 
 ### Commands
 
-| Command | Purpose |
-|---------|---------|
-| `/memory` | Show memory status: file count, last modified, storage location, and scope policy. |
-| `/remember <text>` | Agent-mediated shortcut for explicit durable write. The command injects a prompt directing the agent to persist `<text>` via `memory_write`. The agent decides `topic` and `scope`. |
-| `/forget <query>` | Resolve matching memories to entry IDs, then mark those entries as invalid. If the query matches multiple entries, `/forget` presents the matches and asks the user to confirm which entries to invalidate. A single match is also confirmed before invalidation. In non-interactive mode, it reports the matching entry IDs without invalidating any. |
+| Command            | Purpose                                                                                                                                                                                                                                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/memory`          | Show memory status: file count, last modified, storage location, and scope policy.                                                                                                                                                                                                                                                                     |
+| `/remember <text>` | Direct shortcut for explicit durable writes through the managed write path. It stores `<text>` immediately after resolving a topic and scope; it does not route through a model-mediated command flow.                                                                                                                                                 |
+| `/forget <query>`  | Resolve matching memories to entry IDs, then mark those entries as invalid. If the query matches multiple entries, `/forget` presents the matches and asks the user to confirm which entries to invalidate. A single match is also confirmed before invalidation. In non-interactive mode, it reports the matching entry IDs without invalidating any. |
+
+### Pi 0.73 Integration Notes
+
+- `before_agent_start` prompt changes must be returned as `{ systemPrompt }`.
+  Mutating the event object is not sufficient.
+- Command handlers should not rely on returned strings for user-visible output.
+  `/memory`, `/remember`, and `/forget` emit explicit command messages via
+  `pi.sendMessage` and register a `MessageRenderer` so the output carries a
+  friendly label rather than the internal `customType` token. UI notifications
+  are supplemental interactive feedback.
+- Pi can run sibling tool calls in parallel. Memory writes that target topic
+  files must participate in Pi's `withFileMutationQueue()` while keeping the
+  managed write path's validation, symlink checks, secret filtering, and atomic
+  temp-file-and-rename behavior.
+- Schema definitions should import `Type` from the TypeBox 1.x `typebox`
+  package while continuing to use `StringEnum` from `@mariozechner/pi-ai`.
 
 ## Prompt Behavior
 
@@ -1155,10 +1165,11 @@ Pi does not currently expose a documented session-only prompt hook. The design
 should therefore treat prompt injection as a recurring cost and keep it minimal.
 Instead:
 
-1. At `before_agent_start`, inject the cached orientation summary and the
-   narrow memory decision contract. The orientation summary is a single line
-   (~30 tokens) computed at `session_start` and invalidated on `memory_write`,
-   telling the agent what topics exist without loading memory content.
+1. At `before_agent_start`, return the cached orientation summary and the
+   narrow memory decision contract as a system-prompt update. The orientation
+   summary is a single line (~30 tokens) computed at `session_start` and
+   invalidated on `memory_write`, telling the agent what topics exist without
+   loading memory content.
 2. Leave topic files on disk for on-demand use.
 3. Use `memory_search` only when the task appears to require prior-session
    facts.
@@ -1316,9 +1327,9 @@ Integration tests should cover:
 - `session_start` creating the expected `global/` and `projects/<project-id>/`
   directory structure under the resolved agent dir and caching the orientation
   summary
-- `before_agent_start` injecting the cached orientation summary and decision
-  contract, then refreshing that summary after a `memory_write` that creates a
-  new topic
+- `before_agent_start` returning the cached orientation summary and decision
+  contract as a system-prompt update, then refreshing that summary after a
+  `memory_write` that creates a new topic
 - `memory_search` against the fixture corpus described below, verifying
   returned IDs, headings, paths, line spans, statuses, relative-age
   formatting, scope labels, and result limits
@@ -1350,13 +1361,13 @@ so reviewers can inspect them directly.
 
 Minimum fixture contents:
 
-| File | Notable properties |
-|------|--------------------|
-| `project/topics/build.md` | 3 entries: one fully populated, one with `Status: invalid`, one missing `ID` (exercises synthetic-ID assignment) |
-| `project/topics/testing.md` | 2 entries: one with an `Updated` date >90 days old, one recent. Exercises recency tiebreaking and relative-age formatting |
-| `project/topics/empty.md` | 1 entry: heading only, no metadata, no body. Exercises the empty-entry rule |
-| `project/topics/codeblocks.md` | 1 entry whose body contains a fenced code block with `##` inside. Exercises the heading-boundary parser against false positives |
-| `project/topics/duplicates.md` | 2 entries with the same `ID`. Exercises the duplicate-ID-within-file rule (last entry wins) |
+| File                           | Notable properties                                                                                                                        |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `project/topics/build.md`      | 3 entries: one fully populated, one with `Status: invalid`, one missing `ID` (exercises synthetic-ID assignment)                          |
+| `project/topics/testing.md`    | 2 entries: one with an `Updated` date >90 days old, one recent. Exercises recency tiebreaking and relative-age formatting                 |
+| `project/topics/empty.md`      | 1 entry: heading only, no metadata, no body. Exercises the empty-entry rule                                                               |
+| `project/topics/codeblocks.md` | 1 entry whose body contains a fenced code block with `##` inside. Exercises the heading-boundary parser against false positives           |
+| `project/topics/duplicates.md` | 2 entries with the same `ID`. Exercises the duplicate-ID-within-file rule (last entry wins)                                               |
 | `global/topics/preferences.md` | 2 entries: one that conflicts with a project entry (e.g. "use npm" vs project's "use pnpm"), one unique. Exercises scope-precedence merge |
 
 This is a minimum — implementations may add fixtures for additional edge cases
@@ -1422,15 +1433,15 @@ Ship the smallest version that has the right shape:
 6. Managed memory boundary with an explicit-write-only policy.
 7. `/memory`, `/remember`, `/forget` commands.
 8. User-level settings only; ignore project `memory` config in v1.
-9. No maintenance. Pi's extension API does not currently expose an LLM call
-   mechanism, so `/dream` is deferred until that API exists.
+9. No maintenance. `/dream` is deferred until explicit opt-in behavior,
+   model configuration, write bounds, and provenance reporting are designed.
 
 Do not require in v1:
 
 - SQLite or any index.
 - QMD or any other external retrieval runtime.
 - Embeddings.
-- `/dream` or any maintenance pass (blocked on Pi extension LLM call API).
+- `/dream` or any maintenance pass.
 - Automatic dreaming on shutdown.
 - Monthly summaries or archival.
 - Workspace storage mode.
@@ -1440,11 +1451,10 @@ Do not require in v1:
 
 ### v1.1
 
-- `/dream` manual maintenance command, contingent on Pi exposing an extension
-  LLM call API (e.g. `pi.chat()` or equivalent). Includes `dreamModel`, the
-  full metadata schema (`Source`, `Superseded-by`, `Promoted-from`,
-  `Review-after`), and inbox-to-topic promotion plus lineage-aware
-  maintenance.
+- `/dream` manual maintenance command, contingent on explicit opt-in and
+  maintenance model configuration. Includes `dreamModel`, the full metadata
+  schema (`Source`, `Superseded-by`, `Promoted-from`, `Review-after`), and
+  inbox-to-topic promotion plus lineage-aware maintenance.
 - If Pi later documents a stable maintenance model-selection and shutdown
   lifecycle contract, optional automatic maintenance triggers such as session
   shutdown (opt-in, user-level only).
@@ -1480,10 +1490,10 @@ Do not require in v1:
    multiple times by `memory_search`? Recall-driven promotion is appealing but
    adds bookkeeping complexity.
 
-3. If Pi later adds an extension LLM call API and automatic maintenance
-   triggers, what should the contract be for selecting a maintenance model and
-   handling model-backed work during shutdown or other lifecycle events? This
-   should follow documented Pi APIs rather than extension-local guesswork.
+3. If automatic maintenance triggers are added later, what should the contract
+   be for selecting a maintenance model and handling model-backed work during
+   shutdown or other lifecycle events? This should follow documented Pi APIs
+   and explicit user configuration rather than extension-local guesswork.
 
 4. The folder-per-agent pattern means "project" now covers both codebases and
    agent home directories. Should the extension surface this distinction in

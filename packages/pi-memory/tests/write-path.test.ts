@@ -2,7 +2,45 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const mutationQueue = vi.hoisted(() => {
+  const tails = new Map<string, Promise<void>>();
+  const calls: string[] = [];
+
+  return {
+    calls,
+    reset() {
+      calls.splice(0);
+      tails.clear();
+    },
+    async withFileMutationQueue<T>(filePath: string, work: () => Promise<T>): Promise<T> {
+      calls.push(filePath);
+
+      const previous = tails.get(filePath) ?? Promise.resolve();
+      let releaseTail: () => void = () => {};
+      const tail = new Promise<void>((resolve) => {
+        releaseTail = resolve;
+      });
+      const queuedTail = previous.then(() => tail);
+      tails.set(filePath, queuedTail);
+
+      await previous;
+      try {
+        return await work();
+      } finally {
+        releaseTail();
+        if (tails.get(filePath) === queuedTail) {
+          tails.delete(filePath);
+        }
+      }
+    },
+  };
+});
+
+vi.mock("@mariozechner/pi-coding-agent", () => ({
+  withFileMutationQueue: mutationQueue.withFileMutationQueue,
+}));
 
 import { parseMemoryFile, parseMemoryFileSource } from "../src/parser.js";
 import { ensureMemoryRoots, resolveMemoryRoots } from "../src/storage.js";
@@ -12,6 +50,7 @@ import { createFixtureEnvironment, createTestIdentity, fixturePath } from "./hel
 const tempDirs: string[] = [];
 
 afterEach(async () => {
+  mutationQueue.reset();
   await Promise.all(
     tempDirs.splice(0).map((directory) => fs.rm(directory, { recursive: true, force: true })),
   );
@@ -104,6 +143,59 @@ describe("write path", () => {
 
     expect(updatedSource.startsWith(originalPreamble)).toBe(true);
     expect(updatedSource).toContain("## New build note");
+  });
+
+  it("participates in Pi's file mutation queue for external same-path writes", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "pi-memory-queue-"));
+    tempDirs.push(tempDir);
+
+    const roots = resolveMemoryRoots(path.join(tempDir, "agent"), createTestIdentity());
+    await ensureMemoryRoots(roots);
+
+    const targetPath = path.join(roots.topicDirs.project, "build.md");
+    await fs.writeFile(targetPath, "# Build\n\n", "utf8");
+    const realTargetPath = await fs.realpath(targetPath);
+
+    let releaseExternal: () => void = () => {};
+    let externalWrite: Promise<void> | undefined;
+    const externalEntered = new Promise<void>((resolve) => {
+      externalWrite = mutationQueue.withFileMutationQueue(realTargetPath, async () => {
+        resolve();
+        await new Promise<void>((release) => {
+          releaseExternal = release;
+        });
+        const source = await fs.readFile(realTargetPath, "utf8");
+        await fs.writeFile(
+          realTargetPath,
+          `${source}## External queued note\n- ID: mem_external\n- Status: active\n- Updated: 2026-04-06\n\nExternal mutation.\n`,
+          "utf8",
+        );
+      });
+    });
+
+    await externalEntered;
+
+    let writeFinished = false;
+    const memoryWrite = writeMemoryEntry(roots, {
+      topic: "Build",
+      content: "## Queued memory note\n\nMemory write waited for the external mutation.",
+    }).then((result) => {
+      writeFinished = true;
+      return result;
+    });
+
+    await Promise.resolve();
+    expect(writeFinished).toBe(false);
+
+    releaseExternal();
+    if (!externalWrite) throw new Error("external write did not start");
+    const [result] = await Promise.all([memoryWrite, externalWrite]);
+    const source = await fs.readFile(realTargetPath, "utf8");
+
+    expect(source).toContain("## External queued note");
+    expect(source).toContain(result.entryId);
+    expect(source).toContain("## Queued memory note");
+    expect(mutationQueue.calls.filter((filePath) => filePath === realTargetPath)).toHaveLength(2);
   });
 
   it("rejects oversized bodies and obvious secrets", async () => {

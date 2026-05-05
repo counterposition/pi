@@ -4,16 +4,6 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@mariozechner/pi-ai", () => ({
-  Type: {
-    Object: (value: unknown) => value,
-    String: (value?: unknown) => value ?? {},
-    Optional: (value: unknown) => value,
-    Number: (value?: unknown) => value ?? {},
-  },
-  StringEnum: (values: string[], options?: unknown) => ({ values, options }),
-}));
-
 import memoryExtension from "../extensions/memory.js";
 import { resolveProjectIdentity } from "../src/identity.js";
 import { resolveMemoryRoots } from "../src/storage.js";
@@ -24,7 +14,7 @@ const tempDirs: string[] = [];
 
 beforeEach(() => {
   vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-04-06T00:00:00Z"));
+  vi.setSystemTime(new Date(2026, 3, 6, 12, 0));
 });
 
 afterEach(async () => {
@@ -47,12 +37,16 @@ describe("integration", () => {
     const harness = registerExtension();
     await callHandler(harness, "session_start", {}, { cwd: environment.cwd, hasUI: false });
 
-    const before = { systemPrompt: "" };
-    await callHandler(harness, "before_agent_start", before, {
-      cwd: environment.cwd,
-      hasUI: false,
-    });
-    expect(before.systemPrompt).toContain("Memory: 7 topics");
+    const before = await callHandler(
+      harness,
+      "before_agent_start",
+      { systemPrompt: "" },
+      {
+        cwd: environment.cwd,
+        hasUI: false,
+      },
+    );
+    expect(getReturnedPrompt(before)).toContain("Memory: 7 topics");
 
     const writeTool = harness.tools.get("memory_write");
     expect(writeTool).toBeDefined();
@@ -65,9 +59,16 @@ describe("integration", () => {
       new AbortController().signal,
     );
 
-    const after = { systemPrompt: "" };
-    await callHandler(harness, "before_agent_start", after, { cwd: environment.cwd, hasUI: false });
-    expect(after.systemPrompt).toContain("Memory: 8 topics");
+    const after = await callHandler(
+      harness,
+      "before_agent_start",
+      { systemPrompt: "" },
+      {
+        cwd: environment.cwd,
+        hasUI: false,
+      },
+    );
+    expect(getReturnedPrompt(after)).toContain("Memory: 8 topics");
   });
 
   it("moves an entry across scopes through the memory_move tool", async () => {
@@ -196,12 +197,14 @@ describe("integration", () => {
       cwd: environment.cwd,
       hasUI: false,
     });
+    const output = getLastCommandOutput(harness);
     const source = await fs.readFile(
       path.join(environment.roots.topicDirs.global, "preferences.md"),
       "utf8",
     );
 
-    expect(String(result)).toContain(targetId);
+    expect(result).toBeUndefined();
+    expect(output).toContain(targetId);
     expect(source).not.toContain("- Status: invalid");
   });
 
@@ -228,7 +231,8 @@ describe("integration", () => {
       "utf8",
     );
 
-    expect(result).toBe("Invalidated mem_01JW33BK6K3R6N3Y0F2A1M8Q9J.");
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toBe("Invalidated mem_01JW33BK6K3R6N3Y0F2A1M8Q9J.");
     expect(confirm).toHaveBeenCalledWith(
       "Forget memory?",
       expect.stringContaining("mem_01JW33BK6K3R6N3Y0F2A1M8Q9J"),
@@ -266,8 +270,46 @@ describe("integration", () => {
       "Forget memory?",
       expect.stringContaining("mem_01JW33BK6K3R6N3Y0F2A1M8Q9J"),
     );
-    expect(result).toBe("Invalidated mem_01JW33BK6K3R6N3Y0F2A1M8Q9J.");
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toBe("Invalidated mem_01JW33BK6K3R6N3Y0F2A1M8Q9J.");
     expect(source).toContain("- Status: invalid");
+  });
+
+  it("confirms before invalidating one of multiple /forget matches", async () => {
+    const environment = await createRuntimeFixtureEnvironment();
+    tempDirs.push(environment.tempDir);
+    process.env.PI_CODING_AGENT_DIR = environment.roots.agentDir;
+
+    const harness = registerExtension();
+    await callHandler(harness, "session_start", {}, { cwd: environment.cwd, hasUI: false });
+
+    const select = vi.fn(async (_title: string, options: string[]) => options[0]);
+    const confirm = vi.fn(async () => false);
+    const result = await harness.commands.get("forget")?.handler("package management", {
+      cwd: environment.cwd,
+      hasUI: true,
+      ui: {
+        confirm,
+        notify: vi.fn(),
+        select,
+      },
+    });
+    const source = await fs.readFile(
+      path.join(environment.roots.topicDirs.project, "build.md"),
+      "utf8",
+    );
+
+    expect(result).toBeUndefined();
+    expect(select).toHaveBeenCalledWith(
+      "Select a memory to invalidate:",
+      expect.arrayContaining(["1. [project] Use pnpm, not npm (mem_01JW2ZZB7N6K4Q2R1P8D5H3C9F)"]),
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      "Forget memory?",
+      expect.stringContaining("mem_01JW2ZZB7N6K4Q2R1P8D5H3C9F"),
+    );
+    expect(getLastCommandOutput(harness)).toBe("Cancelled.");
+    expect(source).toContain("- ID: mem_01JW2ZZB7N6K4Q2R1P8D5H3C9F\n- Status: active");
   });
 
   it("returns cancelled when the interactive empty /forget prompt is dismissed", async () => {
@@ -293,7 +335,8 @@ describe("integration", () => {
 
     expect(input).toHaveBeenCalledWith("What should Pi forget?", "");
     expect(confirm).not.toHaveBeenCalled();
-    expect(result).toBe("Cancelled.");
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toBe("Cancelled.");
   });
 
   it("falls back to text search for non-ID /forget queries", async () => {
@@ -309,7 +352,8 @@ describe("integration", () => {
       hasUI: false,
     });
 
-    expect(String(result)).toContain("mem_01JW33BK6K3R6N3Y0F2A1M8Q9J");
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toContain("mem_01JW33BK6K3R6N3Y0F2A1M8Q9J");
   });
 
   it("returns no matches for an unknown direct entry ID", async () => {
@@ -325,7 +369,8 @@ describe("integration", () => {
       hasUI: false,
     });
 
-    expect(result).toBe("No matching memories.");
+    expect(result).toBeUndefined();
+    expect(getLastCommandOutput(harness)).toBe("No matching memories.");
   });
 
   it("truncates memory_search results at max_results", async () => {
@@ -410,6 +455,7 @@ function registerExtension(): {
     { description: string; handler: (args: string, ctx: unknown) => Promise<unknown> | unknown }
   >;
   handlers: Map<string, Array<(event: unknown, ctx: unknown) => Promise<unknown> | unknown>>;
+  messages: TestCommandMessage[];
   tools: Map<
     string,
     {
@@ -443,6 +489,7 @@ function registerExtension(): {
     string,
     { description: string; handler: (args: string, ctx: unknown) => Promise<unknown> | unknown }
   >();
+  const messages: TestCommandMessage[] = [];
 
   memoryExtension({
     on: vi.fn(
@@ -477,9 +524,13 @@ function registerExtension(): {
         commands.set(name, command);
       },
     ),
-  });
+    registerMessageRenderer: vi.fn(),
+    sendMessage: vi.fn((message: TestCommandMessage) => {
+      messages.push(message);
+    }),
+  } as unknown as Parameters<typeof memoryExtension>[0]);
 
-  return { commands, handlers, tools };
+  return { commands, handlers, messages, tools };
 }
 
 async function callHandler(
@@ -491,6 +542,30 @@ async function callHandler(
   const handlers = harness.handlers.get(eventName);
   expect(handlers).toHaveLength(1);
   return handlers?.[0](event, ctx);
+}
+
+interface TestCommandMessage {
+  customType: string;
+  content: string | Array<{ type: string }>;
+  display: boolean;
+  details?: unknown;
+}
+
+function getLastCommandOutput(harness: ReturnType<typeof registerExtension>): string {
+  const message = harness.messages.at(-1);
+  expect(message).toMatchObject({
+    customType: "pi-memory-command",
+    display: true,
+  });
+  expect(typeof message?.content).toBe("string");
+  return String(message?.content);
+}
+
+function getReturnedPrompt(result: unknown): string {
+  expect(result).toMatchObject({
+    systemPrompt: expect.any(String),
+  });
+  return (result as { systemPrompt: string }).systemPrompt;
 }
 
 async function createEmptyRuntimeEnvironment(): Promise<{

@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
+import { withFileMutationQueue } from "@mariozechner/pi-coding-agent";
+
 import { ensureMemoryRoots, pathIsInside } from "./storage.js";
 import { formatIsoDate, parseMemoryFileSource } from "./parser.js";
 import type {
@@ -32,7 +34,6 @@ const MAX_BODY_LENGTH = 2_000;
 const MEMORY_ID_PREFIX = "mem_";
 const MEMORY_ID_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const KNOWN_SECRET_KEY_PATTERN = /(?:password|passwd|secret|api[_-]?key|token|access[_-]?key)/iu;
-const writeQueues = new Map<string, Promise<void>>();
 
 export async function writeMemoryEntry(
   roots: MemoryRoots,
@@ -397,20 +398,7 @@ async function atomicWriteFile(filePath: string, content: string, fsOps: Managed
 }
 
 async function runQueuedWrite(filePath: string, work: () => Promise<void>): Promise<void> {
-  const previous = writeQueues.get(filePath) ?? Promise.resolve();
-  const current = previous.then(work);
-  const queued = current.catch(() => {
-    // preserve the rejection for the caller but keep the queue chain alive
-  });
-  writeQueues.set(filePath, queued);
-
-  try {
-    await current;
-  } finally {
-    if (writeQueues.get(filePath) === queued) {
-      writeQueues.delete(filePath);
-    }
-  }
+  await withFileMutationQueue(filePath, work);
 }
 
 async function runQueuedWrites(filePaths: string[], work: () => Promise<void>): Promise<void> {
@@ -484,7 +472,11 @@ function upsertMetadataLine(
   const lineEnding = detectLineEnding(entryRaw);
   const existingLine = findMetadataLine(entryRaw, key);
   if (existingLine) {
-    return entryRaw.slice(0, existingLine.start) + replacement + entryRaw.slice(existingLine.end);
+    return (
+      entryRaw.slice(0, existingLine.start) +
+      `${replacement}${existingLine.lineEnding}` +
+      entryRaw.slice(existingLine.end)
+    );
   }
 
   const afterLine =
@@ -522,8 +514,9 @@ function findMetadataLine(
 ): {
   start: number;
   end: number;
+  lineEnding: string;
 } | null {
-  const pattern = new RegExp(`^- ${key}:[^\\r\\n]*(?:\\r\\n|\\n|\\r|$)`, "mu");
+  const pattern = new RegExp(`^- ${key}:[^\\r\\n]*(\\r\\n|\\n|\\r|$)`, "mu");
   const match = pattern.exec(entryRaw);
   if (match?.index === undefined) {
     return null;
@@ -532,6 +525,7 @@ function findMetadataLine(
   return {
     start: match.index,
     end: match.index + match[0].length,
+    lineEnding: match[1] ?? "",
   };
 }
 

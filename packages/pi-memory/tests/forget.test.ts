@@ -59,6 +59,6 @@ describe("forget invalidation", () => {
     expect(result.syntheticIdBackfilled).toBe(false);
     expect(result.entryId).toBe(target.id);
     expect(updatedSource).toContain(`- ID: ${target.id}`);
-    expect(updatedSource).toContain("- Status: invalid");
+    expect(updatedSource).toContain("- Status: invalid\n- Updated:");
   });
 });
