@@ -1,6 +1,6 @@
 # Pi Monorepo
 
-[Pi](https://github.com/badlogic/pi-coding-agent) is a minimal terminal coding agent. It ships four tools, four execution modes, and a philosophy: adapt Pi to your workflows, not the other way around. Users extend it with TypeScript extensions, skills, prompt templates, and shareable packages.
+[Pi](https://github.com/badlogic/pi-mono) is a minimal terminal coding agent. It ships four tools, four execution modes, and a philosophy: adapt Pi to your workflows, not the other way around. Users extend it with TypeScript extensions, skills, prompt templates, and shareable packages.
 
 This repo builds the pieces that extend Pi and teach other coding agents about it.
 

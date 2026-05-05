@@ -16,7 +16,10 @@ pi install ./relative/path/to/package
 pi remove npm:@foo/bar
 pi uninstall npm:@foo/bar
 pi list
-pi update
+pi update                 # update pi itself + all installed packages (skips pinned)
+pi update --self          # update pi only
+pi update --extensions    # update packages only
+pi update <source>        # update one package
 pi config
 ```
 
@@ -92,8 +95,9 @@ If there is no `pi` manifest, Pi auto-discovers:
   - `@mariozechner/pi-agent-core`
   - `@mariozechner/pi-coding-agent`
   - `@mariozechner/pi-tui`
-  - `@sinclair/typebox`
-- Other Pi packages must be bundled explicitly if your package depends on them
+  - `typebox` (legacy `@sinclair/typebox` still aliased)
+- Other Pi packages must be bundled explicitly
+- Git package installs run `npm install --omit=dev` — runtime needs go in `dependencies`, not `devDependencies`
 
 ## Package Filtering
 

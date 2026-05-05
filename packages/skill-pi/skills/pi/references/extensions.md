@@ -18,13 +18,13 @@ Use `pi -e ./my-extension.ts` or `pi --extension ...` for quick tests. Put stabl
 
 ```typescript
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 import { StringEnum } from "@mariozechner/pi-ai";
 import { Text } from "@mariozechner/pi-tui";
 ```
 
-- Use `@sinclair/typebox` for schemas
-- Use `StringEnum` from `@mariozechner/pi-ai` for Google-compatible string enums
+- Use `typebox` (1.x) for schemas. Legacy `@sinclair/typebox` is still aliased but `@sinclair/typebox/compiler` is not.
+- Use `StringEnum` from `@mariozechner/pi-ai` for Google-compatible string enums.
 
 ## Quick Start
 
@@ -52,6 +52,9 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  // For reusable tool definitions outside `pi.registerTool(...)`, use `defineTool({...})`
+  // — it preserves parameter type inference and can be passed via `customTools` to the SDK.
+
   pi.registerCommand("hello", {
     description: "Say hello",
     async handler(args, ctx) {
@@ -75,32 +78,24 @@ Useful session events:
 - `session_shutdown`
 - `resources_discover`
 
-Pi 0.65.0 removed the post-transition `session_switch` and `session_fork` events. Handle startup, reload, new, resume, and fork in `session_start` instead:
-
-```typescript
-pi.on("session_start", async (event, ctx) => {
-  if (event.reason === "fork" && event.previousSessionFile && ctx.hasUI) {
-    ctx.ui.notify(`Forked from ${event.previousSessionFile}`, "info");
-  }
-});
-```
-
-Use `event.reason` to distinguish `"startup"`, `"reload"`, `"new"`, `"resume"`, and `"fork"`. For `"new"`, `"resume"`, and `"fork"`, `event.previousSessionFile` points at the session file being replaced.
+`session_start` carries `event.reason` — `"startup" | "reload" | "new" | "resume" | "fork"` — and `event.previousSessionFile` for `"new"`/`"resume"`/`"fork"`. The old post-transition `session_switch` / `session_fork` events were removed; route all of those flows through `session_start`.
 
 Useful agent events:
 
 - `input`
-- `before_agent_start`
+- `before_agent_start` — receives `event.systemPromptOptions` (a `BuildSystemPromptOptions`) so handlers can inspect the structured inputs feeding the system prompt
 - `agent_start`
 - `agent_end`
 - `turn_start`
 - `turn_end`
 - `message_start`
 - `message_update`
-- `message_end`
+- `message_end` — return a replacement message to override usage/cost or rewrite the finalized assistant message
 - `context`
 - `before_provider_request`
+- `after_provider_response` — inspect the provider HTTP status and headers before stream consumption
 - `model_select`
+- `thinking_level_select` — observe interactive thinking-level changes
 
 Useful tool events:
 
@@ -109,6 +104,10 @@ Useful tool events:
 - `tool_execution_update`
 - `tool_result`
 - `tool_execution_end`
+
+Tool results may include `terminate: true` to end the current tool batch without an automatic follow-up LLM turn — useful for tools that produce a structured final answer (see `examples/extensions/structured-output.ts` in the Pi repo).
+
+`session_shutdown` events carry `event.reason` (`"quit" | "reload" | "new" | "resume" | "fork"`) and, where applicable, `event.targetSessionFile` so cleanup logic can distinguish teardown paths.
 
 ## Extension Context
 
@@ -172,6 +171,8 @@ ctx.ui.notify("Done", "info");
 
 ctx.ui.setStatus("my-ext", "Processing...");
 ctx.ui.setWorkingMessage("Thinking deeply...");
+ctx.ui.setWorkingIndicator({ frames: ["⣷", "⣯", "⣟", "⡿"], intervalMs: 80 });
+ctx.ui.setWorkingVisible(false);                                  // hide the built-in loader row
 ctx.ui.setWidget("my-widget", ["Line 1", "Line 2"]);
 ctx.ui.setFooter((tui, theme) => new Text(theme.fg("dim", "Custom footer"), 0, 0));
 ctx.ui.setTitle("pi - custom");
@@ -179,15 +180,17 @@ ctx.ui.setTitle("pi - custom");
 ctx.ui.setEditorText("prefilled text");
 const current = ctx.ui.getEditorText();
 ctx.ui.pasteToEditor("extra text");
+ctx.ui.setHiddenThinkingLabel("…");
+const editorFactory = ctx.ui.getEditorComponent();                 // wrap the active editor factory
 
 ctx.ui.setToolsExpanded(true);
+
+ctx.ui.addAutocompleteProvider((query, ctx) => /* completions */);  // stack on top of slash/path provider
 
 const result = await ctx.ui.custom((tui, theme, keybindings, done) => {
   return new Text("Press Enter", 0, 0);
 }, { overlay: true });
 ```
-
-Pi 0.64.0 also added `ctx.ui.setHiddenThinkingLabel(...)` so interactive extensions can customize the collapsed thinking label.
 
 ## Commands, Shortcuts, Flags
 
@@ -233,15 +236,30 @@ pi.on("session_start", async (_event, ctx) => {
 
 ## Provider Integration
 
-Extensions can register providers:
+Extensions can register or override providers:
 
 ```typescript
 pi.registerProvider("my-provider", {
+  name: "My Provider",                       // optional friendly label for /login
   baseUrl: "https://api.example.com",
   api: "openai-completions",
   apiKey: "MY_PROVIDER_KEY",
-  models: [{ id: "my-model", name: "My Model", contextWindow: 128000, maxTokens: 4096 }],
+  models: [
+    {
+      id: "my-model",
+      name: "My Model",
+      contextWindow: 128000,
+      maxTokens: 4096,
+      baseUrl: "https://us-east.api.example.com", // per-model override
+      thinkingLevelMap: { off: null, minimal: "low", medium: "medium", high: "high", xhigh: "high" },
+    },
+  ],
 });
+
+// Override-only: re-route an existing built-in provider through a proxy
+pi.registerProvider("anthropic", { baseUrl: "https://proxy.example.com" });
+
+pi.unregisterProvider("my-provider");
 ```
 
 If you need auth for a specific model request, use:
@@ -249,6 +267,8 @@ If you need auth for a specific model request, use:
 ```typescript
 const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 ```
+
+Pass `shouldStopAfterTurn` via the SDK to exit the agent loop gracefully after a completed turn. See `references/sdk.md` and `references/providers.md` for the full provider/model schema.
 
 ## Handy Patterns
 

@@ -65,7 +65,12 @@ Edit JSON directly or use `/settings` for common interactive options.
     "enabled": true,
     "maxRetries": 3,
     "baseDelayMs": 2000,
-    "maxDelayMs": 60000
+    "maxDelayMs": 60000,
+    "provider": {
+      "timeoutMs": 0,
+      "maxRetries": 0,
+      "maxRetryDelayMs": 0
+    }
   }
 }
 ```
@@ -73,6 +78,7 @@ Edit JSON directly or use `/settings` for common interactive options.
 Notes:
 
 - `retry.maxDelayMs = 0` disables the cap on server-requested retry delays.
+- `retry.provider.*` (Pi 0.70.1) controls the underlying provider SDK's request timeout and retry/backoff — useful for slow local LLMs and flaky proxies. Pi forwards these into `streamSimple` request options when set.
 - `branchSummary.skipPrompt` skips the confirmation step when navigating with `/tree`.
 
 ## Message Delivery
@@ -94,7 +100,9 @@ Notes:
 {
   "terminal": {
     "showImages": true,
-    "clearOnShrink": false
+    "clearOnShrink": false,
+    "showTerminalProgress": false,
+    "imageWidthCells": 60
   },
   "images": {
     "autoResize": true,
@@ -107,6 +115,19 @@ Notes:
 ```
 
 - `npmCommand` is argv-style and is used for npm lookup/install operations, including git-package installs.
+- `terminal.showTerminalProgress` (default `false` since Pi 0.70.0) toggles OSC 9;4 progress reporting in supporting terminals (iTerm2, WezTerm, Windows Terminal, Kitty).
+- `terminal.imageWidthCells` (Pi 0.68.1) caps inline tool-output image width in terminal cells.
+
+## Warnings & Telemetry
+
+```json
+{
+  "warnings": { "anthropicExtraUsage": true },
+  "enableInstallTelemetry": true
+}
+```
+
+`enableInstallTelemetry` sends an anonymous version ping to `pi.dev` once per local changelog advance (interactive mode only). `PI_OFFLINE=1` or `PI_TELEMETRY=0` disable it.
 
 ## Sessions, Model Cycling, Markdown
 
@@ -171,14 +192,66 @@ Arrays support filtering:
 - `+path` force-includes an exact path
 - `-path` force-excludes an exact path
 
+## CLI Flags
+
+Run `pi --help` for the authoritative list. Most commonly:
+
+```text
+pi [options] [@files...] [messages...]
+
+# package commands: install/remove/uninstall/update/list/config (all support -l for project scope)
+
+# modes
+-p, --print                      single-shot text output
+--mode json|rpc                  newline-delimited events / JSON-RPC over stdio
+--export <in> [out]              export a session to HTML
+
+# model
+--provider <name>                e.g. anthropic, openai, google
+--model <pattern>                supports provider/id and optional :<thinking>
+--api-key <key>
+--thinking off|minimal|low|medium|high|xhigh
+--models <patterns>              Ctrl+P cycling allowlist
+--list-models [search]
+
+# sessions
+-c, --continue                   continue most recent session
+-r, --resume                     browse and select
+--session <path|id>
+--fork <path|id>
+--session-dir <dir>
+--no-session                     ephemeral
+
+# tools and resources
+--tools <list>, -t               name allowlist (read,bash,edit,write,grep,find,ls,...)
+--no-tools, -nt                  disable everything
+--no-builtin-tools, -nbt         disable built-ins, keep extension/custom
+-e, --extension <source>         repeatable; npm/git/path
+--skill <path>                   repeatable
+--prompt-template <path>         repeatable
+--theme <path>                   repeatable
+--no-extensions / --no-skills / --no-prompt-templates / --no-themes
+--no-context-files, -nc          skip AGENTS.md / CLAUDE.md discovery
+
+# prompts and misc
+--system-prompt <text>           replace default
+--append-system-prompt <text>    repeatable; appended with double newlines
+--verbose
+```
+
 ## Environment Variables
 
 | Variable | Effect |
 |----------|--------|
 | `PI_CODING_AGENT_DIR` | Override the global agent directory |
+| `PI_CODING_AGENT_SESSION_DIR` | Override session storage; `--session-dir` still wins |
 | `PI_PACKAGE_DIR` | Override package storage directory |
-| `PI_SKIP_VERSION_CHECK` | Skip startup version checks |
-| `PI_CACHE_RETENTION` | Use extended prompt-cache retention where supported |
+| `PI_SKIP_VERSION_CHECK` | Skip the `pi.dev` latest-version request at startup |
+| `PI_OFFLINE` | Disable all startup network operations (update checks, telemetry) |
+| `PI_TELEMETRY` | Force install telemetry on/off (`1`/`0`); does not gate update checks |
+| `PI_CACHE_RETENTION` | Set to `long` for extended prompt-cache retention where supported |
+| `PI_OAUTH_CALLBACK_HOST` | Bind the OAuth callback server to a custom interface |
+| `PI_CODING_AGENT=true` | Set automatically at startup so subprocesses can detect Pi |
 | `VISUAL`, `EDITOR` | External editor for `Ctrl+G` |
 | Provider API key env vars | See `references/providers.md` |
 

@@ -46,9 +46,8 @@ Run with `npx tsx my-script.ts`.
 import {
   AuthStorage,
   createAgentSession,
-  createCodingTools,
-  createReadOnlyTools,
   DefaultResourceLoader,
+  defineTool,
   ModelRegistry,
   SessionManager,
 } from "@mariozechner/pi-coding-agent";
@@ -67,22 +66,27 @@ const { session } = await createAgentSession({
   agentDir: "~/.pi/agent",
   authStorage,
   modelRegistry,
-  model: getModel("anthropic", "claude-sonnet-4-20250514"),
+  model: getModel("anthropic", "claude-opus-4-7"),
   thinkingLevel: "medium",
   scopedModels: [
-    { model: getModel("anthropic", "claude-sonnet-4-20250514"), thinkingLevel: "high" },
+    { model: getModel("anthropic", "claude-opus-4-7"), thinkingLevel: "high" },
   ],
-  tools: createCodingTools(cwd),
+  tools: ["read", "bash", "edit", "write"],
+  customTools: [/* defineTool(...) entries */],
   resourceLoader: new DefaultResourceLoader(),
   sessionManager: SessionManager.inMemory(),
+  shouldStopAfterTurn: (state) => state.turnCount >= 5,
 });
 ```
 
 Notes:
 
 - `cwd` and `agentDir` control default resource discovery when using `DefaultResourceLoader`.
-- If you provide a custom `cwd` **and** explicit built-in tools, use `createCodingTools(cwd)` / `createReadOnlyTools(cwd)` so paths resolve against that cwd.
-- `DefaultResourceLoader` loads extensions, skills, prompt templates, themes, and context files. If you replace it, `cwd` and `agentDir` no longer drive resource discovery.
+- Pi 0.68.0 changed the SDK `tools` option from `Tool[]` to a `string[]` allowlist of built-in, extension, and custom tool names. Use `noTools: "builtin"` to disable built-ins while keeping extension/custom tools enabled, or `noTools: "all"` for none.
+- `customTools` accepts `ToolDefinition[]`. Build them with `defineTool({...})` for full TypeScript inference.
+- The `create*Tool(cwd)` factories still exist for code that needs explicit `AgentTool` instances (e.g. when wiring tools into pi-agent-core directly), but they are no longer the value passed to `createAgentSession({ tools })`.
+- `DefaultResourceLoader` loads extensions, skills, prompt templates, themes, and context files. Replace it to drive resource discovery from custom sources (and it must implement `loadProjectContextFiles()` if you want `AGENTS.md`/`CLAUDE.md` discovery; that helper is also exported standalone).
+- Pass `shouldStopAfterTurn(state) => boolean` (Pi 0.72.0) to exit the agent loop gracefully after a completed turn.
 
 ## Prompting & Queueing
 
@@ -140,6 +144,7 @@ let session = runtime.session;
 let unsubscribe = session.subscribe(() => {});
 
 await runtime.newSession();
+await runtime.fork("entry-id", { position: "at" });   // "before" | "at" — `at` powers /clone
 
 unsubscribe();
 session = runtime.session;
@@ -214,7 +219,7 @@ Use `defineTool()` when you want a reusable custom tool definition outside `pi.r
 
 ```typescript
 import { defineTool } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import { Type } from "typebox";
 
 const myTool = defineTool({
   name: "my_tool",
@@ -227,7 +232,10 @@ const myTool = defineTool({
     return {
       content: [{ type: "text", text: `Result: ${params.input}` }],
       details: {},
+      // terminate: true,  // optional — end the tool batch without an automatic follow-up LLM turn
     };
   },
 });
 ```
+
+Pass these via `customTools: [myTool]` on `createAgentSession()` or via `pi.registerTool(myTool)` from inside an extension.
