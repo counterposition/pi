@@ -27,7 +27,7 @@ Practical recipes for extending Pi. Each pattern is a self-contained example.
 Block dangerous bash commands with user confirmation:
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
   const dangerous = [/\brm\s+(-rf?|--recursive)/i, /\bsudo\b/i, /\b(chmod|chown)\b.*777/i];
@@ -237,7 +237,7 @@ The Pi examples include an `interactive-shell.ts` extension that maintains a per
 
 ## TUI Components
 
-Pi's TUI library (`@mariozechner/pi-tui`) provides:
+Pi's TUI library (`@earendil-works/pi-tui`) provides:
 
 - `Text` — Word-wrapped text
 - `Box` — Padded container with border

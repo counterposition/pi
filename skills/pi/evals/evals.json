@@ -7,7 +7,7 @@
       "expected_output": "A TypeScript extension file that hooks into tool_call events, checks for curl in bash commands, prompts via ctx.ui.select, and appends blocked commands to a log file. Should check ctx.hasUI and handle non-interactive mode.",
       "files": [],
       "assertions": [
-        "Uses correct ExtensionAPI import from @mariozechner/pi-coding-agent",
+        "Uses correct ExtensionAPI import from @earendil-works/pi-coding-agent",
         "Hooks into tool_call event (the correct event for intercepting tool calls)",
         "Checks event.toolName === 'bash' before inspecting command",
         "Tests for curl in the command string",

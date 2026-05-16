@@ -1,5 +1,14 @@
 # @counterposition/skill-pi
 
+## 0.74.0
+
+### Minor Changes
+
+- Update the Pi skill for Pi 0.74.0, including the official
+  `@earendil-works/*` package scope and `earendil-works/pi` source repository.
+- Refresh package guidance so Pi-provided libraries, including `typebox`, are
+  declared as peer dependencies with `"*"` ranges.
+
 ## 0.73.0
 
 ### Minor Changes

@@ -13,14 +13,15 @@ Pi's philosophy: **adapt Pi to your workflows, not the other way around**.
 
 ## Architecture
 
-Four core packages on npm (source: [github.com/badlogic/pi-mono](https://github.com/badlogic/pi-mono)):
+Core packages on npm (source: [github.com/earendil-works/pi](https://github.com/earendil-works/pi)):
 
 | Package | Purpose |
 |---------|---------|
-| `@mariozechner/pi-ai` | Unified LLM API across 20+ providers |
-| `@mariozechner/pi-agent-core` | Agent loop, tool execution, state |
-| `@mariozechner/pi-tui` | Terminal UI components |
-| `@mariozechner/pi-coding-agent` | CLI, extensions, skills, sessions, settings |
+| `@earendil-works/pi-ai` | Unified LLM API across 20+ providers |
+| `@earendil-works/pi-agent-core` | Agent runtime with tool execution and state |
+| `@earendil-works/pi-tui` | Terminal UI components |
+| `@earendil-works/pi-coding-agent` | CLI, extensions, skills, sessions, settings |
+| `@earendil-works/pi-web-ui` | Web components for chat interfaces |
 
 ## File System Layout
 
