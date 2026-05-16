@@ -26,7 +26,7 @@ const state = vi.hoisted(() => ({
   resolveSearchProviders: vi.fn(),
 }));
 
-vi.mock("@mariozechner/pi-ai", () => ({
+vi.mock("@earendil-works/pi-ai", () => ({
   Type: {
     Object: (value: unknown) => value,
     String: (value?: unknown) => value ?? {},

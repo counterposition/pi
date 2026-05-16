@@ -1,6 +1,6 @@
 # Pi Web Search
 
-A [Pi](https://github.com/badlogic/pi-coding-agent) extension that gives the agent two tools for working with the open web:
+A [Pi](https://github.com/earendil-works/pi) extension that gives the agent two tools for working with the open web:
 
 1. **`web_search`** for querying multiple search providers with automatic fallback.
 2. **`web_fetch`** for reading pages as clean markdown.
