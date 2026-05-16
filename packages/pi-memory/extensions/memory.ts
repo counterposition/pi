@@ -1,4 +1,5 @@
-import { CustomMessageComponent } from "@mariozechner/pi-coding-agent";
+import { StringEnum } from "@earendil-works/pi-ai";
+import { CustomMessageComponent } from "@earendil-works/pi-coding-agent";
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
@@ -7,8 +8,7 @@ import type {
   MessageRenderer,
   ToolCallEvent,
   ToolCallEventResult,
-} from "@mariozechner/pi-coding-agent";
-import { StringEnum } from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import {

@@ -2,7 +2,7 @@ import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionHandler,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import { describe, expect, it } from "vitest";
 
 describe("Pi API type coverage", () => {

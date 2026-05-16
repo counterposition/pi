@@ -6,6 +6,7 @@ npm is the primary registry for Pi-installable packages in this repo.
 
 - `@counterposition/skill-pi` ships the `pi` skill for `pi install npm:@counterposition/skill-pi`.
 - `@counterposition/pi-web-search` ships the web search extension for `pi install npm:@counterposition/pi-web-search`.
+- `@counterposition/pi-memory` ships the durable memory extension for `pi install npm:@counterposition/pi-memory`.
 
 All publishable packages must include:
 

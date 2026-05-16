@@ -77,10 +77,19 @@ for (const dirName of packageDirs) {
       errors.push(`${dirName}: package uses src/ and must include it in files`);
     }
 
-    for (const peerName of ["@mariozechner/pi-ai", "@mariozechner/pi-coding-agent"]) {
-      if (!pkg.peerDependencies?.[peerName]) {
-        errors.push(`${dirName}: missing peer dependency '${peerName}'`);
-      }
+    const canonicalPiPeers = ["@earendil-works/pi-ai", "@earendil-works/pi-coding-agent"];
+    const legacyPiPeers = ["@mariozechner/pi-ai", "@mariozechner/pi-coding-agent"];
+    const hasCanonicalPeers = canonicalPiPeers.every((peerName) => pkg.peerDependencies?.[peerName]);
+    const hasLegacyPeers = legacyPiPeers.every((peerName) => pkg.peerDependencies?.[peerName]);
+
+    if (!hasCanonicalPeers && !hasLegacyPeers) {
+      errors.push(
+        `${dirName}: missing Pi peer dependencies '${canonicalPiPeers.join("', '")}'`,
+      );
+    }
+
+    if (hasCanonicalPeers && !pkg.peerDependencies?.typebox) {
+      errors.push(`${dirName}: missing peer dependency 'typebox'`);
     }
   }
 

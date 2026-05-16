@@ -953,7 +953,7 @@ normal conversation and performs bounded memory hygiene. It is **deferred past
 v1** for product-risk reasons: it can create or rewrite durable memory without
 the user watching each change, and mistakes would be harder to notice than
 ordinary tool output. Current Pi examples show extension-launched model work is
-technically possible through `@mariozechner/pi-ai` plus
+technically possible through `@earendil-works/pi-ai` plus
 `ctx.modelRegistry.getApiKeyAndHeaders()`, so the blocker is not impossibility.
 
 V1 still rejects `/dream` because maintenance needs a stricter contract than
@@ -1157,7 +1157,7 @@ model-backed maintenance or new durable writes to either lifecycle event.
   managed write path's validation, symlink checks, secret filtering, and atomic
   temp-file-and-rename behavior.
 - Schema definitions should import `Type` from the TypeBox 1.x `typebox`
-  package while continuing to use `StringEnum` from `@mariozechner/pi-ai`.
+  package while continuing to use `StringEnum` from `@earendil-works/pi-ai`.
 
 ## Prompt Behavior
 
