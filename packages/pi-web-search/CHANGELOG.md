@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+
+### Minor Changes
+
+- Update Pi peer dependencies and extension imports to the official
+  `@earendil-works/*` package scope for Pi 0.74.
+- Treat `typebox` as a Pi-provided peer dependency for extension schemas.
+
 ## 0.4.1
 
 ### Patch Changes

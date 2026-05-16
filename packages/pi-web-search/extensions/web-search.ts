@@ -1,5 +1,6 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { StringEnum, Type } from "@mariozechner/pi-ai";
+import { StringEnum } from "@earendil-works/pi-ai";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 
 import { loadConfig, normalizeDomains, resolveSearchProviders } from "../src/config.js";
 import {
@@ -50,7 +51,7 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       query: Type.String({ description: "Search query" }),
       depth: Type.Optional(
-        StringEnum(["basic", "thorough"], {
+        StringEnum(["basic", "thorough"] as const, {
           default: "basic",
           description:
             "basic (default): fast search that returns snippets. " +
@@ -58,7 +59,7 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
       freshness: Type.Optional(
-        StringEnum(["day", "week", "month", "year"], {
+        StringEnum(["day", "week", "month", "year"] as const, {
           description: "Optional recency filter for time-sensitive searches.",
         }),
       ),
@@ -79,6 +80,8 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, signal, onUpdate) {
+      const abortSignal = signal ?? new AbortController().signal;
+
       if (!providers.hasAnySearchProvider) {
         throw new Error(
           "No search provider configured. Set one of BRAVE_API_KEY, TAVILY_API_KEY, or EXA_API_KEY to enable web_search.",
@@ -86,12 +89,13 @@ export default function (pi: ExtensionAPI) {
       }
 
       const depth = params.depth ?? "basic";
+      const freshness = params.freshness;
       const maxResults = params.max_results ?? 5;
       const domains = normalizeDomains(params.domains);
       const resolution = resolveSearchProviders(
         {
           depth,
-          freshness: params.freshness,
+          freshness,
           domains,
         },
         providers.search,
@@ -107,7 +111,7 @@ export default function (pi: ExtensionAPI) {
       let lastError: Error | undefined;
 
       for (const provider of resolution.providers) {
-        if (signal.aborted) throw new Error("Search aborted.");
+        if (abortSignal.aborted) throw new Error("Search aborted.");
 
         onUpdate?.({
           content: [
@@ -124,9 +128,9 @@ export default function (pi: ExtensionAPI) {
             query: params.query,
             maxResults,
             includeContent: resolution.servedDepth === "thorough",
-            freshness: params.freshness,
+            freshness,
             domains,
-            signal,
+            signal: abortSignal,
           });
 
           const notes = [...resolution.notes, ...(response.notes ?? [])];
@@ -140,7 +144,7 @@ export default function (pi: ExtensionAPI) {
                   provider: provider.name,
                   requestedDepth: depth,
                   servedDepth: resolution.servedDepth,
-                  freshness: params.freshness,
+                  freshness,
                   domains,
                   appliedFilters: response.appliedFilters,
                   notes,
@@ -153,14 +157,14 @@ export default function (pi: ExtensionAPI) {
               servedDepth: resolution.servedDepth,
               degraded: resolution.servedDepth !== depth,
               warnings: config.warnings,
-              freshness: params.freshness ?? null,
+              freshness: freshness ?? null,
               domains: domains ?? [],
               appliedFilters: response.appliedFilters ?? null,
               resultCount: response.results.length,
             },
           };
         } catch (error) {
-          if (signal.aborted) throw error;
+          if (abortSignal.aborted) throw error;
 
           lastError = error instanceof Error ? error : new Error(String(error));
           if (!isTransientProviderError(lastError)) {
@@ -199,6 +203,7 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     async execute(_toolCallId, params, signal) {
+      const abortSignal = signal ?? new AbortController().signal;
       const url = validateFetchUrl(params.url);
       const offset = params.offset ?? 0;
       const maxChars = params.max_chars ?? FETCH_DEFAULT_MAX_CHARS;
@@ -214,11 +219,11 @@ export default function (pi: ExtensionAPI) {
         }
 
         try {
-          content = await provider.fetch(url, signal);
+          content = await provider.fetch(url, abortSignal);
           providerName = provider.name;
           pageCache.set(url, content, provider.name);
         } catch (error) {
-          if (signal.aborted) throw error;
+          if (abortSignal.aborted) throw error;
 
           const providerError = error instanceof Error ? error : new Error(String(error));
           if (!isTransientProviderError(providerError)) {
