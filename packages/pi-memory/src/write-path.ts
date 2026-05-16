@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { withFileMutationQueue } from "@mariozechner/pi-coding-agent";
+import { withFileMutationQueue } from "@earendil-works/pi-coding-agent";
 
 import { ensureMemoryRoots, pathIsInside } from "./storage.js";
 import { formatIsoDate, parseMemoryFileSource } from "./parser.js";

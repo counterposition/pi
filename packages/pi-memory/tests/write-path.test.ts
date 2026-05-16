@@ -38,7 +38,7 @@ const mutationQueue = vi.hoisted(() => {
   };
 });
 
-vi.mock("@mariozechner/pi-coding-agent", () => ({
+vi.mock("@earendil-works/pi-coding-agent", () => ({
   withFileMutationQueue: mutationQueue.withFileMutationQueue,
 }));
 

@@ -42,3 +42,4 @@ This repository separates canonical skill authoring from publishable Pi packages
 - `skills/pi` - canonical Pi skill.
 - `packages/skill-pi` - single-skill npm distribution for `pi install` and local package smoke tests.
 - `packages/pi-web-search` - web search extension package and local package smoke-test target.
+- `packages/pi-memory` - durable memory extension package and local package smoke-test target.

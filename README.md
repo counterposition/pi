@@ -1,6 +1,6 @@
 # Pi Monorepo
 
-[Pi](https://github.com/badlogic/pi-mono) is a minimal terminal coding agent. It ships four tools, four execution modes, and a philosophy: adapt Pi to your workflows, not the other way around. Users extend it with TypeScript extensions, skills, prompt templates, and shareable packages.
+[Pi](https://github.com/earendil-works/pi) is a minimal terminal coding agent. It ships four tools, four execution modes, and a philosophy: adapt Pi to your workflows, not the other way around. Users extend it with TypeScript extensions, skills, prompt templates, and shareable packages.
 
 This repo builds the pieces that extend Pi and teach other coding agents about it.
 
@@ -9,6 +9,8 @@ This repo builds the pieces that extend Pi and teach other coding agents about i
 **[`skills/pi`](skills/pi/)** -- A skill that gives coding agents grounded knowledge of Pi's architecture, settings, and extension APIs. Pi's own system prompt already points it at its source documentation, but agents like Claude Code, OpenCode, and Codex CLI have no built-in awareness of Pi. This skill bridges that gap via the [Agent Skills](https://agentskills.io/home) standard. Also installable as a Pi package.
 
 **[`packages/pi-web-search`](packages/pi-web-search/)** -- An extension that adds `web_search` and `web_fetch` tools. Three search backends (Brave, Tavily, Exa) behind a single interface with automatic provider ranking and fallback. Page fetching via Jina Reader.
+
+**[`packages/pi-memory`](packages/pi-memory/)** -- An extension that adds explicit, Markdown-backed durable memory with global and project scopes.
 
 **[`packages/skill-pi`](packages/skill-pi/)** -- The `pi` skill packaged for `npm`, so `pi install` can fetch it from the registry.
 
@@ -21,6 +23,9 @@ pi install npm:@counterposition/skill-pi
 
 # the web search extension
 pi install npm:@counterposition/pi-web-search
+
+# the memory extension
+pi install npm:@counterposition/pi-memory
 ```
 
 ---
@@ -58,6 +63,7 @@ pnpm --filter @counterposition/pi-web-search exec vitest run tests/providers.tes
 skills/pi/              canonical skill source (loaded by Pi and Agent Skills)
 packages/skill-pi/      npm package wrapping the pi skill
 packages/pi-web-search/ web search extension (TypeScript, vitest tests)
+packages/pi-memory/     durable Markdown memory extension
 scripts/                validators and sync utilities
 docs/                   architecture, ADRs, contributor guides
 .pi/settings.json       project-local Pi config

@@ -1,7 +1,7 @@
 # Pi Memory
 
 `@counterposition/pi-memory` is a
-[Pi](https://github.com/badlogic/pi-coding-agent) extension that gives the
+[Pi](https://github.com/earendil-works/pi) extension that gives the
 agent a durable, human-readable memory store on disk.
 
 V1 ships a private Markdown-backed store under Pi's resolved agent directory,

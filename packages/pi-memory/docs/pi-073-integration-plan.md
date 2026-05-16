@@ -46,12 +46,12 @@ the prompt-injection bug pass typecheck.
 
 Next steps:
 
-- Prefer typechecking against the real `@mariozechner/pi-coding-agent@0.73.x`
+- Prefer typechecking against the real `@earendil-works/pi-coding-agent@0.74.x`
   declarations in dev/test.
 - If an ambient shim remains necessary, narrow it to the exact current
   event/result shapes used by this package.
 - Update imports toward the documented `typebox` package for schemas while
-  keeping `StringEnum` from `@mariozechner/pi-ai`.
+  keeping `StringEnum` from `@earendil-works/pi-ai`.
 - Add type-level coverage for `BeforeAgentStartEventResult` so return-vs-mutate
   mistakes are harder to reintroduce.
 
@@ -109,7 +109,7 @@ Next steps:
 
 The v1 design doc says `/dream` is blocked because extensions lack a supported
 LLM-call path. That is no longer strictly accurate: current Pi examples show
-extension-launched model calls through `@mariozechner/pi-ai` and
+extension-launched model calls through `@earendil-works/pi-ai` and
 `ctx.modelRegistry`.
 
 Next steps:
