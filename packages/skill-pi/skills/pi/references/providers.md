@@ -34,10 +34,10 @@ Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Goog
 | OpenCode Go | `OPENCODE_API_KEY` | `opencode-go` |
 | Hugging Face | `HF_TOKEN` | `huggingface` |
 | Fireworks | `FIREWORKS_API_KEY` | `fireworks` |
+| Together AI | `TOGETHER_API_KEY` | `together` |
 | Kimi For Coding | `KIMI_API_KEY` | `kimi-coding` |
 | MiniMax | `MINIMAX_API_KEY` | `minimax` |
 | MiniMax (China) | `MINIMAX_CN_API_KEY` | `minimax-cn` |
-| Moonshot | `MOONSHOT_API_KEY` | `moonshot` |
 | Xiaomi MiMo | `XIAOMI_API_KEY` | `xiaomi` |
 | Xiaomi MiMo Token Plan (CN/AMS/SGP) | `XIAOMI_TOKEN_PLAN_{CN,AMS,SGP}_API_KEY` | `xiaomi-token-plan-{cn,ams,sgp}` |
 
@@ -167,7 +167,7 @@ Common `api` values:
 
 - `thinkingLevelMap` (Pi 0.72) replaces `compat.reasoningEffortMap`. Map pi levels (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`) to provider values; use `null` to hide a level.
 - `openRouterRouting` is forwarded as-is in the OpenRouter `provider` field (fallbacks, ZDR, ignore lists, throughput/latency).
-- Advanced `compat` flags exist for proxy quirks (`cacheControlFormat`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `sendSessionIdHeader`, `sendSessionAffinityHeaders`). See [pi-mono `docs/models.md`](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
+- Advanced `compat` flags exist for proxy quirks (`cacheControlFormat`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `sendSessionIdHeader`, `sendSessionAffinityHeaders`). See [Pi `docs/models.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
 
 ## Custom Providers via Extensions
 

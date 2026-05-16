@@ -91,11 +91,11 @@ If there is no `pi` manifest, Pi auto-discovers:
 
 - Normal runtime dependencies belong in `dependencies`
 - Pi core libraries should be peer deps with `"*"` ranges:
-  - `@mariozechner/pi-ai`
-  - `@mariozechner/pi-agent-core`
-  - `@mariozechner/pi-coding-agent`
-  - `@mariozechner/pi-tui`
-  - `typebox` (legacy `@sinclair/typebox` still aliased)
+  - `@earendil-works/pi-ai`
+  - `@earendil-works/pi-agent-core`
+  - `@earendil-works/pi-coding-agent`
+  - `@earendil-works/pi-tui`
+  - `typebox`
 - Other Pi packages must be bundled explicitly
 - Git package installs run `npm install --omit=dev` — runtime needs go in `dependencies`, not `devDependencies`
 

@@ -5,7 +5,7 @@ The SDK embeds Pi in Node.js applications via `createAgentSession()`. Use `creat
 ## Installation
 
 ```bash
-npm install @mariozechner/pi-coding-agent
+npm install @earendil-works/pi-coding-agent
 ```
 
 ## Quick Start
@@ -16,7 +16,7 @@ import {
   createAgentSession,
   ModelRegistry,
   SessionManager,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 const authStorage = AuthStorage.create();
 const modelRegistry = ModelRegistry.create(authStorage);
@@ -50,8 +50,8 @@ import {
   defineTool,
   ModelRegistry,
   SessionManager,
-} from "@mariozechner/pi-coding-agent";
-import { getModel } from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-coding-agent";
+import { getModel } from "@earendil-works/pi-ai";
 ```
 
 ## Core Options
@@ -115,7 +115,7 @@ import {
   createAgentSessionServices,
   getAgentDir,
   SessionManager,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 
 const createRuntime: CreateAgentSessionRuntimeFactory = async ({
   cwd,
@@ -218,7 +218,7 @@ session.subscribe((event) => {
 Use `defineTool()` when you want a reusable custom tool definition outside `pi.registerTool(...)`:
 
 ```typescript
-import { defineTool } from "@mariozechner/pi-coding-agent";
+import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 const myTool = defineTool({

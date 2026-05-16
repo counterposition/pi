@@ -17,20 +17,20 @@ Use `pi -e ./my-extension.ts` or `pi --extension ...` for quick tests. Put stabl
 ## Common Imports
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { StringEnum } from "@mariozechner/pi-ai";
-import { Text } from "@mariozechner/pi-tui";
+import { StringEnum } from "@earendil-works/pi-ai";
+import { Text } from "@earendil-works/pi-tui";
 ```
 
-- Use `typebox` (1.x) for schemas. Legacy `@sinclair/typebox` is still aliased but `@sinclair/typebox/compiler` is not.
-- Use `StringEnum` from `@mariozechner/pi-ai` for Google-compatible string enums.
+- Use `typebox` (1.x) for schemas.
+- Use `StringEnum` from `@earendil-works/pi-ai` for Google-compatible string enums.
 
 ## Quick Start
 
 ```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { Type } from "@sinclair/typebox";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 
 export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
