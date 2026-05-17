@@ -23,7 +23,7 @@ pi update <source>        # update one package
 pi config
 ```
 
-By default, `install` and `remove` write to global settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead.
+By default, `install` and `remove` write to user settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead.
 
 Project installs are shareable with a team. Pi will install missing project packages automatically on startup.
 
@@ -38,7 +38,7 @@ npm:@scope/pkg@1.2.3
 npm:pkg
 ```
 
-- Global installs use `npm install -g`
+- User installs go under `~/.pi/agent/npm/`
 - Project installs go under `.pi/npm/`
 - Version-pinned installs are skipped by `pi update`
 - Use `npmCommand` in settings if you need a wrapper such as `mise` or `asdf`
