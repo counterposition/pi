@@ -49,7 +49,8 @@ Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Goog
 {
   "anthropic": { "type": "api_key", "key": "sk-ant-..." },
   "openai": { "type": "api_key", "key": "!op read 'OpenAI API Key'" },
-  "google": { "type": "api_key", "key": "GEMINI_API_KEY" }
+  "google": { "type": "api_key", "key": "GEMINI_API_KEY" },
+  "together": { "type": "api_key", "key": "TOGETHER_API_KEY" }
 }
 ```
 
@@ -167,7 +168,12 @@ Common `api` values:
 
 - `thinkingLevelMap` (Pi 0.72) replaces `compat.reasoningEffortMap`. Map pi levels (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`) to provider values; use `null` to hide a level.
 - `openRouterRouting` is forwarded as-is in the OpenRouter `provider` field (fallbacks, ZDR, ignore lists, throughput/latency).
-- Advanced `compat` flags exist for proxy quirks (`cacheControlFormat`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `sendSessionIdHeader`, `sendSessionAffinityHeaders`). See [Pi `docs/models.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
+- `compat.thinkingFormat` supports OpenAI-compatible reasoning variants: `openrouter` sends `reasoning: { effort }`, `together` sends `reasoning: { enabled }` plus `reasoning_effort` when supported, and `qwen-chat-template` targets local Qwen-compatible servers that read `chat_template_kwargs.enable_thinking`.
+- Advanced `compat` flags exist for proxy quirks (`cacheControlFormat`, `supportsReasoningEffort`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `sendSessionIdHeader`, `sendSessionAffinityHeaders`). See [Pi `docs/models.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
+
+### Context Overflow Recovery
+
+Pi can auto-compact and retry when a provider fails with a recognized context-window overflow. For custom providers whose overflow text Pi does not recognize, use a provider-scoped `message_end` extension handler to rewrite the finalized assistant `errorMessage` so it starts with `context_length_exceeded`.
 
 ## Custom Providers via Extensions
 

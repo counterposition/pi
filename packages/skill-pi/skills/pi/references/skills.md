@@ -1,6 +1,6 @@
 # Skills
 
-Skills are self-contained capability packages that Pi loads on demand. Pi follows the [Agent Skills specification](https://agentskills.io/specification) and stays fairly lenient, warning on many violations instead of hard-failing.
+Skills are self-contained capability packages that Pi loads on demand. Pi follows the [Agent Skills specification](https://agentskills.io/specification) and stays fairly lenient, warning on most violations instead of hard-failing. Pi allows skill names to differ from parent directory names so shared skill directories can work across multiple agent harnesses.
 
 ## How Skills Work
 
@@ -83,7 +83,7 @@ Read `references/api.md` for the full details.
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `name` | Yes | 1-64 chars, lowercase letters/numbers/hyphens, must match parent dir |
+| `name` | Yes | 1-64 chars, lowercase letters/numbers/hyphens; may differ from parent dir |
 | `description` | Yes | Max 1024 chars; primary trigger text |
 | `license` | No | License name or bundled reference |
 | `compatibility` | No | Environment requirements |
@@ -113,7 +113,6 @@ To reuse Claude Code or Codex skill directories, add them to settings:
 
 Pi warns on most issues but still loads the skill when possible:
 
-- Name and parent-directory mismatch
 - Name too long or invalid
 - Description too long
 - Duplicate names, where first discovered wins

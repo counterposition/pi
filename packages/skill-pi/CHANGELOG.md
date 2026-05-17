@@ -1,5 +1,13 @@
 # @counterposition/skill-pi
 
+## 0.74.1
+
+### Patch Changes
+
+- Sync the Pi skill with Pi 0.74.1, including relaxed skill-name directory
+  guidance and updated custom-provider notes for Together/OpenRouter thinking
+  formats and context-overflow recovery.
+
 ## 0.74.0
 
 ### Minor Changes
