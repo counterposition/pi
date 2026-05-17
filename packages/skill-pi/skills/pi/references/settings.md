@@ -114,7 +114,7 @@ Notes:
 }
 ```
 
-- `npmCommand` is argv-style and is used for npm lookup/install operations, including git-package installs.
+- `npmCommand` is argv-style and is used for npm lookup/install operations, including git-package installs. User-scoped npm packages install under `~/.pi/agent/npm/`; project-scoped npm packages install under `.pi/npm/`.
 - `terminal.showTerminalProgress` (default `false` since Pi 0.70.0) toggles OSC 9;4 progress reporting in supporting terminals (iTerm2, WezTerm, Windows Terminal, Kitty).
 - `terminal.imageWidthCells` (Pi 0.68.1) caps inline tool-output image width in terminal cells.
 

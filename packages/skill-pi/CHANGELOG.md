@@ -1,5 +1,12 @@
 # @counterposition/skill-pi
 
+## 0.75.0
+
+### Minor Changes
+
+- Sync the Pi skill with Pi 0.75.0, including the new user-scoped npm package
+  install location under `~/.pi/agent/npm/`.
+
 ## 0.74.1
 
 ### Patch Changes
