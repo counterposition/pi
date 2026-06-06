@@ -1,6 +1,6 @@
 {
   "name": "@counterposition/pi-memory",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Durable Markdown-backed memory for Pi",
   "keywords": [
     "memory",
@@ -44,8 +44,8 @@
     "pack:check": "pnpm pack --pack-destination ../../.pack"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^0.74.0",
-    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-ai": "^0.78.0",
+    "@earendil-works/pi-coding-agent": "^0.78.0",
     "@types/node": "^25.5.0",
     "markdownlint-cli2": "^0.18.1",
     "oxfmt": "^0.42.0",
