@@ -1,6 +1,6 @@
 {
   "name": "@counterposition/pi-web-search",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Multi-provider web search and markdown page fetch for Pi",
   "keywords": [
     "brave-search",
@@ -48,8 +48,8 @@
     "pack:check": "pnpm pack --pack-destination ../../.pack"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^0.74.0",
-    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-ai": "^0.78.0",
+    "@earendil-works/pi-coding-agent": "^0.78.0",
     "@types/node": "^25.5.0",
     "oxfmt": "^0.42.0",
     "oxlint": "^1.57.0",
