@@ -82,7 +82,7 @@ Useful session events:
 
 Useful agent events:
 
-- `input`
+- `input` — carries `event.streamingBehavior` (`"steer" | "followUp" | undefined`) so handlers can distinguish idle prompts, mid-stream steers, and queued follow-ups; return `{ action: "transform" | "handled" | "continue" }`
 - `before_agent_start` — receives `event.systemPromptOptions` (a `BuildSystemPromptOptions`) so handlers can inspect the structured inputs feeding the system prompt
 - `agent_start`
 - `agent_end`
@@ -111,18 +111,22 @@ Tool results may include `terminate: true` to end the current tool batch without
 
 ## Extension Context
 
-`ctx` gives extensions access to:
+`ctx` (`ExtensionContext`) gives extensions access to:
 
 - `ctx.ui` for interactive UI hooks
+- `ctx.mode` — `"tui" | "rpc" | "json" | "print"`; gate terminal-only features on `ctx.mode === "tui"`
 - `ctx.cwd`
-- `ctx.session`
-- `ctx.sessionManager`
-- `ctx.modelRegistry`
-- `ctx.hasUI`
-- `ctx.isIdle()`
-- `ctx.abort()`
+- `ctx.sessionManager` (read-only)
+- `ctx.modelRegistry` / `ctx.model`
+- `ctx.hasUI` — `true` in TUI and RPC modes
+- `ctx.signal` — the active agent abort signal (or `undefined` when idle); pass it to `fetch`/model calls for abort-aware nested work
+- `ctx.isIdle()` / `ctx.hasPendingMessages()`
+- `ctx.abort()` / `ctx.shutdown()`
 - `ctx.getContextUsage()`
+- `ctx.compact(options?)` — trigger compaction without awaiting completion
 - `ctx.getSystemPrompt()`
+
+Command handlers receive `ExtensionCommandContext`, which extends the above with session-control methods that would deadlock from event handlers: `ctx.getSystemPromptOptions()` (inspect the base system-prompt inputs), `ctx.waitForIdle()`, `ctx.newSession()`, `ctx.fork()`, `ctx.switchSession()`, `ctx.navigateTree()`, and `ctx.reload()`.
 
 ## Tool Registration
 
@@ -148,6 +152,8 @@ pi.registerTool({
   },
 });
 ```
+
+Optional prompt metadata: add `promptSnippet` to give the tool a one-line entry in the system prompt's `Available tools` list, and `promptGuidelines: string[]` to append bullets to the `Guidelines` section while the tool is active. Guidelines are appended flat with no tool-name prefix, so each bullet must name its tool (write `"Use my_tool when..."`, not `"Use this tool when..."`). `pi.getAllTools()` exposes each tool's `promptGuidelines` for attribution.
 
 Important rules:
 

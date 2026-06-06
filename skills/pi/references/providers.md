@@ -7,7 +7,7 @@ Pi supports subscription-based providers via OAuth, API-key providers via env va
 Use `/login` in interactive mode, then select a provider. The `/login` selector is fuzzy-searchable and shows where each entry's auth comes from (`--api-key`, env var, custom provider) without leaking the secret.
 
 - Anthropic Claude Pro / Max — third-party usage draws from extra usage and is billed per token (suppress the warning via `warnings.anthropicExtraUsage`)
-- OpenAI ChatGPT Plus / Pro (Codex)
+- OpenAI ChatGPT Plus / Pro (Codex) — `/login` defaults to browser auth but can use a device-code flow for headless environments
 - GitHub Copilot
 
 Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Google Gemini CLI and Google Antigravity providers.
@@ -17,9 +17,11 @@ Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Goog
 | Provider | Env Var | `auth.json` key |
 |----------|---------|-----------------|
 | Anthropic | `ANTHROPIC_API_KEY` | `anthropic` |
+| Ant Ling | `ANT_LING_API_KEY` | `ant-ling` |
 | Azure OpenAI Responses | `AZURE_OPENAI_API_KEY` | `azure-openai-responses` |
 | OpenAI | `OPENAI_API_KEY` | `openai` |
 | DeepSeek | `DEEPSEEK_API_KEY` | `deepseek` |
+| NVIDIA NIM | `NVIDIA_API_KEY` | `nvidia` |
 | Google Gemini | `GEMINI_API_KEY` | `google` |
 | Mistral | `MISTRAL_API_KEY` | `mistral` |
 | Groq | `GROQ_API_KEY` | `groq` |
@@ -30,6 +32,7 @@ Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Goog
 | OpenRouter | `OPENROUTER_API_KEY` | `openrouter` |
 | Vercel AI Gateway | `AI_GATEWAY_API_KEY` | `vercel-ai-gateway` |
 | ZAI | `ZAI_API_KEY` | `zai` |
+| ZAI Coding Plan (China) | `ZAI_CODING_CN_API_KEY` | `zai-coding-cn` |
 | OpenCode Zen | `OPENCODE_API_KEY` | `opencode` |
 | OpenCode Go | `OPENCODE_API_KEY` | `opencode-go` |
 | Hugging Face | `HF_TOKEN` | `huggingface` |

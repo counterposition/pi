@@ -65,11 +65,10 @@ Edit JSON directly or use `/settings` for common interactive options.
     "enabled": true,
     "maxRetries": 3,
     "baseDelayMs": 2000,
-    "maxDelayMs": 60000,
     "provider": {
-      "timeoutMs": 0,
+      "timeoutMs": 3600000,
       "maxRetries": 0,
-      "maxRetryDelayMs": 0
+      "maxRetryDelayMs": 60000
     }
   }
 }
@@ -77,8 +76,9 @@ Edit JSON directly or use `/settings` for common interactive options.
 
 Notes:
 
-- `retry.maxDelayMs = 0` disables the cap on server-requested retry delays.
-- `retry.provider.*` (Pi 0.70.1) controls the underlying provider SDK's request timeout and retry/backoff — useful for slow local LLMs and flaky proxies. Pi forwards these into `streamSimple` request options when set.
+- `retry.maxRetries` (default `3`) and `retry.baseDelayMs` (default `2000`) govern Pi's own agent-level retry with exponential backoff.
+- `retry.provider.*` controls the underlying provider SDK's request timeout and retry/backoff — useful for slow local LLMs and flaky proxies. `retry.provider.timeoutMs` sets the SDK request timeout; `retry.provider.maxRetries` defaults to `0` (keep it there unless you need SDK-level retries, since raising it can let provider retries swallow usage-limit errors before Pi handles them).
+- `retry.provider.maxRetryDelayMs` (default `60000`) caps how long a server-requested retry delay can be before the request fails immediately with an informative error; set to `0` to disable the cap. The old top-level `retry.maxDelayMs` was renamed to this and is auto-migrated.
 - `branchSummary.skipPrompt` skips the confirmation step when navigating with `/tree`.
 
 ## Message Delivery
@@ -87,12 +87,16 @@ Notes:
 {
   "steeringMode": "one-at-a-time",
   "followUpMode": "one-at-a-time",
-  "transport": "sse"
+  "transport": "auto",
+  "httpIdleTimeoutMs": 300000,
+  "websocketConnectTimeoutMs": 15000
 }
 ```
 
 - `steeringMode` and `followUpMode`: `"all"` or `"one-at-a-time"`
-- `transport`: `"sse"`, `"websocket"`, or `"auto"`
+- `transport` (default `"auto"`): `"sse"`, `"websocket"`, `"websocket-cached"`, or `"auto"` — the preferred transport for providers that support several
+- `httpIdleTimeoutMs` (default `300000`) is the HTTP header/body idle timeout, also applied as the default SDK request timeout for providers that support it (e.g. OpenAI Codex WebSocket waits, llama.cpp). Set to `0` to disable.
+- `websocketConnectTimeoutMs` (default `15000`) bounds the WebSocket connect/open handshake. Set to `0` to disable.
 
 ## Terminal, Images, and Shell
 
@@ -218,12 +222,15 @@ pi [options] [@files...] [messages...]
 -c, --continue                   continue most recent session
 -r, --resume                     browse and select
 --session <path|id>
+--session-id <id>                use an exact project-local session id, creating it if missing
 --fork <path|id>
 --session-dir <dir>
+-n, --name <name>                set the session display name at startup
 --no-session                     ephemeral
 
 # tools and resources
 --tools <list>, -t               name allowlist (read,bash,edit,write,grep,find,ls,...)
+--exclude-tools <list>, -xt      disable specific built-in/extension/custom tools, keep the rest
 --no-tools, -nt                  disable everything
 --no-builtin-tools, -nbt         disable built-ins, keep extension/custom
 -e, --extension <source>         repeatable; npm/git/path
@@ -248,7 +255,7 @@ pi [options] [@files...] [messages...]
 | `PI_PACKAGE_DIR` | Override package storage directory |
 | `PI_SKIP_VERSION_CHECK` | Skip the `pi.dev` latest-version request at startup |
 | `PI_OFFLINE` | Disable all startup network operations (update checks, telemetry) |
-| `PI_TELEMETRY` | Force install telemetry on/off (`1`/`0`); does not gate update checks |
+| `PI_TELEMETRY` | Override install/update telemetry and provider attribution headers (`1`/`0`); does not gate update checks |
 | `PI_CACHE_RETENTION` | Set to `long` for extended prompt-cache retention where supported |
 | `PI_OAUTH_CALLBACK_HOST` | Bind the OAuth callback server to a custom interface |
 | `PI_CODING_AGENT=true` | Set automatically at startup so subprocesses can detect Pi |

@@ -1,5 +1,23 @@
 # @counterposition/skill-pi
 
+## 0.78.1
+
+### Minor Changes
+
+- Sync the Pi skill with Pi 0.78.1, covering changes across 0.76–0.78.
+  - Settings: document `--name`/`-n` and `--session-id` for sessions, `--exclude-tools`/`-xt`
+    for selective tool disablement, and the `httpIdleTimeoutMs`/`websocketConnectTimeoutMs`
+    network timeouts plus the new `transport: "websocket-cached"` option.
+  - Correct the retry schema: `retry.maxDelayMs` was renamed to `retry.provider.maxRetryDelayMs`
+    (default `60000`); refresh the provider-retry guidance and defaults.
+  - Extensions: fix the `ExtensionContext` surface (remove the nonexistent `ctx.session`; add
+    `ctx.mode`, `ctx.signal`, `ctx.hasPendingMessages()`, `ctx.shutdown()`, `ctx.compact()`, and
+    the command-only `ctx.getSystemPromptOptions()`); note `input` event `streamingBehavior` and
+    custom-tool `promptSnippet`/`promptGuidelines` metadata.
+  - Providers: add Ant Ling, NVIDIA NIM, and ZAI Coding Plan (China); note the headless
+    device-code login option for OpenAI Codex.
+  - SDK: bump example model IDs to `claude-opus-4-8`.
+
 ## 0.75.0
 
 ### Minor Changes
