@@ -66,10 +66,10 @@ const { session } = await createAgentSession({
   agentDir: "~/.pi/agent",
   authStorage,
   modelRegistry,
-  model: getModel("anthropic", "claude-opus-4-7"),
+  model: getModel("anthropic", "claude-opus-4-8"),
   thinkingLevel: "medium",
   scopedModels: [
-    { model: getModel("anthropic", "claude-opus-4-7"), thinkingLevel: "high" },
+    { model: getModel("anthropic", "claude-opus-4-8"), thinkingLevel: "high" },
   ],
   tools: ["read", "bash", "edit", "write"],
   customTools: [/* defineTool(...) entries */],
