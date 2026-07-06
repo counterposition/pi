@@ -16,16 +16,19 @@ pi install ./relative/path/to/package
 pi remove npm:@foo/bar
 pi uninstall npm:@foo/bar
 pi list
-pi update                 # update pi itself + all installed packages (skips pinned)
-pi update --self          # update pi only
+pi update                 # update pi only (changed in Pi 0.79.7)
+pi update --all           # update pi + packages, reconcile pinned git refs
 pi update --extensions    # update packages only
+pi update --self          # update pi only
 pi update <source>        # update one package
 pi config
 ```
 
-By default, `install` and `remove` write to user settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead.
+By default, `install` and `remove` write to user settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead. `pi update` installs the exact version returned by the update check.
 
-Project installs are shareable with a team. Pi will install missing project packages automatically on startup.
+Package commands follow the project trust flow (`pi update` never prompts); pass `--approve`/`-a` or `--no-approve`/`-na` to trust or ignore project-local settings for one command.
+
+Project installs are shareable with a team. Pi will install missing project packages automatically on startup once the project is trusted.
 
 For temporary one-run testing, use `--extension` / `-e` with an npm or git source. Pi installs it into a temporary directory for that run only.
 
@@ -40,7 +43,7 @@ npm:pkg
 
 - User installs go under `~/.pi/agent/npm/`
 - Project installs go under `.pi/npm/`
-- Version-pinned installs are skipped by `pi update`
+- Version-pinned installs are skipped by `pi update --extensions` / `--all`
 - Use `npmCommand` in settings if you need a wrapper such as `mise` or `asdf`
 
 ### git
@@ -54,7 +57,7 @@ ssh://git@github.com/user/repo@v1
 
 - Global clones live in `~/.pi/agent/git/`
 - Project clones live in `.pi/git/`
-- Refs pin the package and are skipped by `pi update`
+- Refs pin the package; `pi update --extensions` / `--all` do not move them to newer refs but do reconcile the clone to the configured ref — use `pi install git:host/user/repo@new-ref` to move a pin
 - Pi runs `npm install` after clone/pull when `package.json` exists
 
 ### local paths

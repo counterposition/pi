@@ -51,8 +51,10 @@ import {
   ModelRegistry,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { getModel } from "@earendil-works/pi-ai";
+import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 ```
+
+**pi-ai 0.80.0 API move:** the old global API (`getModel`, `getModels`, `getProviders`, `stream`, `complete`, `completeSimple`, `registerApiProvider`, `getEnvApiKey`, ...) moved off the `@earendil-works/pi-ai` root entrypoint to `@earendil-works/pi-ai/compat` (a deprecated shim slated for removal). For built-in model lookup use `getBuiltinModel(provider, modelId)` from `@earendil-works/pi-ai/providers/all`, or the provider-factory API (`createModels()` / `Models.getModel()`). Extensions loaded by Pi are unaffected at runtime — the extension loader aliases the pi-ai root to the compat superset — but standalone SDK scripts and typechecked extension sources must use the new paths. The selective `@earendil-works/pi-ai/base` / `@earendil-works/pi-agent-core/base` entrypoints introduced in 0.79.8 were removed again in 0.80.0.
 
 ## Core Options
 
@@ -66,10 +68,10 @@ const { session } = await createAgentSession({
   agentDir: "~/.pi/agent",
   authStorage,
   modelRegistry,
-  model: getModel("anthropic", "claude-opus-4-8"),
+  model: getBuiltinModel("anthropic", "claude-opus-4-8"),
   thinkingLevel: "medium",
   scopedModels: [
-    { model: getModel("anthropic", "claude-opus-4-8"), thinkingLevel: "high" },
+    { model: getBuiltinModel("anthropic", "claude-opus-4-8"), thinkingLevel: "high" },
   ],
   tools: ["read", "bash", "edit", "write"],
   customTools: [/* defineTool(...) entries */],
@@ -203,6 +205,18 @@ session.subscribe((event) => {
   }
 });
 ```
+
+`compaction_end` results and RPC `compact` responses include estimated post-compaction token counts (Pi 0.79.8) so clients can show the approximate context reduction.
+
+## RPC Mode
+
+`pi --mode rpc` speaks newline-delimited JSON over stdio. Additions since Pi 0.79:
+
+- `get_entries` / `get_tree` (Pi 0.80.3) read session entries and tree snapshots over RPC.
+- `@earendil-works/pi-coding-agent/rpc-entry` (Pi 0.80.3) launches Pi directly in RPC mode from an importing process.
+- RPC extension UI request/response types are exported from the public API (Pi 0.79.0).
+- Package asset path helpers are exported from the public API (Pi 0.79.0).
+- `CONFIG_DIR_NAME` and edit diff helpers (`generateDiffString`, `generateUnifiedPatch`, `EditDiffResult`) are exported for extensions and hosts (Pi 0.79.7).
 
 ## Resource Loader Hooks
 

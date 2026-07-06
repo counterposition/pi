@@ -39,14 +39,19 @@ Edit JSON directly or use `/settings` for common interactive options.
   "doubleEscapeAction": "tree",
   "treeFilterMode": "default",
   "editorPaddingX": 0,
+  "outputPad": 1,
   "autocompleteMaxVisible": 5,
-  "showHardwareCursor": false
+  "showHardwareCursor": false,
+  "externalEditor": "code --wait"
 }
 ```
 
 - `doubleEscapeAction`: `"tree"`, `"fork"`, or `"none"`
 - `treeFilterMode`: `"default"`, `"no-tools"`, `"user-only"`, `"labeled-only"`, or `"all"`
 - In `/tree`, `Shift+T` toggles timestamps on entry labels
+- `theme` also accepts `"light-name/dark-name"` (Pi 0.79.7) to switch themes automatically with the terminal color scheme; `/` is reserved in theme names for this. On first run Pi detects the terminal background and defaults to `dark` or `light`.
+- `outputPad` (Pi 0.80.3, `0` or `1`) sets horizontal padding for user messages, assistant messages, and thinking blocks.
+- `externalEditor` (Pi 0.80.3) sets the `Ctrl+G` external editor command and takes precedence over `$VISUAL`/`$EDITOR`.
 
 ## Compaction, Branch Summary, Retry
 
@@ -89,7 +94,8 @@ Notes:
   "followUpMode": "one-at-a-time",
   "transport": "auto",
   "httpIdleTimeoutMs": 300000,
-  "websocketConnectTimeoutMs": 15000
+  "websocketConnectTimeoutMs": 15000,
+  "httpProxy": "http://127.0.0.1:7890"
 }
 ```
 
@@ -97,6 +103,7 @@ Notes:
 - `transport` (default `"auto"`): `"sse"`, `"websocket"`, `"websocket-cached"`, or `"auto"` — the preferred transport for providers that support several
 - `httpIdleTimeoutMs` (default `300000`) is the HTTP header/body idle timeout, also applied as the default SDK request timeout for providers that support it (e.g. OpenAI Codex WebSocket waits, llama.cpp). Set to `0` to disable.
 - `websocketConnectTimeoutMs` (default `15000`) bounds the WebSocket connect/open handshake. Set to `0` to disable.
+- `httpProxy` (Pi 0.79.5, global settings only) is applied as `HTTP_PROXY` and `HTTPS_PROXY` for Pi-managed HTTP clients.
 
 ## Terminal, Images, and Shell
 
@@ -146,6 +153,21 @@ Notes:
 ```
 
 When multiple sources specify a session directory, `--session-dir` takes precedence over `sessionDir` in settings. Pi 0.65.0 removed the old `session_directory` extension/settings hook.
+
+## Project Trust
+
+Since Pi 0.79.0, project-local settings, resources, and packages (`.pi/` settings/extensions/skills/prompts/themes, project packages) only load after the project is trusted. `AGENTS.md` / `CLAUDE.md` context files load regardless of trust. Trust is a loading gate, not a sandbox.
+
+```json
+{
+  "defaultProjectTrust": "ask"
+}
+```
+
+- Interactive mode prompts on first use; `/trust` saves a decision (written to `~/.pi/agent/trust.json`; restart Pi to apply).
+- `--approve`/`-a` and `--no-approve`/`-na` override trust for one run, including for `pi install` and other package commands. `pi update` never prompts.
+- Non-interactive modes (`-p`, `--mode json`, `--mode rpc`) never prompt. Without a saved decision they follow `defaultProjectTrust` (global setting only): `"ask"` (default) and `"never"` skip project resources; `"always"` trusts them.
+- Extensions can decide or defer trust via the `project_trust` event and inspect the outcome with `ctx.isProjectTrusted()` — see `references/extensions.md`.
 
 ## Resources
 
@@ -240,6 +262,11 @@ pi [options] [@files...] [messages...]
 --no-extensions / --no-skills / --no-prompt-templates / --no-themes
 --no-context-files, -nc          skip AGENTS.md / CLAUDE.md discovery
 
+# trust and network
+-a, --approve                    trust project-local files for this run
+-na, --no-approve                ignore project-local files for this run
+--offline                        disable startup network operations (same as PI_OFFLINE=1)
+
 # prompts and misc
 --system-prompt <text>           replace default
 --append-system-prompt <text>    repeatable; appended with double newlines
@@ -259,7 +286,7 @@ pi [options] [@files...] [messages...]
 | `PI_CACHE_RETENTION` | Set to `long` for extended prompt-cache retention where supported |
 | `PI_OAUTH_CALLBACK_HOST` | Bind the OAuth callback server to a custom interface |
 | `PI_CODING_AGENT=true` | Set automatically at startup so subprocesses can detect Pi |
-| `VISUAL`, `EDITOR` | External editor for `Ctrl+G` |
+| `VISUAL`, `EDITOR` | External editor for `Ctrl+G` (the `externalEditor` setting takes precedence) |
 | Provider API key env vars | See `references/providers.md` |
 
 ## Practical Notes

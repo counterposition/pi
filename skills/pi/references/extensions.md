@@ -25,6 +25,7 @@ import { Text } from "@earendil-works/pi-tui";
 
 - Use `typebox` (1.x) for schemas.
 - Use `StringEnum` from `@earendil-works/pi-ai` for Google-compatible string enums.
+- Pi 0.80.0 moved pi-ai's old global API (`getModel`, `getModels`, `stream`, `complete`, `registerApiProvider`, ...) off the pi-ai root entrypoint to `@earendil-works/pi-ai/compat`. Extensions keep working unchanged at runtime (the extension loader aliases the root to the compat superset), but extension sources that typecheck against pi-ai's published types must import those APIs from `@earendil-works/pi-ai/compat`. `StringEnum` and the type surface remain on the root. The compat entrypoint and loader alias will be removed in a future release.
 
 ## Quick Start
 
@@ -75,8 +76,12 @@ Useful session events:
 - `session_compact`
 - `session_before_tree`
 - `session_tree`
+- `session_info_changed` — observe session display-name changes
 - `session_shutdown`
 - `resources_discover`
+- `project_trust` — user/global and CLI extensions only, fired before project resources load; return `{ trusted: "yes" | "no" | "undecided" }` (optionally `remember: true` to persist). The first yes/no decision wins and suppresses the built-in trust prompt.
+
+`session_before_compact` and `session_compact` carry `reason` and `willRetry` (Pi 0.79.10) so handlers can distinguish manual `/compact`, threshold auto-compaction, and overflow-retry compaction.
 
 `session_start` carries `event.reason` — `"startup" | "reload" | "new" | "resume" | "fork"` — and `event.previousSessionFile` for `"new"`/`"resume"`/`"fork"`. The old post-transition `session_switch` / `session_fork` events were removed; route all of those flows through `session_start`.
 
@@ -125,6 +130,9 @@ Tool results may include `terminate: true` to end the current tool batch without
 - `ctx.getContextUsage()`
 - `ctx.compact(options?)` — trigger compaction without awaiting completion
 - `ctx.getSystemPrompt()`
+- `ctx.isProjectTrusted()` — the effective project trust decision, including temporary `--approve`/`--no-approve` decisions
+
+Use `CONFIG_DIR_NAME` (exported from `@earendil-works/pi-coding-agent`) instead of hardcoding `.pi` when building project config paths, e.g. `join(ctx.cwd, CONFIG_DIR_NAME, "my-extension.json")`.
 
 Command handlers receive `ExtensionCommandContext`, which extends the above with session-control methods that would deadlock from event handlers: `ctx.getSystemPromptOptions()` (inspect the base system-prompt inputs), `ctx.waitForIdle()`, `ctx.newSession()`, `ctx.fork()`, `ctx.switchSession()`, `ctx.navigateTree()`, and `ctx.reload()`.
 
@@ -191,7 +199,11 @@ const editorFactory = ctx.ui.getEditorComponent();                 // wrap the a
 
 ctx.ui.setToolsExpanded(true);
 
-ctx.ui.addAutocompleteProvider((query, ctx) => /* completions */);  // stack on top of slash/path provider
+ctx.ui.addAutocompleteProvider((current) => ({    // stack on top of slash/path provider
+  triggerCharacters: ["#"],                       // optional natural triggers (Pi 0.79.1)
+  async getSuggestions(lines, cursorLine, cursorCol, options) { /* ... or delegate to current */ },
+  applyCompletion(...args) { return current.applyCompletion(...args); },
+}));
 
 const result = await ctx.ui.custom((tui, theme, keybindings, done) => {
   return new Text("Press Enter", 0, 0);

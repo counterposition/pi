@@ -53,6 +53,7 @@ Core packages on npm (source: [github.com/earendil-works/pi](https://github.com/
 - **Skills** — Markdown capability packages (`SKILL.md` + frontmatter) following the Agent Skills standard. Pi loads names + descriptions into the system prompt; bodies load on demand. → `references/skills.md`
 - **Settings** — Hierarchical JSON: project `.pi/settings.json` merges over global `~/.pi/agent/settings.json`. → `references/settings.md`
 - **Packages** — Bundles of extensions/skills/prompts/themes via npm, git, or local paths. Installed with `pi install`. → `references/packages.md`
+- **Project trust** — Pi 0.79+ asks before loading project-local settings, resources, and packages; decisions persist in `~/.pi/agent/trust.json`. `--approve`/`--no-approve` override per run; `defaultProjectTrust` sets the non-interactive fallback. → `references/settings.md`
 - **Context files & prompt templates** — Pi loads `AGENTS.md` / `CLAUDE.md` from the agent dir and from `cwd` up through ancestors. `.pi/SYSTEM.md` replaces the system prompt; `APPEND_SYSTEM.md` appends. Prompt templates in `prompts/` become slash commands. → `references/settings.md`
 - **SDK** — Programmatic embedding via `createAgentSession()`; `createAgentSessionRuntime()` for session replacement. → `references/sdk.md`
 - **Custom providers & models** — `models.json` or extension `pi.registerProvider()` for any OpenAI-/Anthropic-/Google-compatible or custom LLM endpoint. → `references/providers.md`

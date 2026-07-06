@@ -18,7 +18,7 @@ Pi discovers skills from:
 - Global:
   - `~/.pi/agent/skills/`
   - `~/.agents/skills/`
-- Project:
+- Project (loaded only after the project is trusted; see project trust in `references/settings.md`):
   - `.pi/skills/`
   - `.agents/skills/` in `cwd` and ancestor directories
 - Packages:

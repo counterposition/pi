@@ -52,16 +52,25 @@ Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Goog
 {
   "anthropic": { "type": "api_key", "key": "sk-ant-..." },
   "openai": { "type": "api_key", "key": "!op read 'OpenAI API Key'" },
-  "google": { "type": "api_key", "key": "GEMINI_API_KEY" },
-  "together": { "type": "api_key", "key": "TOGETHER_API_KEY" }
+  "google": { "type": "api_key", "key": "$GEMINI_API_KEY" },
+  "cloudflare-ai-gateway": {
+    "type": "api_key",
+    "key": "$CLOUDFLARE_API_KEY",
+    "env": {
+      "CLOUDFLARE_ACCOUNT_ID": "account-id",
+      "CLOUDFLARE_GATEWAY_ID": "gateway-id"
+    }
+  }
 }
 ```
 
 `key` values can be:
 
 - A literal secret
-- An environment variable name
-- A shell command prefixed with `!`
+- `$ENV_VAR` / `${ENV_VAR}` environment interpolation (works inside larger literals). Plain uppercase names without `$` are treated as literals since Pi 0.79.4 — the old bare-env-var-name form no longer resolves.
+- A shell command prefixed with `!` (stdout is used, cached for the process lifetime)
+
+Entries may include an `env` object (Pi 0.79.5) for provider-scoped environment overrides — Cloudflare account/gateway IDs, Azure endpoints, Vertex project/location, Bedrock config, cache retention, proxies — applied without changing the project shell.
 
 ## Credential Resolution Order
 
@@ -77,8 +86,10 @@ Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Goog
 ```bash
 export AZURE_OPENAI_API_KEY=...
 export AZURE_OPENAI_BASE_URL=https://your-resource.openai.azure.com
-# Cognitive Services endpoints are also supported and auto-normalized to /openai/v1:
+# Cognitive Services and modern Microsoft Foundry endpoint URLs are also
+# supported; root endpoints are auto-normalized to /openai/v1:
 # export AZURE_OPENAI_BASE_URL=https://your-resource.cognitiveservices.azure.com
+# export AZURE_OPENAI_BASE_URL=https://your-resource.ai.azure.com
 # Or supply the resource name only:
 export AZURE_OPENAI_RESOURCE_NAME=your-resource
 
@@ -156,6 +167,8 @@ Use `models.json` for OpenAI-compatible, Anthropic-compatible, Google-compatible
 }
 ```
 
+`apiKey` is optional (Pi 0.80.0): omit it when auth comes from `/login`, `auth.json`, or CLI `--api-key`. Like `auth.json` keys, `apiKey` and `headers` values support `!command` execution and `$ENV_VAR` interpolation; plain uppercase strings are literals. Keyless local servers (e.g. Ollama) should keep a dummy value so their models appear in `/model`.
+
 Common `api` values:
 
 - `"openai-completions"`
@@ -171,7 +184,7 @@ Common `api` values:
 
 - `thinkingLevelMap` (Pi 0.72) replaces `compat.reasoningEffortMap`. Map pi levels (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`) to provider values; use `null` to hide a level.
 - `openRouterRouting` is forwarded as-is in the OpenRouter `provider` field (fallbacks, ZDR, ignore lists, throughput/latency).
-- `compat.thinkingFormat` supports OpenAI-compatible reasoning variants: `openrouter` sends `reasoning: { effort }`, `together` sends `reasoning: { enabled }` plus `reasoning_effort` when supported, and `qwen-chat-template` targets local Qwen-compatible servers that read `chat_template_kwargs.enable_thinking`.
+- `compat.thinkingFormat` supports OpenAI-compatible reasoning variants: `openrouter` sends `reasoning: { effort }`, `together` sends `reasoning: { enabled }` plus `reasoning_effort` when supported, `qwen-chat-template` targets local Qwen-compatible servers that read `chat_template_kwargs.enable_thinking`, and `chat-template` (Pi 0.79.9) sends configurable `chat_template_kwargs` via `compat.chatTemplateKwargs` — e.g. `{ "thinking": { "$var": "thinking.enabled" } }` for DeepSeek models behind vLLM/Hugging Face chat templates (`"$var"` accepts `"thinking.enabled"` or `"thinking.effort"`).
 - Advanced `compat` flags exist for proxy quirks (`cacheControlFormat`, `supportsReasoningEffort`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `sendSessionIdHeader`, `sendSessionAffinityHeaders`). See [Pi `docs/models.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
 
 ### Context Overflow Recovery

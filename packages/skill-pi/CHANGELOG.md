@@ -1,5 +1,33 @@
 # @counterposition/skill-pi
 
+## 0.80.3
+
+### Minor Changes
+
+- Sync the Pi skill with Pi 0.80.3, covering changes across 0.79–0.80.
+  - Project trust (Pi 0.79.0): document the trust gate for project-local settings, resources,
+    and packages — `/trust`, `trust.json`, `--approve`/`-a` and `--no-approve`/`-na`, the
+    `defaultProjectTrust` fallback for non-interactive modes, the `project_trust` extension
+    event, and `ctx.isProjectTrusted()`. Note trust gating in the skills and packages
+    references and add a project-trust concept bullet to `SKILL.md`.
+  - Packages: bare `pi update` now updates Pi only (Pi 0.79.7); document `pi update --all`,
+    exact-version updates, and pinned git-ref reconciliation semantics.
+  - Settings: add `httpProxy`, `outputPad`, and `externalEditor` (overrides
+    `$VISUAL`/`$EDITOR`), plus the `"light-name/dark-name"` automatic theme syntax.
+  - Extensions: add `session_info_changed`, `reason`/`willRetry` on
+    `session_before_compact`/`session_compact`, autocomplete `triggerCharacters`,
+    `CONFIG_DIR_NAME`, and a note on the pi-ai root → `@earendil-works/pi-ai/compat`
+    global-API move (Pi 0.80.0).
+  - SDK: replace removed root `getModel` with `getBuiltinModel` from
+    `@earendil-works/pi-ai/providers/all`, document the compat entrypoint and the removed
+    `/base` entrypoints, new public exports (edit diff helpers, RPC extension UI types,
+    package asset path helpers), RPC `get_entries`/`get_tree`, the `rpc-entry` subpath,
+    and post-compaction token estimates.
+  - Providers: correct `auth.json` key resolution (`$ENV_VAR` interpolation; bare uppercase
+    names are literals since Pi 0.79.4), document per-credential `env` overrides (Pi 0.79.5),
+    optional `models.json` `apiKey` (Pi 0.80.0), the `chat-template` thinking format with
+    `chatTemplateKwargs` (Pi 0.79.9), and Microsoft Foundry endpoint URLs for Azure.
+
 ## 0.78.1
 
 ### Minor Changes
