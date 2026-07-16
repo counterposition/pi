@@ -17,6 +17,7 @@ Edit JSON directly or use `/settings` for common interactive options.
   "defaultModel": "claude-sonnet-4-20250514",
   "defaultThinkingLevel": "medium",
   "hideThinkingBlock": false,
+  "showCacheMissNotices": false,
   "thinkingBudgets": {
     "minimal": 1024,
     "low": 4096,
@@ -26,8 +27,9 @@ Edit JSON directly or use `/settings` for common interactive options.
 }
 ```
 
-- Thinking levels: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`
+- Thinking levels: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"` — `max` (Pi 0.80.6) is an opt-in level above `xhigh`, exposed only when the selected model supports it (some models, e.g. GPT-5.6, expose both). Custom themes can define `thinkingMax`; existing themes fall back to `thinkingXhigh`.
 - `hideThinkingBlock` hides visible thinking output in the UI
+- `showCacheMissNotices` (Pi 0.80.4) shows transcript notices for significant prompt-cache misses
 
 ## UI & Display
 
@@ -125,6 +127,7 @@ Notes:
 }
 ```
 
+- `shellPath` supports a leading `~` for the home directory (Pi 0.80.6).
 - `npmCommand` is argv-style and is used for npm lookup/install operations, including git-package installs. User-scoped npm packages install under `~/.pi/agent/npm/`; project-scoped npm packages install under `.pi/npm/`.
 - `terminal.showTerminalProgress` (default `false` since Pi 0.70.0) toggles OSC 9;4 progress reporting in supporting terminals (iTerm2, WezTerm, Windows Terminal, Kitty).
 - `terminal.imageWidthCells` (Pi 0.68.1) caps inline tool-output image width in terminal cells.
@@ -236,7 +239,7 @@ pi [options] [@files...] [messages...]
 --provider <name>                e.g. anthropic, openai, google
 --model <pattern>                supports provider/id and optional :<thinking>
 --api-key <key>
---thinking off|minimal|low|medium|high|xhigh
+--thinking off|minimal|low|medium|high|xhigh|max
 --models <patterns>              Ctrl+P cycling allowlist
 --list-models [search]
 

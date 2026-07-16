@@ -9,8 +9,12 @@ Use `/login` in interactive mode, then select a provider. The `/login` selector 
 - Anthropic Claude Pro / Max — third-party usage draws from extra usage and is billed per token (suppress the warning via `warnings.anthropicExtraUsage`)
 - OpenAI ChatGPT Plus / Pro (Codex) — `/login` defaults to browser auth but can use a device-code flow for headless environments
 - GitHub Copilot
+- xAI (Grok/X subscription, Pi 0.80.8) — `/login xai` then **Use a subscription** (device-code OAuth); `XAI_API_KEY` remains available via **Use an API key**
+- Radius (Pi 0.80.8) — a dynamic `pi-messages` gateway; `/login radius` stores OAuth tokens, and custom Radius gateways can be declared in `models.json` with `"oauth": "radius"` plus a gateway `baseUrl`
 
-Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Google Gemini CLI and Google Antigravity providers.
+`/login <provider>` with autocomplete works since Pi 0.80.4, and login methods are provider-owned since 0.80.8 (registered pi-ai providers expose their own auth options and status in `/login`). Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Google Gemini CLI and Google Antigravity providers.
+
+Since Pi 0.80.8, built-in catalogs are complemented by dynamic ones: `/model` refreshes configured providers in the background, `pi update --models` forces an immediate refresh, and refreshed catalogs are cached in `~/.pi/agent/models-store.json` for offline use.
 
 ## API Key Providers
 
@@ -35,6 +39,8 @@ Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Goog
 | ZAI Coding Plan (China) | `ZAI_CODING_CN_API_KEY` | `zai-coding-cn` |
 | OpenCode Zen | `OPENCODE_API_KEY` | `opencode` |
 | OpenCode Go | `OPENCODE_API_KEY` | `opencode-go` |
+| Amazon Bedrock | `AWS_BEARER_TOKEN_BEDROCK` | `amazon-bedrock` |
+| Radius | `RADIUS_API_KEY` | `radius` |
 | Hugging Face | `HF_TOKEN` | `huggingface` |
 | Fireworks | `FIREWORKS_API_KEY` | `fireworks` |
 | Together AI | `TOGETHER_API_KEY` | `together` |
@@ -99,7 +105,7 @@ export AZURE_OPENAI_DEPLOYMENT_NAME_MAP=gpt-4o=my-gpt4o
 
 ### Amazon Bedrock
 
-Pi supports standard AWS auth flows:
+`/login amazon-bedrock` stores a Bedrock API key (Pi 0.80.7). Ambient AWS credential flows also work — these keep using SigV4 authentication:
 
 - `AWS_PROFILE`
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
@@ -182,10 +188,14 @@ Common `api` values:
 
 ### Model & Compatibility Knobs
 
-- `thinkingLevelMap` (Pi 0.72) replaces `compat.reasoningEffortMap`. Map pi levels (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`) to provider values; use `null` to hide a level.
+- `thinkingLevelMap` (Pi 0.72) replaces `compat.reasoningEffortMap`. Map pi levels (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`) to provider values; use `null` to hide a level. Maps may contain holes (Pi 0.80.6) — e.g. expose `high` and `max` without `xhigh`. When a key is omitted, standard levels through `high` use the provider default mapping, but the extended `xhigh`/`max` levels are unsupported.
+- `cost` supports request-wide input pricing tiers (Pi 0.80.6): a `tiers` array where each tier supplies a complete alternate rate set and applies to the whole request when total input usage (`input + cacheRead + cacheWrite`) exceeds `inputTokensAbove`; the highest matching threshold wins. Also usable in `modelOverrides` and extension-registered providers.
+- `modelOverrides` applies to built-in and (since Pi 0.80.4) extension-registered provider models; per-model fields: `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost` (partial), `contextWindow`, `maxTokens`, `headers`, `compat`.
 - `openRouterRouting` is forwarded as-is in the OpenRouter `provider` field (fallbacks, ZDR, ignore lists, throughput/latency).
 - `compat.thinkingFormat` supports OpenAI-compatible reasoning variants: `openrouter` sends `reasoning: { effort }`, `together` sends `reasoning: { enabled }` plus `reasoning_effort` when supported, `qwen-chat-template` targets local Qwen-compatible servers that read `chat_template_kwargs.enable_thinking`, and `chat-template` (Pi 0.79.9) sends configurable `chat_template_kwargs` via `compat.chatTemplateKwargs` — e.g. `{ "thinking": { "$var": "thinking.enabled" } }` for DeepSeek models behind vLLM/Hugging Face chat templates (`"$var"` accepts `"thinking.enabled"` or `"thinking.effort"`).
-- Advanced `compat` flags exist for proxy quirks (`cacheControlFormat`, `supportsReasoningEffort`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `sendSessionIdHeader`, `sendSessionAffinityHeaders`). See [Pi `docs/models.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
+- **Breaking (Pi 0.80.7):** `compat.sendSessionIdHeader` was removed. Session affinity is now controlled by `compat.sessionAffinityFormat` (`"openai"` sends `session_id`/`x-client-request-id`, `"openai-nosession"` omits the underscore-containing `session_id` header, `"openrouter"` sends `x-session-id`; default auto-detected). Replace `sendSessionIdHeader: false` with `sessionAffinityFormat: "openai-nosession"`. `sendSessionAffinityHeaders` still gates the behavior for `openai-completions`.
+- `compat.deferredToolsMode: "kimi"` (Pi 0.80.9) enables Kimi's deferred tool serialization; `compat.supportsToolReferences` / `compat.supportsToolSearch` enable native dynamic tool loading on verified custom endpoints (see `references/extensions.md`).
+- Advanced `compat` flags exist for proxy quirks (`cacheControlFormat`, `supportsReasoningEffort`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `supportsStrictMode`). See [Pi `docs/models.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
 
 ### Context Overflow Recovery
 
@@ -219,7 +229,7 @@ pi.registerProvider("anthropic", { baseUrl: "https://proxy.example.com" });
 
 ## SDK / Extension Auth Lookup
 
-If extension or SDK code needs auth for a specific model request, use `getApiKeyAndHeaders(model)` rather than the removed `getApiKey(model)`:
+If extension code needs auth for a specific model request, use `getApiKeyAndHeaders(model)` rather than the removed `getApiKey(model)`:
 
 ```typescript
 const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
@@ -228,4 +238,4 @@ if (!auth.ok) throw new Error(auth.error);
 const { apiKey, headers } = auth;
 ```
 
-This matters for providers whose headers or auth values resolve dynamically on every request.
+This matters for providers whose headers or auth values resolve dynamically on every request. In SDK code, use `ModelRuntime.getAuth(providerOrModel)` instead (Pi 0.80.8) — passing a model also resolves built-in, `models.json`, and extension model headers; see `references/sdk.md`.

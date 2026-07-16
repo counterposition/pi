@@ -90,13 +90,15 @@ Useful agent events:
 - `input` — carries `event.streamingBehavior` (`"steer" | "followUp" | undefined`) so handlers can distinguish idle prompts, mid-stream steers, and queued follow-ups; return `{ action: "transform" | "handled" | "continue" }`
 - `before_agent_start` — receives `event.systemPromptOptions` (a `BuildSystemPromptOptions`) so handlers can inspect the structured inputs feeding the system prompt
 - `agent_start`
-- `agent_end`
+- `agent_end` — one low-level run; Pi may still auto-retry, auto-compact and retry, or continue with queued follow-ups
+- `agent_settled` (Pi 0.80.4) — fired when no retry/compaction/follow-up remains; use for status integrations that need to know Pi will not continue automatically (`ctx.isIdle()` is true here unless another extension started a new run)
 - `turn_start`
 - `turn_end`
 - `message_start`
 - `message_update`
 - `message_end` — return a replacement message to override usage/cost or rewrite the finalized assistant message
 - `context`
+- `before_provider_headers` (Pi 0.80.4) — mutate `event.headers` in place after outgoing HTTP headers are assembled: set a key to a string to add/override, `null` to delete. Runs once per provider request; retries reuse the same headers
 - `before_provider_request`
 - `after_provider_response` — inspect the provider HTTP status and headers before stream consumption
 - `model_select`
@@ -121,8 +123,8 @@ Tool results may include `terminate: true` to end the current tool batch without
 - `ctx.ui` for interactive UI hooks
 - `ctx.mode` — `"tui" | "rpc" | "json" | "print"`; gate terminal-only features on `ctx.mode === "tui"`
 - `ctx.cwd`
-- `ctx.sessionManager` (read-only)
-- `ctx.modelRegistry` / `ctx.model`
+- `ctx.sessionManager` (read-only; `buildContextEntries()` returns active-branch entries with compaction applied, Pi 0.80.4)
+- `ctx.modelRegistry` / `ctx.model` — `ctx.modelRegistry` is the synchronous extension-facing facade; its `refresh()` became `Promise<void>` in Pi 0.80.8 (await it before synchronous registry reads)
 - `ctx.hasUI` — `true` in TUI and RPC modes
 - `ctx.signal` — the active agent abort signal (or `undefined` when idle); pass it to `fetch`/model calls for abort-aware nested work
 - `ctx.isIdle()` / `ctx.hasPendingMessages()`
@@ -170,6 +172,19 @@ Important rules:
 3. Throw on failure instead of returning fake success.
 4. Use the file-mutation queue for write/edit style tools.
 5. Put reconstructable state in `details`; it persists in session history.
+
+## Dynamic Tool Loading
+
+Pi 0.80.7 lets an extension register many tools while keeping only a small initial set active, then add more during execution — cache-friendly on models with native deferred loading. Lifecycle:
+
+1. Register every tool with `pi.registerTool()` (all appear in `pi.getAllTools()`).
+2. Keep a loader tool (e.g. `search_tools`) active; leave searchable tools inactive — e.g. on `session_start`, `pi.setActiveTools()` to the filtered set.
+3. During loader execution, call `pi.setActiveTools([...pi.getActiveTools(), ...matches])`. The change must be purely additive; unknown names are ignored.
+4. Pi records the added tools on that tool result and exposes their definitions before the next model response.
+
+Native deferred loading preserves the cached prompt prefix on Anthropic Sonnet/Opus/Fable ≥ 4.5 (not Haiku) and OpenAI `gpt-5.4`+; Kimi K3 works via `compat.deferredToolsMode: "kimi"` (Pi 0.80.9). For verified custom models/proxies, enable `compat.supportsToolReferences: true` (`anthropic-messages`) or `compat.supportsToolSearch: true` (`openai-responses`/`openai-codex-responses`). All other models fall back to sending the full active tool list on the next request — activation still works, but may invalidate the provider's cached prefix. Non-additive changes (removals/replacements) always use the fallback.
+
+Cache tips: keep the loader active for the whole session; add rather than replace. Activating a tool that has `promptSnippet`/`promptGuidelines` rebuilds the system prompt and can invalidate the prefix even with native support — lazily loaded tools should rely on their `description` alone.
 
 ## UI Methods
 
@@ -240,6 +255,15 @@ Store extension state with custom session entries:
 pi.appendEntry("my-extension-state", { key: "value" });
 ```
 
+Custom entries never participate in LLM context. Since Pi 0.80.4 they can also render in the interactive transcript via `pi.registerEntryRenderer(customType, renderer)` — the TUI-only counterpart to `pi.registerMessageRenderer()` (whose custom messages DO enter LLM context via `pi.sendMessage()`):
+
+```typescript
+pi.registerEntryRenderer("status-card", (entry, { expanded }, theme) => {
+  return new Text(theme.fg("accent", JSON.stringify(entry.data)));
+});
+pi.appendEntry("status-card", { title: "Indexed files", count: 17 });
+```
+
 Use lifecycle hooks to restore it:
 
 ```typescript
@@ -280,11 +304,15 @@ pi.registerProvider("anthropic", { baseUrl: "https://proxy.example.com" });
 pi.unregisterProvider("my-provider");
 ```
 
+Dynamic providers can implement `refreshModels(context)` (Pi 0.80.8) for model discovery: Pi calls it during catalog refresh (`/model`, `pi update --models`) and publishes the returned list; its models replace extension-provided `models`. Persist results through the scoped `context.store` only when they should survive restarts — live servers like llama.cpp can ignore it.
+
 If you need auth for a specific model request, use:
 
 ```typescript
 const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 ```
+
+(Still supported for extensions in Pi 0.80.8+; SDK code should use `ModelRuntime.getAuth()` — see `references/sdk.md`.)
 
 Pass `shouldStopAfterTurn` via the SDK to exit the agent loop gracefully after a completed turn. See `references/sdk.md` and `references/providers.md` for the full provider/model schema.
 

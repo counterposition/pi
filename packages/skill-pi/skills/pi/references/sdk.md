@@ -12,19 +12,16 @@ npm install @earendil-works/pi-coding-agent
 
 ```typescript
 import {
-  AuthStorage,
   createAgentSession,
-  ModelRegistry,
+  ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 
-const authStorage = AuthStorage.create();
-const modelRegistry = ModelRegistry.create(authStorage);
+const modelRuntime = await ModelRuntime.create();
 
 const { session } = await createAgentSession({
   sessionManager: SessionManager.inMemory(),
-  authStorage,
-  modelRegistry,
+  modelRuntime,
 });
 
 session.subscribe((event) => {
@@ -38,17 +35,16 @@ await session.prompt("What files are in the current directory?");
 
 Run with `npx tsx my-script.ts`.
 
-**Important:** `ModelRegistry` no longer has a public constructor. Use `ModelRegistry.create(authStorage, modelsJsonPath?)` for file-backed registries or `ModelRegistry.inMemory(authStorage)` for built-in models only.
+**Breaking (Pi 0.80.8):** `ModelRuntime` replaced the old `AuthStorage`/`ModelRegistry` pair as the SDK model/auth facade. `CreateAgentSessionOptions.authStorage` and `modelRegistry` are gone — pass the async `modelRuntime` instead. `AuthStorage` is no longer exported; use `ModelRuntime` (or a custom pi-ai `CredentialStore`), or `readStoredCredential()` for one-off reads of `auth.json`. `ModelRegistry` still exists only as the synchronous extension-facing compatibility facade, and its `refresh()` is now `Promise<void>`.
 
 ## Key Imports
 
 ```typescript
 import {
-  AuthStorage,
   createAgentSession,
   DefaultResourceLoader,
   defineTool,
-  ModelRegistry,
+  ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
@@ -60,16 +56,14 @@ import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 
 ```typescript
 const cwd = "/path/to/project";
-const authStorage = AuthStorage.create();
-const modelRegistry = ModelRegistry.create(authStorage);
+const modelRuntime = await ModelRuntime.create();
 
 const { session } = await createAgentSession({
   cwd,
   agentDir: "~/.pi/agent",
-  authStorage,
-  modelRegistry,
+  modelRuntime,
   model: getBuiltinModel("anthropic", "claude-opus-4-8"),
-  thinkingLevel: "medium",
+  thinkingLevel: "medium",  // off | minimal | low | medium | high | xhigh | max
   scopedModels: [
     { model: getBuiltinModel("anthropic", "claude-opus-4-8"), thinkingLevel: "high" },
   ],
@@ -89,6 +83,50 @@ Notes:
 - The `create*Tool(cwd)` factories still exist for code that needs explicit `AgentTool` instances (e.g. when wiring tools into pi-agent-core directly), but they are no longer the value passed to `createAgentSession({ tools })`.
 - `DefaultResourceLoader` loads extensions, skills, prompt templates, themes, and context files. Replace it to drive resource discovery from custom sources (and it must implement `loadProjectContextFiles()` if you want `AGENTS.md`/`CLAUDE.md` discovery; that helper is also exported standalone).
 - Pass `shouldStopAfterTurn(state) => boolean` (Pi 0.72.0) to exit the agent loop gracefully after a completed turn.
+
+## Models & Auth (`ModelRuntime`)
+
+`ModelRuntime` (Pi 0.80.8) implements the pi-ai `Models` interface and owns credential storage. Auth resolution priority: runtime overrides (`setRuntimeApiKey`, not persisted) → stored credentials in `auth.json` → environment variables → fallback resolver for `models.json` keys.
+
+```typescript
+import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+
+// Default: ~/.pi/agent/auth.json and ~/.pi/agent/models.json
+const modelRuntime = await ModelRuntime.create();
+
+// Model lookup (use pi-ai Models methods directly; the old
+// getAll()/find()/getSnapshot() projections were removed)
+const model = modelRuntime.getModel("my-provider", "my-model");
+const available = await modelRuntime.getAvailable();  // only models with valid auth
+
+// Provider-owned auth methods and current status
+for (const provider of modelRuntime.getProviders()) {
+  const status = await modelRuntime.checkAuth(provider.id);
+}
+
+modelRuntime.setRuntimeApiKey("anthropic", "sk-my-temp-key");
+
+// Custom locations, or inject any pi-ai CredentialStore
+const custom = await ModelRuntime.create({ authPath: "/my/auth.json", modelsPath: "/my/models.json" });
+const inMemory = await ModelRuntime.create({ credentials: new InMemoryCredentialStore() });
+```
+
+`ModelRuntime.getAuth(providerOrModel)` assembles final request auth (replacing `ModelRegistry.getApiKeyAndHeaders()` on the SDK side); passing a model also resolves built-in, `models.json`, and extension model headers. Dynamic provider catalogs refresh via async `ModelRuntime.refresh()` and are cached in `~/.pi/agent/models-store.json`.
+
+To match CLI model parsing, use the exported resolver helpers (Pi 0.80.4):
+
+```typescript
+import { resolveCliModel, resolveModelScopeWithDiagnostics } from "@earendil-works/pi-coding-agent";
+
+const cliModel = resolveCliModel({ cliModel: "anthropic/claude-opus-4-8:high", modelRuntime });
+const { scopedModels, diagnostics } = await resolveModelScopeWithDiagnostics(
+  ["anthropic/*:high", "gpt-5"],
+  modelRuntime,
+);
+```
+
+`resolveCliModel()` resolves against all registered models (so `--api-key`-style first-time setup works before stored auth exists); `resolveModelScopeWithDiagnostics()` matches `--models`/`enabledModels` semantics and returns warnings instead of printing.
 
 ## Prompting & Queueing
 
@@ -193,7 +231,8 @@ session.subscribe((event) => {
     case "tool_execution_update":
     case "tool_execution_end":
     case "agent_start":
-    case "agent_end":
+    case "agent_end":      // one low-level run; may be followed by retry/compaction/queued follow-ups
+    case "agent_settled":  // fully settled — no automatic continuation left (Pi 0.80.4)
     case "turn_start":
     case "turn_end":
     case "queue_update":
@@ -212,6 +251,7 @@ session.subscribe((event) => {
 
 `pi --mode rpc` speaks newline-delimited JSON over stdio. Additions since Pi 0.79:
 
+- `agent_settled` event (Pi 0.80.4) fires when a run is fully settled — no automatic retry, compaction retry, or queued continuation remains; `agent_end` now carries `willRetry`. `set_thinking_level` accepts `"max"` where the model supports it.
 - `get_entries` / `get_tree` (Pi 0.80.3) read session entries and tree snapshots over RPC.
 - `@earendil-works/pi-coding-agent/rpc-entry` (Pi 0.80.3) launches Pi directly in RPC mode from an importing process.
 - RPC extension UI request/response types are exported from the public API (Pi 0.79.0).
@@ -226,6 +266,20 @@ session.subscribe((event) => {
 - Override `agentsFiles` to inject virtual `AGENTS.md` content
 - Add custom skills or prompt templates without touching disk
 - Share an event bus between the host app and loaded extensions
+
+To name an inline factory in the startup Extensions list (instead of `<inline:1>`), wrap it in an `InlineExtension` (Pi 0.80.4):
+
+```typescript
+import type { InlineExtension } from "@earendil-works/pi-coding-agent";
+
+const myProvider: InlineExtension = {
+  name: "my-provider",
+  factory: (pi) => { /* ... */ },
+};
+const loader = new DefaultResourceLoader({ extensionFactories: [myProvider] });
+```
+
+Bare factory functions are still accepted.
 
 ## Standalone Custom Tools
 

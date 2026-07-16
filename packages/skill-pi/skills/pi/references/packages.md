@@ -19,9 +19,11 @@ pi list
 pi update                 # update pi only (changed in Pi 0.79.7)
 pi update --all           # update pi + packages, reconcile pinned git refs
 pi update --extensions    # update packages only
+pi update --models        # refresh model catalogs only (Pi 0.80.8)
 pi update --self          # update pi only
 pi update <source>        # update one package
-pi config
+pi config                 # starts in global settings; Tab switches scope
+pi config -l              # start in project overrides (.pi/settings.json)
 ```
 
 By default, `install` and `remove` write to user settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead. `pi update` installs the exact version returned by the update check.
@@ -129,6 +131,6 @@ Rules:
 
 ## Scope and Deduplication
 
-- Project settings override global settings for the same package identity
+- Project settings override global settings for the same package identity — unless the project entry has `autoload: false`, in which case it is applied as a delta over the global entry (Pi 0.80.4)
 - Identity is package name for npm, repo URL for git, and resolved absolute path for local sources
-- `pi config` can enable or disable package resources after installation
+- `pi config` can enable or disable package resources after installation; since Pi 0.80.4 it manages global vs project-local scopes (Tab to switch, `pi config -l` to start in project mode with inherited global resources dimmed)
