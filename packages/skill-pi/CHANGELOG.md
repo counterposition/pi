@@ -1,5 +1,38 @@
 # @counterposition/skill-pi
 
+## 0.80.9
+
+### Minor Changes
+
+- Sync the Pi skill with Pi 0.80.9, covering changes across 0.80.4–0.80.9.
+  - SDK (breaking in Pi 0.80.8): rewrite `references/sdk.md` around `ModelRuntime`, which
+    replaces the removed `AuthStorage`/`ModelRegistry` SDK surface and the
+    `authStorage`/`modelRegistry` options on `createAgentSession()`. Document
+    `ModelRuntime.create()` (custom paths, injected pi-ai `CredentialStore`),
+    auth resolution priority, `getAuth()`, `checkAuth()`, `readStoredCredential()`,
+    the `resolveCliModel`/`resolveModelScopeWithDiagnostics` helpers, named
+    `InlineExtension` factories, and the `agent_settled` session/RPC event with
+    `willRetry` on `agent_end`.
+  - Extensions: document dynamic tool loading (Pi 0.80.7) — additive
+    `pi.setActiveTools()` during execution, native deferred loading on Anthropic
+    and OpenAI Responses models, Kimi `deferredToolsMode` (Pi 0.80.9), compat
+    flags, and cache guidance. Add the `agent_settled` and
+    `before_provider_headers` hooks, `pi.registerEntryRenderer()` for TUI-only
+    custom entries, provider `refreshModels(context)` discovery, the async
+    `ModelRegistry.refresh()`, and `sessionManager.buildContextEntries()`.
+  - Providers: xAI subscription login and Radius gateway (Pi 0.80.8), Bedrock
+    `/login` API key (Pi 0.80.7), `/login <provider>` autocomplete, live model
+    catalog refresh via `/model`, `pi update --models`, and `models-store.json`.
+  - models.json: replace the removed `compat.sendSessionIdHeader` with
+    `compat.sessionAffinityFormat` (breaking in Pi 0.80.7), add request-wide
+    input pricing `cost.tiers` (Pi 0.80.6), `max` in `thinkingLevelMap` with
+    hole semantics, and expanded `modelOverrides` (extension-registered models,
+    `thinkingLevelMap`).
+  - Settings: the `max` thinking level (Pi 0.80.6) across settings and CLI,
+    `showCacheMissNotices` (Pi 0.80.4), and `~` expansion for `shellPath`.
+  - Packages: `pi update --models`, `pi config -l` with Tab scope switching
+    (Pi 0.80.4), and `autoload: false` project-entry delta semantics.
+
 ## 0.80.3
 
 ### Minor Changes

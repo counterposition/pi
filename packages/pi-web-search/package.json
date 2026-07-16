@@ -48,8 +48,8 @@
     "pack:check": "pnpm pack --pack-destination ../../.pack"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^0.80.0",
-    "@earendil-works/pi-coding-agent": "^0.80.0",
+    "@earendil-works/pi-ai": "^0.80.9",
+    "@earendil-works/pi-coding-agent": "^0.80.9",
     "@types/node": "^25.5.0",
     "oxfmt": "^0.42.0",
     "oxlint": "^1.57.0",
