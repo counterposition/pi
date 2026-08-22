@@ -1,3 +1,5 @@
+
+
 # Pi Monorepo
 
 [Pi](https://github.com/earendil-works/pi) is a minimal terminal coding agent. It ships four tools, four execution modes, and a philosophy: adapt Pi to your workflows, not the other way around. Users extend it with TypeScript extensions, skills, prompt templates, and shareable packages.
@@ -44,7 +46,7 @@ mise trust && mise install
 
 ```bash
 pnpm install          # install dependencies
-pnpm run check        # lint + format + typecheck + test + validate (the full gate)
+pnpm run check        # lint + format:check + typecheck + test + validate (the full gate)
 pnpm run test         # vitest
 pnpm run lint:fix     # oxlint autofix
 pnpm run sync:skills  # copy canonical skills into packages/ before release
