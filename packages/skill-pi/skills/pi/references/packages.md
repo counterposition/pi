@@ -101,6 +101,7 @@ If there is no `pi` manifest, Pi auto-discovers:
   - `@earendil-works/pi-coding-agent`
   - `@earendil-works/pi-tui`
   - `typebox`
+- Pin dev dependencies to a current Pi line (e.g. `^0.84.2`) so typecheck/tests validate against what users run; keep peers `"*"` so installs stay compatible across Pi versions
 - Other Pi packages must be bundled explicitly
 - Git package installs run `npm install --omit=dev` — runtime needs go in `dependencies`, not `devDependencies`
 

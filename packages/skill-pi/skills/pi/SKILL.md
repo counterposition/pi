@@ -7,7 +7,7 @@ compatibility: "Pi-specific guidance for agents that support Agent Skills"
 
 # Pi Coding Agent
 
-Pi is a minimal terminal coding harness. Default tools: `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls`. Modes: interactive (`pi`), print (`pi -p`), JSON (`--mode json`), RPC (`--mode rpc`), or embedded (`createAgentSession()`). Sub-agents, plan mode, permission flows, and MCP are intentionally left to extensions and Pi packages.
+Pi is a minimal terminal coding harness. Default tools: `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls` (configurable via the `defaultTools` setting since Pi 0.84.2). Modes: interactive (`pi`), print (`pi -p`), JSON (`--mode json`), RPC (`--mode rpc`), or embedded (`createAgentSession()`). Sub-agents, plan mode, permission flows, and MCP are intentionally left to extensions and Pi packages. Skill synced with Pi 0.84.2.
 
 Pi's philosophy: **adapt Pi to your workflows, not the other way around**.
 
@@ -20,8 +20,10 @@ Core packages on npm (source: [github.com/earendil-works/pi](https://github.com/
 | `@earendil-works/pi-ai` | Unified LLM API across 20+ providers |
 | `@earendil-works/pi-agent-core` | Agent runtime with tool execution and state |
 | `@earendil-works/pi-tui` | Terminal UI components |
-| `@earendil-works/pi-coding-agent` | CLI, extensions, skills, sessions, settings |
+| `@earendil-works/pi-coding-agent` | CLI, extensions, skills, sessions, settings (also exports `./client` for remote sessions and `./rpc-entry`) |
 | `@earendil-works/pi-web-ui` | Web components for chat interfaces |
+| `@earendil-works/pi-client` / `@earendil-works/pi-protocol` | Experimental remote-session client and wire protocol (Pi 0.84.0) |
+| `@earendil-works/pi-telemetry` | Vendor-neutral telemetry contracts (Pi 0.84.0) |
 
 ## File System Layout
 
@@ -54,9 +56,9 @@ Core packages on npm (source: [github.com/earendil-works/pi](https://github.com/
 - **Settings** — Hierarchical JSON: project `.pi/settings.json` merges over global `~/.pi/agent/settings.json`. → `references/settings.md`
 - **Packages** — Bundles of extensions/skills/prompts/themes via npm, git, or local paths. Installed with `pi install`. → `references/packages.md`
 - **Project trust** — Pi 0.79+ asks before loading project-local settings, resources, and packages; decisions persist in `~/.pi/agent/trust.json`. `--approve`/`--no-approve` override per run; `defaultProjectTrust` sets the non-interactive fallback. → `references/settings.md`
-- **Context files & prompt templates** — Pi loads `AGENTS.md` / `CLAUDE.md` from the agent dir and from `cwd` up through ancestors. `.pi/SYSTEM.md` replaces the system prompt; `APPEND_SYSTEM.md` appends. Prompt templates in `prompts/` become slash commands. → `references/settings.md`
+- **Context files & prompt templates** — Pi loads `AGENTS.md` / `CLAUDE.md` from the agent dir and from `cwd` up through ancestors. Per-directory `AGENTS.override.md` (Pi 0.84.0) replaces same-directory context files while others layer normally. `.pi/SYSTEM.md` replaces the system prompt; `APPEND_SYSTEM.md` appends. Prompt templates in `prompts/` become slash commands. → `references/settings.md`
 - **SDK** — Programmatic embedding via `createAgentSession()`; `createAgentSessionRuntime()` for session replacement. → `references/sdk.md`
-- **Custom providers & models** — `models.json` or extension `pi.registerProvider()` for any OpenAI-/Anthropic-/Google-compatible or custom LLM endpoint. → `references/providers.md`
+- **Custom providers & models** — `models.json` or extension `pi.registerProvider()` (config form or complete pi-ai providers) for any OpenAI-/Anthropic-/Google-compatible or custom LLM endpoint. → `references/providers.md`
 - **Sessions & compaction** — Append-only JSONL with a tree structure; branch with `/tree`, `/fork`, `/clone`, compact with `/compact`. Auto-compaction triggers when `contextTokens > contextWindow - reserveTokens`. Extensions intercept via `session_before_compact`. → `references/extensions.md` and `references/sdk.md`
 
 ## How to Use This Skill

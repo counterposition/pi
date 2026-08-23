@@ -51,9 +51,27 @@ Edit JSON directly or use `/settings` for common interactive options.
 - `doubleEscapeAction`: `"tree"`, `"fork"`, or `"none"`
 - `treeFilterMode`: `"default"`, `"no-tools"`, `"user-only"`, `"labeled-only"`, or `"all"`
 - In `/tree`, `Shift+T` toggles timestamps on entry labels
-- `theme` also accepts `"light-name/dark-name"` (Pi 0.79.7) to switch themes automatically with the terminal color scheme; `/` is reserved in theme names for this. On first run Pi detects the terminal background and defaults to `dark` or `light`.
-- `outputPad` (Pi 0.80.3, `0` or `1`) sets horizontal padding for user messages, assistant messages, and thinking blocks.
+- `theme` also accepts `"light-name/dark-name"` (Pi 0.79.7) to switch themes automatically with the terminal color scheme; `/` is reserved in theme names for this. On first run Pi detects the terminal background and defaults to `dark` or `light`. `--use-theme <name[/name]>` (Pi 0.84.2) sets a per-run initial theme without changing saved settings.
+- `outputPad` (Pi 0.80.3, `0` or `1`) sets horizontal padding for user messages, assistant messages, and thinking blocks; custom message renderers receive it as `options.outputPad` (Pi 0.82.1).
 - `externalEditor` (Pi 0.80.3) sets the `Ctrl+G` external editor command and takes precedence over `$VISUAL`/`$EDITOR`.
+
+## Fullscreen TUI Mode
+
+Experimental since Pi 0.84.0:
+
+```json
+{
+  "tuiMode": "regular",
+  "fullscreenExitOutput": "transcript",
+  "fullscreenScrollbar": "auto"
+}
+```
+
+- `tuiMode`: `"regular"` (default) or `"fullscreen"`; `/settings` switches at runtime, `--tui-mode` overrides per run
+- `fullscreenExitOutput` (Pi 0.84.2): `"transcript"` prints the final transcript on exit; `"resume-hint"` restores the previous screen and prints only a resume hint
+- `fullscreenScrollbar`: `"auto"` shows while scrolling, `"always"` reserves the rightmost column, `"hidden"`
+- Fullscreen keeps editor/status/widgets/footer docked while the transcript scrolls independently; transcript search (`Ctrl+Shift+F`, Pi 0.84.2), page/half-page/line scrolling, and marked-message navigation are configurable via `tui.altScreen.*` keybindings
+- Theme tokens `scrollbarThumb`, `searchMatchBg`, `searchMatchText` are optional additions with fallbacks (`selectedBg`, `selectedBg`, `text`)
 
 ## Compaction, Branch Summary, Retry
 
@@ -149,13 +167,18 @@ Notes:
 {
   "sessionDir": ".pi/sessions",
   "enabledModels": ["claude-*", "gpt-4o", "gemini-2*"],
+  "defaultTools": ["bash", "read", "edit"],
   "markdown": {
-    "codeBlockIndent": " "
+    "codeBlockIndent": "  ",
+    "mermaid": "streaming"
   }
 }
 ```
 
 When multiple sources specify a session directory, `--session-dir` takes precedence over `sessionDir` in settings. Pi 0.65.0 removed the old `session_directory` extension/settings hook.
+
+- `defaultTools` (Pi 0.84.2) picks the built-in tools enabled at startup (global or per project; project replaces global). An empty array starts with no built-in tools while keeping extension/SDK custom tools. `--tools` remains a strict allowlist for all tools, `--exclude-tools` filters the resulting list.
+- `markdown.mermaid` (Pi 0.84.0): `"off"`, `"final"`, or `"streaming"` — themed Unicode rendering of supported Mermaid diagrams in interactive messages. Pi 0.84.0 also renders terminal-friendly Unicode for LaTeX expressions.
 
 ## Project Trust
 
@@ -273,6 +296,8 @@ pi [options] [@files...] [messages...]
 # prompts and misc
 --system-prompt <text>           replace default
 --append-system-prompt <text>    repeatable; appended with double newlines
+--tui-mode regular|fullscreen    experimental fullscreen TUI (Pi 0.84.0)
+--use-theme <name[/name]>        per-run initial theme, saved settings untouched (Pi 0.84.2)
 --verbose
 ```
 
@@ -284,13 +309,19 @@ pi [options] [@files...] [messages...]
 | `PI_CODING_AGENT_SESSION_DIR` | Override session storage; `--session-dir` still wins |
 | `PI_PACKAGE_DIR` | Override package storage directory |
 | `PI_SKIP_VERSION_CHECK` | Skip the `pi.dev` latest-version request at startup |
-| `PI_OFFLINE` | Disable all startup network operations (update checks, telemetry) |
+| `PI_OFFLINE` | Disable all startup network operations (update checks, telemetry, model catalog refresh) |
 | `PI_TELEMETRY` | Override install/update telemetry and provider attribution headers (`1`/`0`); does not gate update checks |
 | `PI_CACHE_RETENTION` | Set to `long` for extended prompt-cache retention where supported |
 | `PI_OAUTH_CALLBACK_HOST` | Bind the OAuth callback server to a custom interface |
-| `PI_CODING_AGENT=true` | Set automatically at startup so subprocesses can detect Pi |
+| `PI_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
+| `PI_HARDWARE_CURSOR` | `1` shows the hardware cursor (see terminal-setup docs) |
+| `PI_TUI_ESC_TIMEOUT` | Ms to wait after a lone ESC before treating it as Escape (default 100 over SSH, 10 otherwise; Pi 0.84.2) — raise it if Alt-key input is misread |
+| `PI_EXPERIMENTAL` | `1` enables experimental features, e.g. strict JSON-schema sampling for built-in tools (Pi 0.84.2) |
+| `AI_AGENT=pi` / `PI_CODING_AGENT=true` | Set automatically by CLI/RPC entry points so child processes can detect Pi (generic vs Pi-specific marker) |
 | `VISUAL`, `EDITOR` | External editor for `Ctrl+G` (the `externalEditor` setting takes precedence) |
 | Provider API key env vars | See `references/providers.md` |
+
+Bash-tool commands additionally receive session state since Pi 0.82.0: `PI_SESSION_ID`, `PI_SESSION_FILE`, `PI_PROVIDER`, `PI_MODEL`, and `PI_REASONING_LEVEL` (resolved per command; not injected into user-entered `!`/`!!` commands). When asked which model is running, inspect these instead of inferring from the system prompt.
 
 ## Practical Notes
 

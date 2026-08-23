@@ -114,6 +114,8 @@ const inMemory = await ModelRuntime.create({ credentials: new InMemoryCredential
 
 `ModelRuntime.getAuth(providerOrModel)` assembles final request auth (replacing `ModelRegistry.getApiKeyAndHeaders()` on the SDK side); passing a model also resolves built-in, `models.json`, and extension model headers. Dynamic provider catalogs refresh via async `ModelRuntime.refresh()` and are cached in `~/.pi/agent/models-store.json`.
 
+Pi 0.84.x made catalog refresh cancellation-aware: `refresh(options?)` accepts `{ providers?, allowNetwork?, force?, signal? }` and returns a `ModelsRefreshResult` (`{ errors, aborted }`) instead of discarding provider errors; `create({ signal })`, `login()`, `logout()`, and the now-async `setRuntimeApiKey()/removeRuntimeApiKey()` accept optional abort signals too (unbounded when omitted — applications own deadline policy). Credential mutations resolve once local state is consistent, without waiting for remote freshness; if that synchronization fails they reject with the exported `CredentialSynchronizationError` (inspect `providerId`, `operation`, `credential`, `cause` rather than retrying blindly). A failed refresh never undoes a committed credential change, and each `refresh()` starts a fresh generation so stale refreshes cannot publish afterward.
+
 To match CLI model parsing, use the exported resolver helpers (Pi 0.80.4):
 
 ```typescript
@@ -240,19 +242,30 @@ session.subscribe((event) => {
     case "compaction_end":
     case "auto_retry_start":
     case "auto_retry_end":
+    case "summarization_retry_scheduled":   // Pi 0.81.1 — compaction/branch-summary retries
+    case "summarization_retry_attempt_start":
+    case "summarization_retry_finished":
       break;
   }
 });
 ```
 
-`compaction_end` results and RPC `compact` responses include estimated post-compaction token counts (Pi 0.79.8) so clients can show the approximate context reduction.
+`compaction_end` results and RPC `compact` responses include estimated post-compaction token counts (Pi 0.79.8) so clients can show the approximate context reduction. Since Pi 0.81.0, summaries persist their LLM `usage`, and session token/cost totals (footer, `/session`, RPC) include assistant messages, tool-reported usage, and summary generation.
+
+**Streaming deltas (Pi 0.84.x, JSON/RPC wire only):** `message_update` records are delta-only — the cumulative `message` field and `assistantMessageEvent.partial` were removed to keep stream size linear. A top-level `usage` carries latest cumulative provider usage; assemble partial text from `contentIndex` + `delta` between `message_start` and `message_end`, which remains authoritative. In-process SDK subscribers still receive full events.
+
+## Remote Sessions (experimental)
+
+Pi 0.84.0 added transport-neutral remote-session client APIs: `@earendil-works/pi-client` (`PiClient`) with a CBOR protocol over Unix sockets, `@earendil-works/pi-protocol` for the wire contract, and `@earendil-works/pi-coding-agent/client` exporting a `RemoteSession` controller with transcript reducers. Sessions list durable `SessionMetadata`; runtime phase/model/lock state lives on acquired `SessionSnapshot` values. Expect these APIs to evolve while experimental.
 
 ## RPC Mode
 
 `pi --mode rpc` speaks newline-delimited JSON over stdio. Additions since Pi 0.79:
 
 - `agent_settled` event (Pi 0.80.4) fires when a run is fully settled — no automatic retry, compaction retry, or queued continuation remains; `agent_end` now carries `willRetry`. `set_thinking_level` accepts `"max"` where the model supports it.
-- `get_entries` / `get_tree` (Pi 0.80.3) read session entries and tree snapshots over RPC.
+- `get_entries` / `get_tree` (Pi 0.80.3) read session entries and tree snapshots over RPC; `get_available_thinking_levels` (Pi 0.81.0) lists the current model's supported thinking levels.
+- Direct RPC `bash` commands stream `bash_execution_update` chunks correlated by request `id` (Pi 0.82.0); include an `id` on the command to associate them.
+- `compact` responses include summary `usage`; `get_tokens`/`get_status` totals cover assistant messages, tool-reported usage, and summaries (Pi 0.81.0).
 - `@earendil-works/pi-coding-agent/rpc-entry` (Pi 0.80.3) launches Pi directly in RPC mode from an importing process.
 - RPC extension UI request/response types are exported from the public API (Pi 0.79.0).
 - Package asset path helpers are exported from the public API (Pi 0.79.0).

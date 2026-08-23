@@ -23,7 +23,7 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import { Text } from "@earendil-works/pi-tui";
 ```
 
-- Use `typebox` (1.x) for schemas.
+- Use `typebox` (1.x) for schemas. Pi 0.83.0 bundles TypeBox 1.3.7, which removed deprecated APIs (`Type.Base`, `Type.Awaited`, `Type.Promise`, `Type.AsyncIterator`, `Type.Iterator`, `Type.Options`, `Value.Mutate`) — migrate extension sources off those before typechecking against current Pi.
 - Use `StringEnum` from `@earendil-works/pi-ai` for Google-compatible string enums.
 - Pi 0.80.0 moved pi-ai's old global API (`getModel`, `getModels`, `stream`, `complete`, `registerApiProvider`, ...) off the pi-ai root entrypoint to `@earendil-works/pi-ai/compat`. Extensions keep working unchanged at runtime (the extension loader aliases the root to the compat superset), but extension sources that typecheck against pi-ai's published types must import those APIs from `@earendil-works/pi-ai/compat`. `StringEnum` and the type surface remain on the root. The compat entrypoint and loader alias will be removed in a future release.
 
@@ -112,7 +112,7 @@ Useful tool events:
 - `tool_result`
 - `tool_execution_end`
 
-Tool results may include `terminate: true` to end the current tool batch without an automatic follow-up LLM turn — useful for tools that produce a structured final answer (see `examples/extensions/structured-output.ts` in the Pi repo).
+Tool results may include `terminate: true` to end the current tool batch without an automatic follow-up LLM turn — useful for tools that produce a structured final answer (see `examples/extensions/structured-output.ts` in the Pi repo). Since Pi 0.84.1, blocked `tool_call` results may also return `terminate: true`; the agent stops early only when every finalized result in the batch is terminating. Tools that make nested LLM calls can return their combined `Usage` as `usage` on the tool result — Pi persists it and includes it in footer, `/session`, and RPC session totals (Pi 0.81.0), and `tool_result` handlers may inspect or replace that value.
 
 `session_shutdown` events carry `event.reason` (`"quit" | "reload" | "new" | "resume" | "fork"`) and, where applicable, `event.targetSessionFile` so cleanup logic can distinguish teardown paths.
 
@@ -124,7 +124,7 @@ Tool results may include `terminate: true` to end the current tool batch without
 - `ctx.mode` — `"tui" | "rpc" | "json" | "print"`; gate terminal-only features on `ctx.mode === "tui"`
 - `ctx.cwd`
 - `ctx.sessionManager` (read-only; `buildContextEntries()` returns active-branch entries with compaction applied, Pi 0.80.4)
-- `ctx.modelRegistry` / `ctx.model` — `ctx.modelRegistry` is the synchronous extension-facing facade; its `refresh()` became `Promise<void>` in Pi 0.80.8 (await it before synchronous registry reads)
+- `ctx.modelRegistry` / `ctx.model` / `ctx.thinkingLevel` / `ctx.scopedModels` (Pi 0.83.0) — `ctx.modelRegistry` is the synchronous extension-facing facade; its `refresh()` became `Promise<void>` in Pi 0.80.8 (await it before synchronous registry reads). Since Pi 0.84.x it also exposes `getProvider(id)` (effective pi-ai provider) and `getProviderAuth(id)` (API key, headers, base URL, provider-scoped env — no loaded model required). `ctx.scopedModels` is the read-only session model scope resolved from `--models`/`enabledModels` (`{ model, thinkingLevel? }[]`, empty when unscoped); prefer it over enumerating `getAvailable()` for model pickers
 - `ctx.hasUI` — `true` in TUI and RPC modes
 - `ctx.signal` — the active agent abort signal (or `undefined` when idle); pass it to `fetch`/model calls for abort-aware nested work
 - `ctx.isIdle()` / `ctx.hasPendingMessages()`
@@ -185,6 +185,29 @@ Pi 0.80.7 lets an extension register many tools while keeping only a small initi
 Native deferred loading preserves the cached prompt prefix on Anthropic Sonnet/Opus/Fable ≥ 4.5 (not Haiku) and OpenAI `gpt-5.4`+; Kimi K3 works via `compat.deferredToolsMode: "kimi"` (Pi 0.80.9). For verified custom models/proxies, enable `compat.supportsToolReferences: true` (`anthropic-messages`) or `compat.supportsToolSearch: true` (`openai-responses`/`openai-codex-responses`). All other models fall back to sending the full active tool list on the next request — activation still works, but may invalidate the provider's cached prefix. Non-additive changes (removals/replacements) always use the fallback.
 
 Cache tips: keep the loader active for the whole session; add rather than replace. Activating a tool that has `promptSnippet`/`promptGuidelines` rebuilds the system prompt and can invalidate the prefix even with native support — lazily loaded tools should rely on their `description` alone.
+
+## Constrained Tool Sampling
+
+`ToolDefinition.constrainedSampling` (Pi 0.82.0) lets a tool prefer or require provider-side output constraints:
+
+- `{ type: "json_schema", strict: "prefer" | "require" }` — strict JSON-schema constrained decoding of the tool's own TypeBox parameters
+- `{ type: "grammar", variants: { openai_lark?: string, openai_regex?: string } }` — OpenAI Lark/regex grammar encodings
+- Set `false` to explicitly disable for that tool
+
+Model capability metadata gates what is actually sent: `compat.supportsStrictTools` / Anthropic built-ins enable strict JSON-schema tools, and `compat.supportsOpenAIGrammarTools` marks endpoints that accept Lark/regex grammar tools (enabled in generated metadata for GPT-5+ across OpenAI, Codex, Azure, GitHub Copilot, opencode, Cloudflare AI Gateway). Unsupported combinations fall back to normal function tools rather than failing. Independently, Pi 0.84.2 ships experimental strict JSON-schema sampling for its default `read`/`bash`/`edit`/`write` tools under `PI_EXPERIMENTAL=1`.
+
+## Display Transformers
+
+`pi.registerMarkdownTransformer(transformer)` (Pi 0.84.0) chains display-only Markdown transforms over user text, assistant text, and thinking blocks:
+
+```typescript
+pi.registerMarkdownTransformer((markdown, { messageType, isStreaming }) => {
+  if (isStreaming || messageType === "assistant-thinking") return markdown;
+  return markdown.replaceAll("-->", "→");
+});
+```
+
+Context carries `messageType` (`"user" | "assistant" | "assistant-thinking"`), `isStreaming`, and `availableWidth` (terminal columns). The hook runs for new messages, restored sessions, and terminal resizes, so keep it synchronous and cheap; a throwing transformer leaves prior output intact and Pi continues the chain. The session and model context are never modified — this is render-only.
 
 ## UI Methods
 
@@ -304,7 +327,9 @@ pi.registerProvider("anthropic", { baseUrl: "https://proxy.example.com" });
 pi.unregisterProvider("my-provider");
 ```
 
-Dynamic providers can implement `refreshModels(context)` (Pi 0.80.8) for model discovery: Pi calls it during catalog refresh (`/model`, `pi update --models`) and publishes the returned list; its models replace extension-provided `models`. Persist results through the scoped `context.store` only when they should survive restarts — live servers like llama.cpp can ignore it.
+Dynamic providers can implement `refreshModels(context)` (Pi 0.80.8) for model discovery: Pi calls it during catalog refresh (`/model`, `pi update --models`) and publishes the returned list; its models replace extension-provided `models`. Since Pi 0.84.0 the context is read-snapshot + generation-checked publication: read `context.stored` (the persisted provider snapshot) instead of `context.store`, and persist through `context.publish({ update?, persist? })` — `persist` omitted leaves storage unchanged, a `ModelsStoreEntry` writes it, `persist: null` deletes it. Config-form callbacks that only return models remain unchanged.
+
+Since Pi 0.81.0, extensions can also register a complete pi-ai `Provider` via `pi.registerProvider(createProvider({...}))` — native auth (`login`/`resolve`), `getModels`, `refreshModels`, `filterModels`, and custom streaming. The registered provider becomes the composition base; `models.json` overrides still apply above it. Prefer this when you need real authentication or stream behavior rather than just a model list. The legacy config form (`name`, `baseUrl`, `apiKey`, `models`, `oauth`, `streamSimple`) remains supported. OAuth `refreshToken(credentials, signal)` callbacks must accept and honor the abort signal since Pi 0.84.0.
 
 If you need auth for a specific model request, use:
 
@@ -312,7 +337,7 @@ If you need auth for a specific model request, use:
 const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
 ```
 
-(Still supported for extensions in Pi 0.80.8+; SDK code should use `ModelRuntime.getAuth()` — see `references/sdk.md`.)
+(Still supported for extensions in Pi 0.80.8+; SDK code should use `ModelRuntime.getAuth()` — see `references/sdk.md`. `ProviderHeaders` values are `string | null` since Pi 0.84.0, where `null` is a delete marker: handle `null` when inspecting, pass through unchanged when forwarding to pi-ai streams.)
 
 Pass `shouldStopAfterTurn` via the SDK to exit the agent loop gracefully after a completed turn. See `references/sdk.md` and `references/providers.md` for the full provider/model schema.
 

@@ -1,5 +1,37 @@
 # @counterposition/skill-pi
 
+## 0.84.2
+
+### Minor Changes
+
+- Sync the Pi skill with Pi 0.84.2, covering changes across 0.81–0.84.2.
+  - Packages: new experimental `pi-client`, `pi-protocol`, and `pi-telemetry`
+    packages plus the `./client` and `./rpc-entry` entrypoints on
+    pi-coding-agent (Pi 0.84.0), and guidance to pin extension
+    devDependencies to the current Pi line while keeping `"*"` peers.
+  - Extensions: tool results may set `terminate: true` to end the batch without
+    an automatic follow-up turn; `input` events accept `streamingBehavior`
+    (`"steer"` | `"followUp"`); handlers get `ctx.modelRegistry`, `ctx.model`,
+    `ctx.thinkingLevel`, and `ctx.scopedModels` (Pi 0.83.0). Document the
+    TypeBox 1.3.7 removals (`Type.Base`, `Type.Awaited`, `Type.Promise`,
+    `Type.Iterator`/`Type.AsyncIterator`, `Type.Options`, `Value.Mutate`)
+    bundled inside Pi since 0.83.0 and the pi-ai root → `/compat` move of the
+    old global API (Pi 0.80.0).
+  - SDK: `ModelRuntime.getAuth(providerOrModel)` replaces the removed
+    SDK-facing `ModelRegistry.getApiKeyAndHeaders()`; add the
+    `compaction_start`/`compaction_end`, `auto_retry_start`/`auto_retry_end`,
+    and `summarization_retry_scheduled` events (Pi 0.81.1).
+  - Providers: Claude Pro/Max extra-usage billing with the
+    `warnings.anthropicExtraUsage` suppressor, OpenAI ChatGPT Plus/Pro (Codex)
+    `/login`, new Together AI, Baseten, Kimi For Coding, and MiniMax (global +
+    China) rows, free-form request `samplingParams` merging for
+    OpenAI-compatible providers (Pi 0.84.0), and `thinkingLevelMap` vs
+    `compat.reasoningEffortMap` guidance.
+  - Settings/context: `AGENTS.override.md` context-file override (Pi 0.84.0),
+    the `defaultTools` setting (Pi 0.84.2) and `enabledModels`,
+    `doubleEscapeAction`, `treeFilterMode` variants, `/tree` Shift+T
+    timestamps, and the full `--thinking <level>` CLI range.
+
 ## 0.80.9
 
 ### Minor Changes

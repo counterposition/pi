@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.3
+
+### Patch Changes
+
+- Align the Pi dev dependencies with the current `@earendil-works/*` 0.84 line so
+  typecheck and tests run against the Pi release users actually run (0.84.2).
+  Runtime is unchanged — the extension still declares the Pi core libraries as
+  `"*"` peer dependencies, and its only pi-ai import (`StringEnum`) remains on
+  the root entrypoint after the 0.80.0 move of the old global API to
+  `@earendil-works/pi-ai/compat`; typebox moves to ^1.3.16 to match Pi 0.83's
+  bundled TypeBox.
+
 ## 0.5.2
 
 ### Patch Changes

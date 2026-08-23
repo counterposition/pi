@@ -9,12 +9,13 @@ Use `/login` in interactive mode, then select a provider. The `/login` selector 
 - Anthropic Claude Pro / Max — third-party usage draws from extra usage and is billed per token (suppress the warning via `warnings.anthropicExtraUsage`)
 - OpenAI ChatGPT Plus / Pro (Codex) — `/login` defaults to browser auth but can use a device-code flow for headless environments
 - GitHub Copilot
+- OpenRouter (Pi 0.82.0) — `/login openrouter` runs a PKCE flow that mints a user-controlled API key billed from OpenRouter credits; on headless/SSH hosts paste the redirect URL or authorization code into the prompt (Pi 0.83.0). `OPENROUTER_API_KEY` still works via **Use an API key**
 - xAI (Grok/X subscription, Pi 0.80.8) — `/login xai` then **Use a subscription** (device-code OAuth); `XAI_API_KEY` remains available via **Use an API key**
 - Radius (Pi 0.80.8) — a dynamic `pi-messages` gateway; `/login radius` stores OAuth tokens, and custom Radius gateways can be declared in `models.json` with `"oauth": "radius"` plus a gateway `baseUrl`
 
-`/login <provider>` with autocomplete works since Pi 0.80.4, and login methods are provider-owned since 0.80.8 (registered pi-ai providers expose their own auth options and status in `/login`). Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Google Gemini CLI and Google Antigravity providers.
+`/login <provider>` with autocomplete works since Pi 0.80.4, and login methods are provider-owned since 0.80.8 (registered pi-ai providers expose their own auth options and status in `/login`). Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Google Gemini CLI and Google Antigravity providers. `pi auth check [provider|model]` (Pi 0.84.1) preflights credential readiness; `pi auth print-api-key` / `pi auth print-bearer-token` (Pi 0.83.0) export resolved credentials to external clients, refreshing OAuth as needed.
 
-Since Pi 0.80.8, built-in catalogs are complemented by dynamic ones: `/model` refreshes configured providers in the background, `pi update --models` forces an immediate refresh, and refreshed catalogs are cached in `~/.pi/agent/models-store.json` for offline use.
+Since Pi 0.80.8, built-in catalogs are complemented by dynamic ones: `/model` refreshes configured providers in the background, `pi update --models` forces an immediate refresh, and refreshed catalogs are cached in `~/.pi/agent/models-store.json` for offline use. Refreshes revalidate with `If-None-Match` since Pi 0.82.1 so unchanged catalogs answer `304`.
 
 ## API Key Providers
 
@@ -44,9 +45,12 @@ Since Pi 0.80.8, built-in catalogs are complemented by dynamic ones: `/model` re
 | Hugging Face | `HF_TOKEN` | `huggingface` |
 | Fireworks | `FIREWORKS_API_KEY` | `fireworks` |
 | Together AI | `TOGETHER_API_KEY` | `together` |
+| Baseten | `BASETEN_API_KEY` | `baseten` |
 | Kimi For Coding | `KIMI_API_KEY` | `kimi-coding` |
 | MiniMax | `MINIMAX_API_KEY` | `minimax` |
 | MiniMax (China) | `MINIMAX_CN_API_KEY` | `minimax-cn` |
+| Qwen Token Plan / Individual | `QWEN_TOKEN_PLAN_API_KEY` | `qwen-token-plan` / `qwen-token-plan-individual` (Pi 0.81.0 / 0.84.1) |
+| Qwen Token Plan (China) | `QWEN_TOKEN_PLAN_CN_API_KEY` | `qwen-token-plan-cn` (Pi 0.81.0) |
 | Xiaomi MiMo | `XIAOMI_API_KEY` | `xiaomi` |
 | Xiaomi MiMo Token Plan (CN/AMS/SGP) | `XIAOMI_TOKEN_PLAN_{CN,AMS,SGP}_API_KEY` | `xiaomi-token-plan-{cn,ams,sgp}` |
 
@@ -188,18 +192,23 @@ Common `api` values:
 
 ### Model & Compatibility Knobs
 
+- `samplingParams` (Pi 0.84.0) is a free-form object merged verbatim into every request body after pi's own fields (its keys win) — for OpenAI-compatible APIs only (`openai-completions`, `openai-responses`, `azure-openai-responses`). Use it for server-specific knobs like llama.cpp `min_p` or vLLM `top_k`; in `modelOverrides` it merges per key.
 - `thinkingLevelMap` (Pi 0.72) replaces `compat.reasoningEffortMap`. Map pi levels (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`) to provider values; use `null` to hide a level. Maps may contain holes (Pi 0.80.6) — e.g. expose `high` and `max` without `xhigh`. When a key is omitted, standard levels through `high` use the provider default mapping, but the extended `xhigh`/`max` levels are unsupported.
 - `cost` supports request-wide input pricing tiers (Pi 0.80.6): a `tiers` array where each tier supplies a complete alternate rate set and applies to the whole request when total input usage (`input + cacheRead + cacheWrite`) exceeds `inputTokensAbove`; the highest matching threshold wins. Also usable in `modelOverrides` and extension-registered providers.
-- `modelOverrides` applies to built-in and (since Pi 0.80.4) extension-registered provider models; per-model fields: `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost` (partial), `contextWindow`, `maxTokens`, `headers`, `compat`.
+- `modelOverrides` applies to built-in and (since Pi 0.80.4) extension-registered provider models; per-model fields: `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost` (partial), `contextWindow`, `maxTokens`, `samplingParams`, `headers`, `compat`.
 - `openRouterRouting` is forwarded as-is in the OpenRouter `provider` field (fallbacks, ZDR, ignore lists, throughput/latency).
-- `compat.thinkingFormat` supports OpenAI-compatible reasoning variants: `openrouter` sends `reasoning: { effort }`, `together` sends `reasoning: { enabled }` plus `reasoning_effort` when supported, `qwen-chat-template` targets local Qwen-compatible servers that read `chat_template_kwargs.enable_thinking`, and `chat-template` (Pi 0.79.9) sends configurable `chat_template_kwargs` via `compat.chatTemplateKwargs` — e.g. `{ "thinking": { "$var": "thinking.enabled" } }` for DeepSeek models behind vLLM/Hugging Face chat templates (`"$var"` accepts `"thinking.enabled"` or `"thinking.effort"`).
+- `compat.thinkingFormat` supports OpenAI-compatible reasoning variants: `openrouter` sends `reasoning: { effort }`, `together` sends `reasoning: { enabled }` plus `reasoning_effort` when supported, `qwen-chat-template` targets local Qwen-compatible servers that read `chat_template_kwargs.enable_thinking`, `chat-template` (Pi 0.79.9) sends configurable `chat_template_kwargs` via `compat.chatTemplateKwargs` — e.g. `{ "thinking": { "$var": "thinking.enabled" } }` for DeepSeek models behind vLLM/Hugging Face chat templates — and `baseten` (Pi 0.84.0) sends `chat_template_args` via `compat.chatTemplateArgs`.
 - **Breaking (Pi 0.80.7):** `compat.sendSessionIdHeader` was removed. Session affinity is now controlled by `compat.sessionAffinityFormat` (`"openai"` sends `session_id`/`x-client-request-id`, `"openai-nosession"` omits the underscore-containing `session_id` header, `"openrouter"` sends `x-session-id`; default auto-detected). Replace `sendSessionIdHeader: false` with `sessionAffinityFormat: "openai-nosession"`. `sendSessionAffinityHeaders` still gates the behavior for `openai-completions`.
-- `compat.deferredToolsMode: "kimi"` (Pi 0.80.9) enables Kimi's deferred tool serialization; `compat.supportsToolReferences` / `compat.supportsToolSearch` enable native dynamic tool loading on verified custom endpoints (see `references/extensions.md`).
-- Advanced `compat` flags exist for proxy quirks (`cacheControlFormat`, `supportsReasoningEffort`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `supportsStrictMode`). See [Pi `docs/models.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
+- `compat.deferredToolsMode: "kimi"` (Pi 0.80.9) enables Kimi's deferred tool serialization; `compat.supportsToolReferences` / `compat.supportsToolSearch` enable native dynamic tool loading on verified custom endpoints, and `compat.supportsStrictTools` / `compat.supportsOpenAIGrammarTools` / per-model `constrainedSampling` gate constrained sampling (see `references/extensions.md`). `compat.supportsFinishReason: false` (Pi 0.84.0) tells pi to infer stop/toolUse for OpenAI-compatible streams that omit `finish_reason`.
+- Advanced `compat` flags exist for proxy quirks (`cacheControlFormat` — now also covering tool-result text content, `supportsReasoningEffort`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `supportsStrictMode`). See [Pi `docs/models.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
 
 ### Context Overflow Recovery
 
 Pi can auto-compact and retry when a provider fails with a recognized context-window overflow. For custom providers whose overflow text Pi does not recognize, use a provider-scoped `message_end` extension handler to rewrite the finalized assistant `errorMessage` so it starts with `context_length_exceeded`.
+
+### llama.cpp
+
+Pi supports the llama.cpp router server (Pi 0.81.0): configure with `/login llama.cpp`, search/download Hugging Face models and load/unload with live progress via `/llama`, then select loaded models in `/model`. The model catalog persists across restarts (fixed in Pi 0.82.1). See [Pi `docs/llama-cpp.md`](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/llama-cpp.md).
 
 ## Custom Providers via Extensions
 
