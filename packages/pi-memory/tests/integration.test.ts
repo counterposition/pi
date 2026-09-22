@@ -37,16 +37,7 @@ describe("integration", () => {
     const harness = registerExtension();
     await callHandler(harness, "session_start", {}, { cwd: environment.cwd, hasUI: false });
 
-    const before = await callHandler(
-      harness,
-      "before_agent_start",
-      { systemPrompt: "" },
-      {
-        cwd: environment.cwd,
-        hasUI: false,
-      },
-    );
-    expect(getReturnedPrompt(before)).toContain("Memory: 7 topics");
+    expect(await getInjectedSection(harness, environment.cwd)).toContain("Memory: 7 topics");
 
     const writeTool = harness.tools.get("memory_write");
     expect(writeTool).toBeDefined();
@@ -59,16 +50,7 @@ describe("integration", () => {
       new AbortController().signal,
     );
 
-    const after = await callHandler(
-      harness,
-      "before_agent_start",
-      { systemPrompt: "" },
-      {
-        cwd: environment.cwd,
-        hasUI: false,
-      },
-    );
-    expect(getReturnedPrompt(after)).toContain("Memory: 8 topics");
+    expect(await getInjectedSection(harness, environment.cwd)).toContain("Memory: 8 topics");
   });
 
   it("moves an entry across scopes through the memory_move tool", async () => {
@@ -561,11 +543,16 @@ function getLastCommandOutput(harness: ReturnType<typeof registerExtension>): st
   return String(message?.content);
 }
 
-function getReturnedPrompt(result: unknown): string {
-  expect(result).toMatchObject({
-    systemPrompt: expect.any(String),
-  });
-  return (result as { systemPrompt: string }).systemPrompt;
+async function getInjectedSection(
+  harness: ReturnType<typeof registerExtension>,
+  cwd: string,
+): Promise<string | undefined> {
+  const event = {
+    systemPrompt: "",
+    systemPromptOptions: { sections: {} as Record<string, string> },
+  };
+  await callHandler(harness, "before_agent_start", event, { cwd, hasUI: false });
+  return event.systemPromptOptions.sections.memory;
 }
 
 async function createEmptyRuntimeEnvironment(): Promise<{

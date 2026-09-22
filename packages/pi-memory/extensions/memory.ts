@@ -2,7 +2,6 @@ import { StringEnum } from "@earendil-works/pi-ai";
 import { CustomMessageComponent } from "@earendil-works/pi-coding-agent";
 import type {
   BeforeAgentStartEvent,
-  BeforeAgentStartEventResult,
   ExtensionAPI,
   ExtensionCommandContext,
   MessageRenderer,
@@ -63,8 +62,6 @@ interface MemoryCommandContext {
   ui?: MemoryCommandUi;
 }
 
-const MEMORY_PROMPT_PREFIX =
-  "Durable memory is available through memory_search, memory_write, and memory_move.";
 const MEMORY_COMMAND_MESSAGE_TYPE = "pi-memory-command";
 const MEMORY_COMMAND_MESSAGE_LABEL = "Memory";
 
@@ -93,12 +90,7 @@ export default function (pi: ExtensionAPI) {
     const currentRuntime = await ensureRuntime(ctx.cwd);
     if (!currentRuntime.config.enabled) return;
 
-    return {
-      systemPrompt: mergeSystemPrompt(
-        event.systemPrompt,
-        buildInjectedPrompt(currentRuntime.orientation),
-      ),
-    } satisfies BeforeAgentStartEventResult;
+    event.systemPromptOptions.sections.memory = buildInjectedPrompt(currentRuntime.orientation);
   });
 
   pi.on("tool_call", async (event: ToolCallEvent, ctx): Promise<ToolCallEventResult | void> => {
@@ -500,18 +492,6 @@ function ensureEnabled(runtime: RuntimeState): void {
   if (!runtime.config.enabled) {
     throw new Error("Memory is disabled in global Pi settings.");
   }
-}
-
-function mergeSystemPrompt(basePrompt: string, injectedPrompt: string): string {
-  if (basePrompt.includes(MEMORY_PROMPT_PREFIX)) {
-    return basePrompt;
-  }
-
-  if (basePrompt.trim() === "") {
-    return injectedPrompt;
-  }
-
-  return `${basePrompt.trimEnd()}\n\n${injectedPrompt}`;
 }
 
 const renderMemoryCommandMessage: MessageRenderer<MemoryCommandDetails> = (message) =>

@@ -32,7 +32,7 @@ describe("memory extension", () => {
     expect(harness.messageRenderers.has("pi-memory-command")).toBe(true);
   });
 
-  it("injects the memory contract and cached orientation summary", async () => {
+  it("injects the memory contract as a system prompt section", async () => {
     const environment = await createRuntimeFixtureEnvironment();
     tempDirs.push(environment.tempDir);
     process.env.PI_CODING_AGENT_DIR = environment.roots.agentDir;
@@ -40,43 +40,20 @@ describe("memory extension", () => {
     const harness = registerExtension();
     await callHandler(harness, "session_start", {}, { cwd: environment.cwd, hasUI: false });
 
-    const event = { systemPrompt: "Base prompt" };
+    const event = createBeforeAgentStartEvent();
     const result = await callHandler(harness, "before_agent_start", event, {
       cwd: environment.cwd,
       hasUI: false,
     });
-    const returnedPrompt = getReturnedPrompt(result);
+    const section = event.systemPromptOptions.sections.memory;
 
+    expect(result).toBeUndefined();
     expect(event.systemPrompt).toBe("Base prompt");
-    expect(returnedPrompt).toContain("Base prompt");
-    expect(returnedPrompt).toContain(
+    expect(Object.keys(event.systemPromptOptions.sections)).toEqual(["memory"]);
+    expect(section).toContain(
       "Durable memory is available through memory_search, memory_write, and memory_move.",
     );
-    expect(returnedPrompt).toContain("Memory: 7 topics");
-  });
-
-  it("does not append the memory contract twice", async () => {
-    const environment = await createRuntimeFixtureEnvironment();
-    tempDirs.push(environment.tempDir);
-    process.env.PI_CODING_AGENT_DIR = environment.roots.agentDir;
-
-    const harness = registerExtension();
-    await callHandler(harness, "session_start", {}, { cwd: environment.cwd, hasUI: false });
-
-    const first = await callHandler(
-      harness,
-      "before_agent_start",
-      { systemPrompt: "Base prompt" },
-      { cwd: environment.cwd, hasUI: false },
-    );
-    const second = await callHandler(
-      harness,
-      "before_agent_start",
-      { systemPrompt: getReturnedPrompt(first) },
-      { cwd: environment.cwd, hasUI: false },
-    );
-
-    expect(countOccurrences(getReturnedPrompt(second), "Durable memory is available")).toBe(1);
+    expect(section).toContain("Memory: 7 topics");
   });
 
   it("allows read tool calls into the managed memory root", async () => {
@@ -528,13 +505,9 @@ function getLastCommandOutput(harness: ReturnType<typeof registerExtension>): st
   return String(message?.content);
 }
 
-function getReturnedPrompt(result: unknown): string {
-  expect(result).toMatchObject({
-    systemPrompt: expect.any(String),
-  });
-  return (result as { systemPrompt: string }).systemPrompt;
-}
-
-function countOccurrences(value: string, pattern: string): number {
-  return value.split(pattern).length - 1;
+function createBeforeAgentStartEvent(): {
+  systemPrompt: string;
+  systemPromptOptions: { sections: Record<string, string> };
+} {
+  return { systemPrompt: "Base prompt", systemPromptOptions: { sections: {} } };
 }
