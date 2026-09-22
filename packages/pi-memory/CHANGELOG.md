@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.5
+
+### Patch Changes
+
+- Inject the memory contract and orientation summary as a `memory` system
+  prompt section instead of returning a full `systemPrompt` replacement from
+  `before_agent_start`. Since Pi 0.86.0 section changes are recorded as
+  transcript deltas, preserving the cached prompt prefix across runs. Pi
+  rebuilds sections for every run, so the old duplicate-injection guard is
+  gone.
+
 ## 0.2.4
 
 ### Patch Changes
