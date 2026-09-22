@@ -10,7 +10,7 @@ This repo builds the pieces that extend Pi and teach other coding agents about i
 
 **[`packages/pi-web-search`](packages/pi-web-search/)** -- An extension that adds `web_search` and `web_fetch` tools. Three search backends (Brave, Tavily, Exa) behind a single interface with automatic provider ranking and fallback. Page fetching via Jina Reader.
 
-**[`packages/pi-memory`](packages/pi-memory/)** -- An extension that adds explicit, Markdown-backed durable memory with global and project scopes.
+**[`packages/pi-memory`](packages/pi-memory/)** -- An extension that adds explicit, Markdown-backed durable memory with global and project scopes. Not yet published to npm.
 
 **[`packages/skill-pi`](packages/skill-pi/)** -- The `pi` skill packaged for `npm`, so `pi install` can fetch it from the registry.
 
@@ -24,8 +24,8 @@ pi install npm:@counterposition/skill-pi
 # the web search extension
 pi install npm:@counterposition/pi-web-search
 
-# the memory extension
-pi install npm:@counterposition/pi-memory
+# the memory extension (unpublished; install from a clone)
+pi install ./packages/pi-memory
 ```
 
 ---

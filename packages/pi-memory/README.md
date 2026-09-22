@@ -32,6 +32,8 @@ explicit-only `memory_write`, corrective `memory_move`, and `/memory`,
 
 ## Install
 
+Not yet published to npm. Install from a clone of this repo:
+
 ```bash
-pi install npm:@counterposition/pi-memory
+pi install ./packages/pi-memory
 ```

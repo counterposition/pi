@@ -1,6 +1,7 @@
 {
   "name": "@counterposition/pi-memory",
   "version": "0.2.3",
+  "private": true,
   "description": "Durable Markdown-backed memory for Pi",
   "keywords": [
     "memory",
