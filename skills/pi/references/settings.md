@@ -18,6 +18,7 @@ Edit JSON directly or use `/settings` for common interactive options.
   "defaultThinkingLevel": "medium",
   "hideThinkingBlock": false,
   "showCacheMissNotices": false,
+  "cacheWarming": "streaming",
   "thinkingBudgets": {
     "minimal": 1024,
     "low": 4096,
@@ -29,7 +30,9 @@ Edit JSON directly or use `/settings` for common interactive options.
 
 - Thinking levels: `"off"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"` — `max` (Pi 0.80.6) is an opt-in level above `xhigh`, exposed only when the selected model supports it (some models, e.g. GPT-5.6, expose both). Custom themes can define `thinkingMax`; existing themes fall back to `thinkingXhigh`.
 - `hideThinkingBlock` hides visible thinking output in the UI
-- `showCacheMissNotices` (Pi 0.80.4) shows transcript notices for significant prompt-cache misses
+- `showCacheMissNotices` (Pi 0.80.4) shows transcript notices for significant prompt-cache misses; newer releases also report successful cache warming, compaction/branch-summary usage, and provider recovery
+- `cacheWarming` (Pi 0.86.0, global only): `"off"`, `"streaming"` (default — keep eligible caches alive during long tool runs), or `"idle"` (also between runs). Pi warms only when the model declares a `promptCache` lifetime and it estimates at least $0.05 in avoided cache-miss cost; refresh usage counts toward session totals but never enters model context. `/session` shows the next decision; extensions can override via `cache_warming_decision`
+- `/model` and `/thinking` (Pi 0.84.3) selections are session-scoped; press `Ctrl+S` in the selector to save as the global default
 
 ## UI & Display
 
@@ -63,13 +66,15 @@ Experimental since Pi 0.84.0:
 {
   "tuiMode": "regular",
   "fullscreenExitOutput": "transcript",
-  "fullscreenScrollbar": "auto"
+  "fullscreenScrollbar": "auto",
+  "fullscreenCopyOnSelect": true
 }
 ```
 
 - `tuiMode`: `"regular"` (default) or `"fullscreen"`; `/settings` switches at runtime, `--tui-mode` overrides per run
 - `fullscreenExitOutput` (Pi 0.84.2): `"transcript"` prints the final transcript on exit; `"resume-hint"` restores the previous screen and prints only a resume hint
 - `fullscreenScrollbar`: `"auto"` shows while scrolling, `"always"` reserves the rightmost column, `"hidden"`
+- `fullscreenCopyOnSelect` (Pi 0.84.4, default `true`): when `false`, `Ctrl+X` copies the active selection (falling back to the last assistant message)
 - Fullscreen keeps editor/status/widgets/footer docked while the transcript scrolls independently; transcript search (`Ctrl+Shift+F`, Pi 0.84.2), page/half-page/line scrolling, and marked-message navigation are configurable via `tui.altScreen.*` keybindings
 - Theme tokens `scrollbarThumb`, `searchMatchBg`, `searchMatchText` are optional additions with fallbacks (`selectedBg`, `selectedBg`, `text`)
 
@@ -80,7 +85,10 @@ Experimental since Pi 0.84.0:
   "compaction": {
     "enabled": true,
     "reserveTokens": 16384,
-    "keepRecentTokens": 20000
+    "keepRecentTokens": 20000,
+    "modelOverrides": {
+      "anthropic/claude-opus-5-5": { "reserveTokens": 32768 }
+    }
   },
   "branchSummary": {
     "reserveTokens": 16384,
@@ -90,6 +98,7 @@ Experimental since Pi 0.84.0:
     "enabled": true,
     "maxRetries": 3,
     "baseDelayMs": 2000,
+    "maxAgentDelayMs": 60000,
     "provider": {
       "timeoutMs": 3600000,
       "maxRetries": 0,
@@ -101,7 +110,8 @@ Experimental since Pi 0.84.0:
 
 Notes:
 
-- `retry.maxRetries` (default `3`) and `retry.baseDelayMs` (default `2000`) govern Pi's own agent-level retry with exponential backoff.
+- `compaction.modelOverrides` (Pi 0.86.0) sets per-model `reserveTokens`/`keepRecentTokens` keyed by exact `provider/modelId`; each value falls back to the ordinary compaction setting, then the default.
+- `retry.maxRetries` (default `3`) and `retry.baseDelayMs` (default `2000`) govern Pi's own agent-level retry with exponential backoff, capped per attempt by `retry.maxAgentDelayMs` (default `60000`, Pi 0.86.0).
 - `retry.provider.*` controls the underlying provider SDK's request timeout and retry/backoff — useful for slow local LLMs and flaky proxies. `retry.provider.timeoutMs` sets the SDK request timeout; `retry.provider.maxRetries` defaults to `0` (keep it there unless you need SDK-level retries, since raising it can let provider retries swallow usage-limit errors before Pi handles them).
 - `retry.provider.maxRetryDelayMs` (default `60000`) caps how long a server-requested retry delay can be before the request fails immediately with an informative error; set to `0` to disable the cap. The old top-level `retry.maxDelayMs` was renamed to this and is auto-migrated.
 - `branchSummary.skipPrompt` skips the confirmation step when navigating with `/tree`.
@@ -133,7 +143,10 @@ Notes:
     "showImages": true,
     "clearOnShrink": false,
     "showTerminalProgress": false,
-    "imageWidthCells": 60
+    "imageWidthCells": 60,
+    "hyperlinks": "auto",
+    "images": "auto",
+    "trueColor": "auto"
   },
   "images": {
     "autoResize": true,
@@ -149,6 +162,7 @@ Notes:
 - `npmCommand` is argv-style and is used for npm lookup/install operations, including git-package installs. User-scoped npm packages install under `~/.pi/agent/npm/`; project-scoped npm packages install under `.pi/npm/`.
 - `terminal.showTerminalProgress` (default `false` since Pi 0.70.0) toggles OSC 9;4 progress reporting in supporting terminals (iTerm2, WezTerm, Windows Terminal, Kitty).
 - `terminal.imageWidthCells` (Pi 0.68.1) caps inline tool-output image width in terminal cells.
+- `terminal.hyperlinks` / `terminal.images` (`"kitty" | "iterm2" | "auto" | false`) / `terminal.trueColor` (Pi 0.84.4) override capability detection (settings win over `PI_HYPERLINKS`, `PI_IMAGE_PROTOCOL`, `PI_TRUE_COLOR`). Only force what the full terminal path (tmux, SSH) supports.
 
 ## Warnings & Telemetry
 
@@ -177,7 +191,7 @@ Notes:
 
 When multiple sources specify a session directory, `--session-dir` takes precedence over `sessionDir` in settings. Pi 0.65.0 removed the old `session_directory` extension/settings hook.
 
-- `defaultTools` (Pi 0.84.2) picks the built-in tools enabled at startup (global or per project; project replaces global). An empty array starts with no built-in tools while keeping extension/SDK custom tools. `--tools` remains a strict allowlist for all tools, `--exclude-tools` filters the resulting list.
+- `defaultTools` (Pi 0.84.2) picks the built-in tools enabled at startup (default `read`, `bash`, `edit`, `write`; also available: `grep`, `find`, `ls`, and `powershell` on Windows since Pi 0.84.3) (global or per project; project replaces global). An empty array starts with no built-in tools while keeping extension/SDK custom tools. `--tools` remains a strict allowlist for all tools, `--exclude-tools` filters the resulting list.
 - `markdown.mermaid` (Pi 0.84.0): `"off"`, `"final"`, or `"streaming"` — themed Unicode rendering of supported Mermaid diagrams in interactive messages. Pi 0.84.0 also renders terminal-friendly Unicode for LaTeX expressions.
 
 ## Project Trust
@@ -301,6 +315,8 @@ pi [options] [@files...] [messages...]
 --verbose
 ```
 
+Use `/bug [description]` (Pi 0.86.0) to report a problem with redacted diagnostics, optionally the transcript or a model-written summary; it uploads to Radius or exports a ZIP. Crashes are recorded in `~/.pi/agent/crashes.json` and attached to the next report.
+
 ## Environment Variables
 
 | Variable | Effect |
@@ -316,7 +332,7 @@ pi [options] [@files...] [messages...]
 | `PI_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
 | `PI_HARDWARE_CURSOR` | `1` shows the hardware cursor (see terminal-setup docs) |
 | `PI_TUI_ESC_TIMEOUT` | Ms to wait after a lone ESC before treating it as Escape (default 100 over SSH, 10 otherwise; Pi 0.84.2) — raise it if Alt-key input is misread |
-| `PI_EXPERIMENTAL` | `1` enables experimental features, e.g. strict JSON-schema sampling for built-in tools (Pi 0.84.2) |
+| `PI_EXPERIMENTAL` | `1` enables experimental features (strict JSON-schema sampling for built-in tools no longer needs it since Pi 0.86.0) |
 | `AI_AGENT=pi` / `PI_CODING_AGENT=true` | Set automatically by CLI/RPC entry points so child processes can detect Pi (generic vs Pi-specific marker) |
 | `VISUAL`, `EDITOR` | External editor for `Ctrl+G` (the `externalEditor` setting takes precedence) |
 | Provider API key env vars | See `references/providers.md` |

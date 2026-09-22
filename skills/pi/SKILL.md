@@ -7,7 +7,7 @@ compatibility: "Pi-specific guidance for agents that support Agent Skills"
 
 # Pi Coding Agent
 
-Pi is a minimal terminal coding harness. Default tools: `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls` (configurable via the `defaultTools` setting since Pi 0.84.2). Modes: interactive (`pi`), print (`pi -p`), JSON (`--mode json`), RPC (`--mode rpc`), or embedded (`createAgentSession()`). Sub-agents, plan mode, permission flows, and MCP are intentionally left to extensions and Pi packages. Skill synced with Pi 0.84.2.
+Pi is a minimal terminal coding harness. Default tools: `read`, `bash`, `edit`, `write`; `grep`, `find`, `ls`, and the Windows `powershell` tool (Pi 0.84.3) are opt-in via the `defaultTools` setting or `--tools`. Modes: interactive (`pi`), print (`pi -p`), JSON (`--mode json`), RPC (`--mode rpc`), or embedded (`createAgentSession()`). Sub-agents, plan mode, permission flows, and MCP are intentionally left to extensions and Pi packages. Skill synced with Pi 0.87.1.
 
 Pi's philosophy: **adapt Pi to your workflows, not the other way around**.
 
@@ -59,7 +59,7 @@ Core packages on npm (source: [github.com/earendil-works/pi](https://github.com/
 - **Context files & prompt templates** — Pi loads `AGENTS.md` / `CLAUDE.md` from the agent dir and from `cwd` up through ancestors. Per-directory `AGENTS.override.md` (Pi 0.84.0) replaces same-directory context files while others layer normally. `.pi/SYSTEM.md` replaces the system prompt; `APPEND_SYSTEM.md` appends. Prompt templates in `prompts/` become slash commands. → `references/settings.md`
 - **SDK** — Programmatic embedding via `createAgentSession()`; `createAgentSessionRuntime()` for session replacement. → `references/sdk.md`
 - **Custom providers & models** — `models.json` or extension `pi.registerProvider()` (config form or complete pi-ai providers) for any OpenAI-/Anthropic-/Google-compatible or custom LLM endpoint. → `references/providers.md`
-- **Sessions & compaction** — Append-only JSONL with a tree structure; branch with `/tree`, `/fork`, `/clone`, compact with `/compact`. Auto-compaction triggers when `contextTokens > contextWindow - reserveTokens`. Extensions intercept via `session_before_compact`. → `references/extensions.md` and `references/sdk.md`
+- **Sessions & compaction** — Append-only JSONL with a tree structure; branch with `/tree`, `/fork`, `/clone`, compact with `/compact`. Auto-compaction triggers when `contextTokens > contextWindow - reserveTokens`. Extensions intercept via `session_before_compact`. Since Pi 0.87.0 `SessionManager` is canonical for model context: append-only `context_edit` entries omit or replace messages in future requests without rewriting history. → `references/extensions.md` and `references/sdk.md`
 
 ## How to Use This Skill
 

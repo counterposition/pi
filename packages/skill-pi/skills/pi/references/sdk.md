@@ -71,7 +71,6 @@ const { session } = await createAgentSession({
   customTools: [/* defineTool(...) entries */],
   resourceLoader: new DefaultResourceLoader(),
   sessionManager: SessionManager.inMemory(),
-  shouldStopAfterTurn: (state) => state.turnCount >= 5,
 });
 ```
 
@@ -82,7 +81,7 @@ Notes:
 - `customTools` accepts `ToolDefinition[]`. Build them with `defineTool({...})` for full TypeScript inference.
 - The `create*Tool(cwd)` factories still exist for code that needs explicit `AgentTool` instances (e.g. when wiring tools into pi-agent-core directly), but they are no longer the value passed to `createAgentSession({ tools })`.
 - `DefaultResourceLoader` loads extensions, skills, prompt templates, themes, and context files. Replace it to drive resource discovery from custom sources (and it must implement `loadProjectContextFiles()` if you want `AGENTS.md`/`CLAUDE.md` discovery; that helper is also exported standalone).
-- Pass `shouldStopAfterTurn(state) => boolean` (Pi 0.72.0) to exit the agent loop gracefully after a completed turn.
+- **Breaking (Pi 0.87.0):** pi-agent-core's `shouldStopAfterTurn` option was removed (it was never a `createAgentSession()` option). On a low-level `Agent`, set `finishTurn` instead: it runs after the assistant message and tool results are finalized but before `turn_end`, also for error/aborted responses. Return `{ action: "end" }` to stop, `{ action: "continue" }` to ensure one more request, or `undefined` for normal scheduling — guard hard exits first: `if (turn.message.stopReason === "error" || turn.message.stopReason === "aborted") return;`. Inside `createAgentSession()`, use an extension's actionable `turn_end` / `agent_before_settle` boundaries (see `references/extensions.md`).
 
 ## Models & Auth (`ModelRuntime`)
 
@@ -215,9 +214,11 @@ Use `runtime.newSession()`, `runtime.switchSession()`, and `runtime.fork()` for 
 Useful state:
 
 - `session.sessionFile` / `session.sessionId`
-- `session.agent.state.messages`
+- `session.agent.state.messages` — read-only view in practice: since Pi 0.87.0 `SessionManager` is canonical for provider context, so assigning it no longer changes future requests
 - `session.model`
 - `session.thinkingLevel`
+
+To change model context from the SDK (Pi 0.87.0): restore external history with `SessionManager.inMemory(cwd, { id }, entries)` (Pi 0.85.0), navigate with `session.navigateTree()`, or append through `session.sessionManager` and call `session.refreshContext()`. `sessionManager.appendContextEdit(entryId, null)` omits one message from future provider context (a `{ content }` replacement rewrites it) without touching raw history, usage, or UI; `appendCompaction(summary, null, tokensBefore)` records a retain-none compaction. `SessionEntry` now includes `ContextEditEntry` (`type: "context_edit"`), so exhaustive entry switches must handle it.
 
 ## Events
 
@@ -236,7 +237,7 @@ session.subscribe((event) => {
     case "agent_end":      // one low-level run; may be followed by retry/compaction/queued follow-ups
     case "agent_settled":  // fully settled — no automatic continuation left (Pi 0.80.4)
     case "turn_start":
-    case "turn_end":
+    case "turn_end":       // Pi 0.87.0: carries turnIndex, messageEntryId, toolResultEntryIds
     case "queue_update":
     case "compaction_start":
     case "compaction_end":
@@ -263,6 +264,7 @@ Pi 0.84.0 added transport-neutral remote-session client APIs: `@earendil-works/p
 `pi --mode rpc` speaks newline-delimited JSON over stdio. Additions since Pi 0.79:
 
 - `agent_settled` event (Pi 0.80.4) fires when a run is fully settled — no automatic retry, compaction retry, or queued continuation remains; `agent_end` now carries `willRetry`. `set_thinking_level` accepts `"max"` where the model supports it.
+- `clear_queue` (Pi 0.84.4) returns and removes queued steering and follow-up messages; direct RPC `steer`/`follow_up` commands pass through extension `input` handlers since Pi 0.86.0.
 - `get_entries` / `get_tree` (Pi 0.80.3) read session entries and tree snapshots over RPC; `get_available_thinking_levels` (Pi 0.81.0) lists the current model's supported thinking levels.
 - Direct RPC `bash` commands stream `bash_execution_update` chunks correlated by request `id` (Pi 0.82.0); include an `id` on the command to associate them.
 - `compact` responses include summary `usage`; `get_tokens`/`get_status` totals cover assistant messages, tool-reported usage, and summaries (Pi 0.81.0).

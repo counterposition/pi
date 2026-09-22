@@ -11,7 +11,8 @@ Use `/login` in interactive mode, then select a provider. The `/login` selector 
 - GitHub Copilot
 - OpenRouter (Pi 0.82.0) — `/login openrouter` runs a PKCE flow that mints a user-controlled API key billed from OpenRouter credits; on headless/SSH hosts paste the redirect URL or authorization code into the prompt (Pi 0.83.0). `OPENROUTER_API_KEY` still works via **Use an API key**
 - xAI (Grok/X subscription, Pi 0.80.8) — `/login xai` then **Use a subscription** (device-code OAuth); `XAI_API_KEY` remains available via **Use an API key**
-- Radius (Pi 0.80.8) — a dynamic `pi-messages` gateway; `/login radius` stores OAuth tokens, and custom Radius gateways can be declared in `models.json` with `"oauth": "radius"` plus a gateway `baseUrl`
+- Radius (Pi 0.80.8) — a dynamic `pi-messages` gateway; `/login radius` stores OAuth tokens, and custom Radius gateways can be declared in `models.json` with `"oauth": "radius"` plus a gateway `baseUrl`. Since Pi 0.86.0 a public Radius catalog ships for immediate/offline selection (cached and live gateway catalogs overlay it); custom gateways use their own catalog
+- Meta Muse (Pi 0.86.1) — `/login meta` with automatic Model API key refresh; `META_API_KEY` also works
 
 `/login <provider>` with autocomplete works since Pi 0.80.4, and login methods are provider-owned since 0.80.8 (registered pi-ai providers expose their own auth options and status in `/login`). Use `/logout` to clear stored OAuth credentials. Pi 0.71.0 removed built-in Google Gemini CLI and Google Antigravity providers. `pi auth check [provider|model]` (Pi 0.84.1) preflights credential readiness; `pi auth print-api-key` / `pi auth print-bearer-token` (Pi 0.83.0) export resolved credentials to external clients, refreshing OAuth as needed.
 
@@ -47,6 +48,7 @@ Since Pi 0.80.8, built-in catalogs are complemented by dynamic ones: `/model` re
 | Together AI | `TOGETHER_API_KEY` | `together` |
 | Baseten | `BASETEN_API_KEY` | `baseten` |
 | Kimi For Coding | `KIMI_API_KEY` | `kimi-coding` |
+| Meta (Muse) | `META_API_KEY` | `meta` |
 | MiniMax | `MINIMAX_API_KEY` | `minimax` |
 | MiniMax (China) | `MINIMAX_CN_API_KEY` | `minimax-cn` |
 | Qwen Token Plan / Individual | `QWEN_TOKEN_PLAN_API_KEY` | `qwen-token-plan` / `qwen-token-plan-individual` (Pi 0.81.0 / 0.84.1) |
@@ -195,7 +197,11 @@ Common `api` values:
 - `samplingParams` (Pi 0.84.0) is a free-form object merged verbatim into every request body after pi's own fields (its keys win) — for OpenAI-compatible APIs only (`openai-completions`, `openai-responses`, `azure-openai-responses`). Use it for server-specific knobs like llama.cpp `min_p` or vLLM `top_k`; in `modelOverrides` it merges per key.
 - `thinkingLevelMap` (Pi 0.72) replaces `compat.reasoningEffortMap`. Map pi levels (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`) to provider values; use `null` to hide a level. Maps may contain holes (Pi 0.80.6) — e.g. expose `high` and `max` without `xhigh`. When a key is omitted, standard levels through `high` use the provider default mapping, but the extended `xhigh`/`max` levels are unsupported.
 - `cost` supports request-wide input pricing tiers (Pi 0.80.6): a `tiers` array where each tier supplies a complete alternate rate set and applies to the whole request when total input usage (`input + cacheRead + cacheWrite`) exceeds `inputTokensAbove`; the highest matching threshold wins. Also usable in `modelOverrides` and extension-registered providers.
-- `modelOverrides` applies to built-in and (since Pi 0.80.4) extension-registered provider models; per-model fields: `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost` (partial), `contextWindow`, `maxTokens`, `samplingParams`, `headers`, `compat`.
+- `modelOverrides` applies to built-in and (since Pi 0.80.4) extension-registered provider models; per-model fields: `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost` (partial), `contextWindow`, `maxTokens`, `samplingParams`, `headers`, `compat`, `inputLimits`, `promptCache`.
+- `inputLimits.images.resize` (Pi 0.87.0) sets per-model cache-safe image encoding — `maxWidth`, `maxHeight`, `maxBytes` (base64 payload), `jpegQuality`; defaults 2000×2000, 4.5 MiB, quality 80 — applied once to attachments, `read` images, and tool-result images (switching models does not re-encode history).
+- `promptCache: { short?, long? }` (Pi 0.86.0) declares best-effort cache lifetimes in seconds per retention tier; models without a lifetime for the active tier are not eligible for cache warming (see `cacheWarming` in `references/settings.md`).
+- `compat.allowedFallbackModels` (Pi 0.86.0) overrides or disables Anthropic server-side fallback models; `compat.supportsMidConvoEffort` (Pi 0.84.4) marks custom Anthropic Messages models that accept per-turn effort changes.
+- OpenAI-compatible local servers: `vllmPriority` and `supportsMaxOutputTokens` (Pi 0.85.0) plus configurable thinking-token budget fields for vLLM, Qwen/SGLang, and llama.cpp (Pi 0.84.3).
 - `openRouterRouting` is forwarded as-is in the OpenRouter `provider` field (fallbacks, ZDR, ignore lists, throughput/latency).
 - `compat.thinkingFormat` supports OpenAI-compatible reasoning variants: `openrouter` sends `reasoning: { effort }`, `together` sends `reasoning: { enabled }` plus `reasoning_effort` when supported, `qwen-chat-template` targets local Qwen-compatible servers that read `chat_template_kwargs.enable_thinking`, `chat-template` (Pi 0.79.9) sends configurable `chat_template_kwargs` via `compat.chatTemplateKwargs` — e.g. `{ "thinking": { "$var": "thinking.enabled" } }` for DeepSeek models behind vLLM/Hugging Face chat templates — and `baseten` (Pi 0.84.0) sends `chat_template_args` via `compat.chatTemplateArgs`.
 - **Breaking (Pi 0.80.7):** `compat.sendSessionIdHeader` was removed. Session affinity is now controlled by `compat.sessionAffinityFormat` (`"openai"` sends `session_id`/`x-client-request-id`, `"openai-nosession"` omits the underscore-containing `session_id` header, `"openrouter"` sends `x-session-id`; default auto-detected). Replace `sendSessionIdHeader: false` with `sessionAffinityFormat: "openai-nosession"`. `sendSessionAffinityHeaders` still gates the behavior for `openai-completions`.
@@ -236,6 +242,10 @@ pi.registerProvider("my-provider", {
 pi.registerProvider("anthropic", { baseUrl: "https://proxy.example.com" });
 ```
 
+### Custom Streaming (Breaking, Pi 0.86.0)
+
+Custom `streamSimple` implementations receive a normalized `TranscriptContext` instead of `Context`. System prompts and tool declarations live in transcript system messages: read them with `getCurrentSystemPrompt(context.messages)` and `getCurrentTools(context.messages)` (not `context.systemPrompt` / `context.tools`), and call `collapseSystemMessages(context)` if the backend cannot accept mid-conversation system messages. `ToolCall.arguments` and `ToolResultMessage.details` must be JSON-compatible. Pi 0.84.3 also renamed `GoogleThinkingLevel` to `GoogleApiThinkingLevel`.
+
 ## SDK / Extension Auth Lookup
 
 If extension code needs auth for a specific model request, use `getApiKeyAndHeaders(model)` rather than the removed `getApiKey(model)`:
@@ -247,4 +257,4 @@ if (!auth.ok) throw new Error(auth.error);
 const { apiKey, headers } = auth;
 ```
 
-This matters for providers whose headers or auth values resolve dynamically on every request. In SDK code, use `ModelRuntime.getAuth(providerOrModel)` instead (Pi 0.80.8) — passing a model also resolves built-in, `models.json`, and extension model headers; see `references/sdk.md`.
+This matters for providers whose headers or auth values resolve dynamically on every request. For nested model calls, `ctx.modelRegistry.streamSimple(model, context, options)` (Pi 0.86.0) resolves auth itself. In SDK code, use `ModelRuntime.getAuth(providerOrModel)` instead (Pi 0.80.8) — passing a model also resolves built-in, `models.json`, and extension model headers; see `references/sdk.md`.

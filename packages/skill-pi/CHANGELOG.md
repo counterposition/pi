@@ -1,5 +1,36 @@
 # @counterposition/skill-pi
 
+## 0.87.1
+
+### Minor Changes
+
+- Sync the Pi skill with Pi 0.87.1, covering changes across 0.84.3–0.87.1.
+  - Breaking-change guidance: pi-agent-core `shouldStopAfterTurn` → `finishTurn`
+    (and remove the incorrect `createAgentSession({ shouldStopAfterTurn })`
+    example); `SessionManager` is canonical for model context, so assigning
+    `session.agent.state.messages` no longer changes requests; custom provider
+    streams receive `TranscriptContext` (`getCurrentSystemPrompt()` /
+    `getCurrentTools()`); JSON-only tool `arguments`/`details`; fail-closed
+    `user_bash`; `GoogleThinkingLevel` → `GoogleApiThinkingLevel`.
+  - Extensions: actionable `turn_end` and `agent_before_settle` boundaries,
+    `context_with_system`, `context` handlers no longer seeing system messages,
+    `session_compact_failed`, `ui_prompt_start`/`ui_prompt_end`,
+    `cache_warming_decision`, deferred `agent_settled` runs, `pi.on()`
+    unsubscribe, `ctx.modelRegistry.stream()`/`streamSimple()`/`complete()`,
+    transcript-backed prompt/tool changes, default strict sampling for
+    built-in tools, and Fireworks native deferred tool loading.
+  - SDK/RPC: context edits (`appendContextEdit`, `ContextEditEntry`),
+    `refreshContext()`, restorable `SessionManager.inMemory()` entries,
+    retain-none compaction, and RPC `clear_queue`.
+  - Providers/settings: Meta Muse login, offline Radius catalog,
+    `inputLimits.images.resize`, `promptCache`, `compat.allowedFallbackModels`,
+    `cacheWarming`, `compaction.modelOverrides`, `retry.maxAgentDelayMs`,
+    terminal capability overrides, `fullscreenCopyOnSelect`, the `powershell`
+    tool, session-scoped `/model`/`/thinking` selection, and `/bug`.
+  - Fixes: correct the default built-in tool list (`read`, `bash`, `edit`,
+    `write`) and replace the Claude-rules recipe's write to the read-only
+    `event.systemPrompt` with a `systemPromptOptions.sections` entry.
+
 ## 0.84.2
 
 ### Minor Changes
