@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.4
+
+### Patch Changes
+
+- Align the Pi dev dependencies with the current `@earendil-works/*` 0.87 line so
+  typecheck and tests run against the Pi release users actually run (0.87.1).
+  Runtime is unchanged — the extension still declares the Pi core libraries as
+  `"*"` peer dependencies, and none of the Pi 0.84.3–0.87.1 breaking changes
+  (`finishTurn`, canonical `SessionManager` context, `TranscriptContext`
+  provider streams, JSON-only tool `details`, fail-closed `user_bash`) touch
+  its extension surface.
+
 ## 0.2.3
 
 ### Patch Changes

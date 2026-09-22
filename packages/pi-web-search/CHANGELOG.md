@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.4
+
+### Patch Changes
+
+- Align the Pi dev dependencies with the current `@earendil-works/*` 0.87 line so
+  typecheck and tests run against the Pi release users actually run (0.87.1).
+  Runtime is unchanged — the extension still declares the Pi core libraries as
+  `"*"` peer dependencies, and none of the Pi 0.84.3–0.87.1 breaking changes
+  touch its tools or `before_agent_start` hook.
+
 ## 0.5.3
 
 ### Patch Changes
