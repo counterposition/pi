@@ -1,7 +1,7 @@
 {
   "name": "@counterposition/pi-monorepo",
   "private": true,
-  "packageManager": "pnpm@10.33.0",
+  "packageManager": "pnpm@12.4.1",
   "engines": {
     "node": ">=24"
   },

@@ -3,3 +3,6 @@ packages:
 # Keep pnpm's release quarantine, but track same-day Pi releases.
 minimumReleaseAgeExclude:
   - '@earendil-works/*'
+allowBuilds:
+  '@google/genai': true
+  protobufjs: true

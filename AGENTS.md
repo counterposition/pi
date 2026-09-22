@@ -2,7 +2,7 @@
 
 This is a `pnpm` monorepo: packages under `packages/*`, canonical skills under `skills/*`, validators under `scripts/`.
 
-- Package manager: `pnpm@10.33.0`  |  Node: `>=24`
+- Package manager: `pnpm@12.4.1`  |  Node: `>=24`
 - TypeScript: `NodeNext`, `strict`, `verbatimModuleSyntax`
 - Test runner: `vitest`  |  Lint/format: `oxlint`, `oxfmt`, `markdownlint-cli2`
 - Setup: `pnpm install` (or `mise trust && mise install`)
