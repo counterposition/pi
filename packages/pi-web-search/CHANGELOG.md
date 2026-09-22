@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.5
+
+### Patch Changes
+
+- Inject the untrusted-web-content guidance as a `web_content` system prompt
+  section instead of returning a full `systemPrompt` replacement from
+  `before_agent_start`. Since Pi 0.86.0 section changes are recorded as
+  transcript deltas, so the guidance survives resume and branch navigation
+  and keeps the cached prompt prefix; it still renders when a custom
+  `SYSTEM.md` replaces the default prompt.
+
 ## 0.5.4
 
 ### Patch Changes
