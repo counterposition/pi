@@ -213,7 +213,7 @@ export default function (pi: ExtensionAPI) {
 
 ## Claude Rules Integration
 
-Scan `.claude/rules/` and inject into system prompt:
+Scan `.claude/rules/` and add a system-prompt section. `event.systemPrompt` is read-only; mutating `event.systemPromptOptions` lets Pi append a transcript delta that keeps the cached prefix (returning `{ systemPrompt }` instead replaces the whole prompt for that run):
 
 ```typescript
 export default function (pi: ExtensionAPI) {
@@ -224,7 +224,8 @@ export default function (pi: ExtensionAPI) {
       .filter(f => f.toString().endsWith(".md"));
     if (files.length === 0) return;
     const listing = files.map(f => `- .claude/rules/${f}`).join("\n");
-    event.systemPrompt += `\n\nProject rules (${files.length} files):\n${listing}\nUse the read tool to load relevant rules.`;
+    event.systemPromptOptions.sections.project_rules =
+      `Project rules (${files.length} files):\n${listing}\nUse the read tool to load relevant rules.`;
   });
 }
 ```
