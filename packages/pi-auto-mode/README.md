@@ -52,12 +52,30 @@ and `/auto` says what to fix.
    Auto mode only answers calls your policy sends to `ask`. If you don't have a
    policy yet, see [A starting policy](#a-starting-policy).
 
-3. Give it a TypeSafe API key: set `TYPESAFE_API_KEY`, or on macOS store it in
-   the Keychain under that name:
+3. Give it a TypeSafe API key. Either set the `TYPESAFE_API_KEY` environment
+   variable, or keep the key in your system's password store:
+   - **macOS**: save it in the Keychain:
 
-   ```bash
-   security add-generic-password -s TYPESAFE_API_KEY -a "$USER" -w
-   ```
+     ```bash
+     security add-generic-password -s TYPESAFE_API_KEY -a "$USER" -w
+     ```
+
+   - **Linux**: save it with `secret-tool` (in the `libsecret-tools` package on
+     Debian and Ubuntu, `libsecret` on Fedora and Arch):
+
+     ```bash
+     secret-tool store --label="TypeSafe API key" service TYPESAFE_API_KEY
+     ```
+
+     Then tell auto mode where to find it, in `~/.pi/agent/auto-mode.json`:
+
+     ```json
+     {
+       "apiKey": "!secret-tool lookup service TYPESAFE_API_KEY"
+     }
+     ```
+
+   Both commands ask for the key, so it never ends up in your shell history.
 
 Then start Pi and run `/auto`. It lists anything that still needs setup. It
 can't see the permission system's `authorizerChain`, so if that entry is missing
