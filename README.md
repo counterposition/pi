@@ -12,6 +12,8 @@ This repo builds the pieces that extend Pi and teach other coding agents about i
 
 **[`packages/pi-memory`](packages/pi-memory/)** -- An extension that adds explicit, Markdown-backed durable memory with global and project scopes. Not yet published to npm.
 
+**[`packages/pi-auto-mode`](packages/pi-auto-mode/)** -- An add-on for `@gotgenes/pi-permission-system` that lets routine tool calls run without asking, and still asks before risky ones. Uses TypeSafe's Jev classifier.
+
 **[`packages/skill-pi`](packages/skill-pi/)** -- The `pi` skill packaged for `npm`, so `pi install` can fetch it from the registry.
 
 ## Install
@@ -23,6 +25,10 @@ pi install npm:@counterposition/skill-pi
 
 # the web search extension
 pi install npm:@counterposition/pi-web-search
+
+# auto mode (install before the permission system; see its README)
+pi install npm:@counterposition/pi-auto-mode
+pi install npm:@gotgenes/pi-permission-system
 
 # the memory extension (unpublished; install from a clone)
 pi install ./packages/pi-memory
@@ -64,6 +70,7 @@ skills/pi/              canonical skill source (loaded by Pi and Agent Skills)
 packages/skill-pi/      npm package wrapping the pi skill
 packages/pi-web-search/ web search extension (TypeScript, vitest tests)
 packages/pi-memory/     durable Markdown memory extension
+packages/pi-auto-mode/  auto mode for pi-permission-system
 scripts/                validators and sync utilities
 docs/                   architecture, ADRs, contributor guides
 .pi/settings.json       project-local Pi config
