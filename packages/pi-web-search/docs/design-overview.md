@@ -80,7 +80,7 @@ Important behaviors:
 - Supports `depth: "basic" | "thorough"`.
 - Supports optional `freshness` and `domains` constraints.
 - Prefers providers that can actually honor the requested capabilities.
-- Gracefully degrades a thorough request to basic when no content-capable provider is configured.
+- Gracefully degrades a thorough request to basic when no content-capable provider can serve it. Keyless Parallel is content-capable, so this only happens if it is unavailable.
 - Tries the next viable search provider when the current one fails transiently.
 
 Current search providers:
@@ -88,6 +88,7 @@ Current search providers:
 - Brave
 - Tavily
 - Exa
+- Parallel (always available: uses the free MCP endpoint without a key, and the Search API with one)
 
 At a high level:
 
@@ -143,9 +144,10 @@ Useful configuration values:
 - `BRAVE_API_KEY`
 - `TAVILY_API_KEY`
 - `EXA_API_KEY`
+- `PARALLEL_API_KEY`
 - `JINA_API_KEY`
 
-For the best experience, configure at least two search provider keys: one basic-capable provider and one content-capable provider. **The recommended pair is Brave plus either Exa or Tavily**. Brave is the default first choice for basic and freshness-filtered searches but cannot enrich results with extracted page content. Exa and Tavily can both serve thorough searches that use extracted content to improve discovery and may include a short inline excerpt. Without a content-capable provider key, thorough searches degrade to basic. Configuring all three search keys adds fallback resilience but is not necessary for full functionality.
+No key is required: Parallel's free tier serves every request no other provider can, and it is ranked last so configured providers always win. For heavier use, configure `PARALLEL_API_KEY` alone or **Brave plus either Exa or Tavily**. Brave is the default first choice for basic and freshness-filtered searches but cannot enrich results with extracted page content. Exa and Tavily can both serve thorough searches that use extracted content to improve discovery and may include a short inline excerpt. Without a content-capable provider key, thorough searches degrade to basic. Configuring all three search keys adds fallback resilience but is not necessary for full functionality.
 
 Useful non-secret settings:
 

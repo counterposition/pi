@@ -13,6 +13,7 @@ const ENV_NAMES = [
   "BRAVE_API_KEY",
   "TAVILY_API_KEY",
   "EXA_API_KEY",
+  "PARALLEL_API_KEY",
   "JINA_API_KEY",
 ] as const;
 const originalEnv = Object.fromEntries(
@@ -54,6 +55,19 @@ describe("resolveSearchProviders", () => {
     expect(resolution.servedDepth).toBe("basic");
     expect(resolution.providers.map((provider) => provider.name)).toEqual(["brave"]);
     expect(resolution.notes.join(" ")).toMatch(/degraded to basic/i);
+  });
+
+  it("serves thorough searches with keyless Parallel instead of degrading", () => {
+    const brave = makeProvider("brave", ["search"]);
+    const parallel = makeProvider("parallel", ["search", "content"]);
+    const config = makeConfig({
+      BRAVE_API_KEY: "brave-test",
+    });
+
+    const resolution = resolveSearchProviders({ depth: "thorough" }, { brave, parallel }, config);
+
+    expect(resolution.servedDepth).toBe("thorough");
+    expect(resolution.providers.map((provider) => provider.name)).toEqual(["parallel"]);
   });
 
   it("ignores an unusable preferred provider", () => {

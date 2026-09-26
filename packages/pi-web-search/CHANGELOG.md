@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0
+
+### Minor Changes
+
+- Add Parallel as a search provider. `web_search` now works with no API keys:
+  without `PARALLEL_API_KEY` it uses Parallel's free, rate-limited MCP
+  endpoint, where freshness and domain filters are approximated. With a key it
+  uses the Search API with native filters. Parallel is ranked last, so
+  configured providers still win; a thorough search with only a Brave key now
+  goes to Parallel instead of degrading to basic.
+
 ## 0.5.5
 
 ### Patch Changes

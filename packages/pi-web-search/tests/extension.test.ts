@@ -16,11 +16,9 @@ const state = vi.hoisted(() => ({
   providers: {
     search: {},
     fetch: {},
-    hasAnySearchProvider: false,
   } as {
     search: Record<string, SearchProvider>;
     fetch: Record<string, FetchProvider>;
-    hasAnySearchProvider: boolean;
   },
   normalizeDomains: vi.fn((domains?: string[]) => domains),
   resolveSearchProviders: vi.fn(),
@@ -61,7 +59,6 @@ describe("web-search extension", () => {
     state.providers = {
       search: {},
       fetch: {},
-      hasAnySearchProvider: false,
     };
   });
 
@@ -118,7 +115,6 @@ describe("web-search extension", () => {
       fetch: {
         jina: makeFetchProvider("jina", async () => "unused"),
       },
-      hasAnySearchProvider: true,
     };
     state.resolveSearchProviders.mockReturnValue({
       providers: [failingProvider, succeedingProvider],
@@ -169,7 +165,6 @@ describe("web-search extension", () => {
       fetch: {
         jina: makeFetchProvider("jina", async () => "unused"),
       },
-      hasAnySearchProvider: true,
     };
     state.resolveSearchProviders.mockReturnValue({
       providers: [provider],
@@ -195,7 +190,6 @@ describe("web-search extension", () => {
     state.providers = {
       search: {},
       fetch: { jina },
-      hasAnySearchProvider: false,
     };
 
     const tools = registerTools();
@@ -230,7 +224,6 @@ describe("web-search extension", () => {
     state.providers = {
       search: {},
       fetch: { jina },
-      hasAnySearchProvider: false,
     };
 
     const tools = registerTools();
@@ -258,7 +251,6 @@ describe("web-search extension", () => {
     state.providers = {
       search: {},
       fetch: { jina },
-      hasAnySearchProvider: false,
     };
 
     const tools = registerTools();

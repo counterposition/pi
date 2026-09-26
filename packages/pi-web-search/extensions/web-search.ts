@@ -34,8 +34,7 @@ export default function (pi: ExtensionAPI) {
     description:
       "Search the web for information. Returns titles, URLs, snippets, and dates when available. " +
       "Set depth to 'thorough' for research that needs content-enriched search and a short inline excerpt when available. " +
-      "Use freshness for recent information and domains for trusted or site-specific sources. " +
-      "Requires at least one configured search provider API key.",
+      "Use freshness for recent information and domains for trusted or site-specific sources.",
     parameters: Type.Object({
       query: Type.String({ description: "Search query" }),
       depth: Type.Optional(
@@ -69,12 +68,6 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_toolCallId, params, signal, onUpdate) {
       const abortSignal = signal ?? new AbortController().signal;
-
-      if (!providers.hasAnySearchProvider) {
-        throw new Error(
-          "No search provider configured. Set one of BRAVE_API_KEY, TAVILY_API_KEY, or EXA_API_KEY to enable web_search.",
-        );
-      }
 
       const depth = params.depth ?? "basic";
       const freshness = params.freshness;
