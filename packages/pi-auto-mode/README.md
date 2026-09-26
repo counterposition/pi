@@ -6,6 +6,8 @@ building, and reading logs, without asking you, and still asks before anything
 risky: deleting work you care about, pushing or posting somewhere, or changing
 system settings.
 
+![Pi runs the tests, builds, and pushes without asking, then asks before publishing to npm](https://raw.githubusercontent.com/counterposition/pi/main/packages/pi-auto-mode/demo/demo.gif)
+
 It is an add-on for
 [`@gotgenes/pi-permission-system`](https://www.npmjs.com/package/@gotgenes/pi-permission-system).
 That extension decides which calls need your approval; auto mode answers the
@@ -209,7 +211,8 @@ has the details.
 - Your messages and tool calls are sent to TypeSafe.
 
 Developers: [`eval/README.md`](eval/README.md) explains how the thresholds were
-tuned and how to rerun the evaluation.
+tuned and how to rerun the evaluation, and `demo/record.sh` re-records the demo
+above.
 
 ## License
 
