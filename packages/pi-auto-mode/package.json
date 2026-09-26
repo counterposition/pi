@@ -1,0 +1,75 @@
+{
+  "name": "@counterposition/pi-auto-mode",
+  "version": "0.1.0",
+  "description": "Auto mode for Pi: TypeSafe's Jev decides which permission asks can run without a human",
+  "keywords": [
+    "auto-mode",
+    "permissions",
+    "pi-extension",
+    "pi-package"
+  ],
+  "homepage": "https://github.com/counterposition/pi/tree/main/packages/pi-auto-mode",
+  "bugs": {
+    "url": "https://github.com/counterposition/pi/issues"
+  },
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/counterposition/pi.git",
+    "directory": "packages/pi-auto-mode"
+  },
+  "files": [
+    "extensions/",
+    "src/",
+    "README.md",
+    "LICENSE.md",
+    "package.json"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "lint": "pnpm run lint:code && pnpm run lint:docs",
+    "lint:code": "oxlint .",
+    "lint:code:fix": "oxlint . --fix",
+    "lint:docs": "markdownlint-cli2 \"README.md\"",
+    "lint:docs:fix": "markdownlint-cli2 --fix \"README.md\"",
+    "format": "oxfmt .",
+    "format:check": "oxfmt . --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "pnpm run lint && pnpm run format:check && pnpm run typecheck && pnpm run test",
+    "pack:check": "pnpm pack --pack-destination ../../.pack",
+    "eval": "jiti eval/cli.ts",
+    "review": "jiti eval/cli.ts review"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-ai": "^0.87.1",
+    "@earendil-works/pi-coding-agent": "^0.87.1",
+    "@gotgenes/pi-permission-system": "33.0.7",
+    "@types/node": "^25.5.0",
+    "jiti": "^2.7.0",
+    "markdownlint-cli2": "^0.18.1",
+    "oxfmt": "^0.42.0",
+    "oxlint": "^1.57.0",
+    "typebox": "^1.3.16",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.2"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "@gotgenes/pi-permission-system": ">=33.0.0",
+    "typebox": "*"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "pi": {
+    "extensions": [
+      "extensions/auto-mode.ts"
+    ]
+  }
+}

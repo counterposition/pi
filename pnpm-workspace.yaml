@@ -7,3 +7,4 @@ allowBuilds:
   '@google/genai': true
   esbuild: true
   protobufjs: true
+  tree-sitter-bash: false
