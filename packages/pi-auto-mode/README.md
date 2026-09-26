@@ -24,14 +24,11 @@ and `/auto` says what to fix.
 
 ## Set up
 
-Auto mode is not on npm yet. From a clone of this repository:
-
-1. Install the repository's dependencies, then auto mode and the permission
-   system. Auto mode must be listed first:
+1. Install auto mode, then the permission system. Auto mode must be listed
+   first:
 
    ```bash
-   pnpm install
-   pi install ./packages/pi-auto-mode
+   pi install npm:@counterposition/pi-auto-mode
    pi install npm:@gotgenes/pi-permission-system
    ```
 
@@ -39,7 +36,7 @@ Auto mode is not on npm yet. From a clone of this repository:
 
    ```json
    {
-     "packages": ["/path/to/pi/packages/pi-auto-mode", "npm:@gotgenes/pi-permission-system"]
+     "packages": ["npm:@counterposition/pi-auto-mode", "npm:@gotgenes/pi-permission-system"]
    }
    ```
 
