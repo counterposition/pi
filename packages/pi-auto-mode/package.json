@@ -1,6 +1,6 @@
 {
   "name": "@counterposition/pi-auto-mode",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Auto mode for Pi: TypeSafe's Jev decides which permission asks can run without a human",
   "keywords": [
     "auto-mode",

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+### Patch Changes
+
+- 5dbcacb: # pi-auto-mode
+
+  Add a demo GIF to the README and document how API keys are stored on Linux.
+
 ## 0.1.0
 
 ### Minor Changes
