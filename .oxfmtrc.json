@@ -6,6 +6,9 @@
     "dist/**",
     ".pack/**",
     "node_modules/**",
-    "LICENSE.md"
+    "LICENSE.md",
+    "**/eval/.data/**",
+    "**/eval/.cache/**",
+    "**/eval/REPORT.md"
   ]
 }

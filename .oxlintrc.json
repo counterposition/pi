@@ -8,5 +8,5 @@
   "env": {
     "node": true
   },
-  "ignorePatterns": ["coverage/**", "dist/**", ".pack/**", "node_modules/**"]
+  "ignorePatterns": ["coverage/**", "dist/**", ".pack/**", "node_modules/**", "**/eval/.data/**", "**/eval/.cache/**"]
 }

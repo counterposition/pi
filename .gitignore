@@ -5,3 +5,7 @@ coverage/
 dist/
 .pack/
 *.tsbuildinfo
+
+# pi-auto-mode eval data (private or third-party traces, API caches)
+packages/pi-auto-mode/eval/.data/
+packages/pi-auto-mode/eval/.cache/
