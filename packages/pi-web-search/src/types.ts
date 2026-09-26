@@ -1,4 +1,4 @@
-export type SearchProviderName = "brave" | "tavily" | "exa";
+export type SearchProviderName = "brave" | "tavily" | "exa" | "parallel";
 
 export type FetchProviderName = "jina";
 
@@ -76,7 +76,12 @@ export interface WebSearchSettings {
   preferredThoroughProvider?: SearchProviderName | null;
 }
 
-export type ApiKeyEnvName = "BRAVE_API_KEY" | "TAVILY_API_KEY" | "EXA_API_KEY" | "JINA_API_KEY";
+export type ApiKeyEnvName =
+  | "BRAVE_API_KEY"
+  | "TAVILY_API_KEY"
+  | "EXA_API_KEY"
+  | "PARALLEL_API_KEY"
+  | "JINA_API_KEY";
 
 export interface LoadedConfig {
   apiKeys: Partial<Record<ApiKeyEnvName, string>>;
@@ -87,7 +92,6 @@ export interface LoadedConfig {
 export interface InitializedProviders {
   search: Partial<Record<SearchProviderName, SearchProvider>>;
   fetch: Partial<Record<FetchProviderName, FetchProvider>>;
-  hasAnySearchProvider: boolean;
 }
 
 export interface ResolvedSearchProviders {

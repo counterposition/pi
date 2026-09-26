@@ -330,6 +330,8 @@ function providerLabel(provider: string): string {
       return "Tavily";
     case "exa":
       return "Exa";
+    case "parallel":
+      return "Parallel";
     case "jina":
       return "Jina Reader";
     default:

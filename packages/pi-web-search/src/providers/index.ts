@@ -1,6 +1,7 @@
 import { createBraveProvider } from "./brave.js";
 import { createExaProvider } from "./exa.js";
 import { createJinaProvider } from "./jina.js";
+import { createParallelProvider } from "./parallel.js";
 import { createTavilyProvider } from "./tavily.js";
 import type { InitializedProviders, LoadedConfig } from "../types.js";
 
@@ -16,6 +17,7 @@ export function initProviders(config: LoadedConfig): InitializedProviders {
   if (config.apiKeys.EXA_API_KEY) {
     search.exa = createExaProvider(config.apiKeys.EXA_API_KEY);
   }
+  search.parallel = createParallelProvider(config.apiKeys.PARALLEL_API_KEY);
 
   const fetch: InitializedProviders["fetch"] = {
     jina: createJinaProvider(config.apiKeys.JINA_API_KEY),
@@ -24,6 +26,5 @@ export function initProviders(config: LoadedConfig): InitializedProviders {
   return {
     search,
     fetch,
-    hasAnySearchProvider: Object.keys(search).length > 0,
   };
 }
