@@ -46,6 +46,8 @@ const pushBranch = [
 
 const setup = (overrides: Partial<LinkContext> = {}) => {
   const log = { review: vi.fn(), debug: vi.fn() } satisfies AuthorizerLog;
+  // One live capture, as the extension keeps it: the re-check compares its input by identity.
+  const call = { toolName: "bash", input: { command: "git push origin main" } };
   const ctx: LinkContext = {
     mode: () => "on",
     isCurrent: () => true,
@@ -55,7 +57,7 @@ const setup = (overrides: Partial<LinkContext> = {}) => {
     cwd: "/repo",
     environment: [],
     branch: () => pushBranch,
-    prepared: () => ({ toolName: "bash", input: { command: "git push origin main" } }),
+    prepared: () => call,
     tools: () => [],
     apiKey: async () => "key",
     setStatus: vi.fn(),

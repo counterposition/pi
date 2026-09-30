@@ -208,6 +208,9 @@ has the details.
   appears in a screenshot isn't seen.
 - Commands built while they run (from variables or downloaded text) are judged
   by Jev alone; the "always asks" list only catches what's written out.
+- Tool calls a codemode script makes, including MCP tools, go to Jev too. Each
+  is judged on its own input; Jev doesn't see the script or the calls it made
+  earlier.
 - Calls from subagents are passed to you rather than judged.
 - Your messages and tool calls are sent to TypeSafe.
 

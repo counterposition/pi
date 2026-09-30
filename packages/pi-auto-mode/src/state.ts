@@ -193,7 +193,12 @@ export type Unresolved = "forwarded" | "ambiguous" | "mismatch" | "unverified";
 export interface PreparedCall {
   toolName: string;
   input: Record<string, unknown>;
+  /** Set when a running tool made this call through `ctx.executeTool()`, as codemode does. */
+  parentToolCallId?: string;
 }
+
+/** The live call captured for an id; "duplicate" when two calls shared it. */
+export type PreparedLookup = (toolCallId: string) => PreparedCall | "duplicate" | undefined;
 
 function namesMatch(name: string, details: AskDetails): boolean {
   return name === details.toolName || name === details.payload?.request?.invokedToolName;
@@ -208,8 +213,8 @@ export function describeAction(action: JevAction, tools: readonly ToolDescriptio
 export interface BuildStateInput {
   branch: readonly BranchEntry[];
   details: AskDetails;
-  /** The captured call for `details.toolCallId`; "duplicate" when two calls shared the id. */
-  prepared: PreparedCall | "duplicate" | undefined;
+  /** Calls still running in this session, as their `tool_call` events carried them. */
+  prepared: PreparedLookup;
   tools: readonly ToolDescription[];
   cwd: string;
   environment: readonly string[];
@@ -221,22 +226,43 @@ export type Resolution =
 
 /**
  * The input Jev should judge: the prepared call and nothing else. The transcript
- * is not what runs, and no field of the ask carries the complete input.
+ * is not what runs, and no field of the ask carries the complete input. `root` is
+ * the model's own call the action runs under: itself, or the call whose tool made it.
  */
-function resolveAction(
+export function resolveAction(
   branch: readonly BranchEntry[],
   details: AskDetails,
-  prepared: BuildStateInput["prepared"],
-): { tool: string; input: unknown } | Unresolved {
-  if (prepared === "duplicate") return "ambiguous";
-  if (!prepared) return "unverified";
+  prepared: PreparedLookup,
+): { tool: string; input: unknown; root: string } | Unresolved {
+  if (!details.toolCallId) return "unverified";
+  const call = prepared(details.toolCallId);
+  if (call === "duplicate") return "ambiguous";
+  if (!call) return "unverified";
+  if (!namesMatch(call.toolName, details)) return "mismatch";
+  // A nested call is not in the transcript. It is trusted only under a chain of calls
+  // that are all still running, up to one the transcript holds.
+  let id = details.toolCallId;
+  let current = call;
+  while (current.parentToolCallId !== undefined) {
+    const parent = current.parentToolCallId;
+    // Pi numbers each caller's calls `<caller id>/1`, `/2`, ...
+    if (!id.startsWith(`${parent}/`) || !/^[1-9]\d*$/.test(id.slice(parent.length + 1))) {
+      return "mismatch";
+    }
+    if (callsWithId(branch, id).length > 0) return "ambiguous";
+    const next = prepared(parent);
+    if (next === "duplicate") return "ambiguous";
+    if (!next) return "unverified";
+    id = parent;
+    current = next;
+  }
   // Pi appends the assistant message before preparing its calls, so the branch shows
   // every call sharing this id. A capture can only be trusted when exactly one exists:
   // otherwise it may belong to another call, whatever order extensions loaded in.
-  const call = callsWithId(branch, details.toolCallId);
-  if (call.length !== 1) return call.length === 0 ? "unverified" : "ambiguous";
-  if (!namesMatch(prepared.toolName, details) || call[0] !== prepared.toolName) return "mismatch";
-  return { tool: prepared.toolName, input: prepared.input };
+  const names = callsWithId(branch, id);
+  if (names.length !== 1) return names.length === 0 ? "unverified" : "ambiguous";
+  if (names[0] !== current.toolName) return "mismatch";
+  return { tool: call.toolName, input: call.input, root: id };
 }
 
 /** Names of the transcript's tool calls with this id. */
@@ -272,15 +298,17 @@ export function resolveState({
   environment,
 }: BuildStateInput): Resolution {
   if (details.forwarding) return { ok: false, why: "forwarded" };
-  const action = resolveAction(branch, details, prepared);
-  if (typeof action === "string") return { ok: false, why: action };
+  const resolved = resolveAction(branch, details, prepared);
+  if (typeof resolved === "string") return { ok: false, why: resolved };
+  const { root, ...action } = resolved;
   const user = userContext(branch);
   return {
     ok: true,
     intentTrusted: user.complete,
     state: {
       user_messages: user.messages,
-      earlier_actions: earlierActions(branch, details.toolCallId),
+      // A nested call sees what a direct call in its root's place would.
+      earlier_actions: earlierActions(branch, root),
       action: describeAction(action, tools),
       cwd,
       environment: [...environment],

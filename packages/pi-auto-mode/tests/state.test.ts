@@ -10,7 +10,7 @@ import {
   stripSkillBlock,
   userContext,
 } from "../src/state.js";
-import type { AskDetails, BranchEntry, BuildStateInput } from "../src/state.js";
+import type { AskDetails, BranchEntry, PreparedCall } from "../src/state.js";
 
 const user = (content: unknown): BranchEntry => ({
   type: "message",
@@ -34,8 +34,17 @@ const tools = [
 const resolve = (
   branch: BranchEntry[],
   details: AskDetails,
-  prepared: BuildStateInput["prepared"] = undefined,
-) => resolveState({ branch, details, prepared, tools, cwd: "/repo", environment: ["env"] });
+  prepared?: PreparedCall | "duplicate",
+  ancestors: Record<string, PreparedCall | "duplicate"> = {},
+) =>
+  resolveState({
+    branch,
+    details,
+    prepared: (id) => (id === details.toolCallId ? prepared : ancestors[id]),
+    tools,
+    cwd: "/repo",
+    environment: ["env"],
+  });
 
 describe("userContext", () => {
   it("keeps only real user text: no assistant text, tool results, or custom messages", () => {
@@ -265,6 +274,125 @@ describe("resolveState", () => {
       },
     );
     expect(result.ok && isOversized(result.state)).toBe(true);
+  });
+});
+
+describe("resolveState for nested calls", () => {
+  const ok = (id: string) => ({
+    type: "message",
+    message: { role: "toolResult", toolCallId: id, toolName: "write", content: "" },
+  });
+  const branch = [
+    user("tidy the notes"),
+    assistant([toolCall("w", "write", { path: "a.txt", content: "x" })]),
+    ok("w"),
+    assistant([
+      toolCall("cm", "codemode", { code: "await tools.bash({command: 'ls'})" }),
+      toolCall("after", "write", { path: "b.txt", content: "y" }),
+    ]),
+  ];
+  const codemode = { toolName: "codemode", input: { code: "…" } };
+  const bash = (parentToolCallId: string, command = "ls") => ({
+    toolName: "bash",
+    input: { command },
+    parentToolCallId,
+  });
+  const ask = (toolCallId: string) => ({ toolCallId, toolName: "bash", command: "ls" });
+
+  it("judges a nested call under a running call the transcript holds", () => {
+    const result = resolve(branch, ask("cm/1"), bash("cm"), { cm: codemode });
+    expect(result.ok && result.state.action).toEqual({ tool: "bash", input: { command: "ls" } });
+    // Earlier actions stop at the root, as for a direct call in its place.
+    expect(result.ok && result.state.earlier_actions).toEqual([
+      { tool: "write", input: '{"path":"a.txt","content":"x"}' },
+    ]);
+  });
+
+  it("judges a grandchild through its whole live chain", () => {
+    const probe = { toolName: "probe", input: {}, parentToolCallId: "cm" };
+    expect(resolve(branch, ask("cm/2/3"), bash("cm/2"), { cm: codemode, "cm/2": probe }).ok).toBe(
+      true,
+    );
+    expect(resolve(branch, ask("cm/2/3"), bash("cm/2"), { "cm/2": probe })).toEqual({
+      ok: false,
+      why: "unverified",
+    });
+  });
+
+  it("refuses an id that is not its parent's id plus a call number", () => {
+    for (const id of ["cm/0", "cm/01", "cm/x", "cm/1/", "cm1", "cmx/1", "other/1", "cm"]) {
+      expect(resolve(branch, ask(id), bash("cm"), { cm: codemode })).toEqual({
+        ok: false,
+        why: "mismatch",
+      });
+    }
+  });
+
+  it("refuses a nested call whose parent is not running", () => {
+    expect(resolve(branch, ask("cm/1"), bash("cm"))).toEqual({ ok: false, why: "unverified" });
+    // The parent is running but is not the model's own call.
+    const orphan = [user("tidy the notes")];
+    expect(resolve(orphan, ask("cm/1"), bash("cm"), { cm: codemode })).toEqual({
+      ok: false,
+      why: "unverified",
+    });
+  });
+
+  it("refuses shared ids anywhere in the chain", () => {
+    expect(resolve(branch, ask("cm/1"), bash("cm"), { cm: "duplicate" })).toEqual({
+      ok: false,
+      why: "ambiguous",
+    });
+    expect(resolve(branch, ask("cm/1"), "duplicate", { cm: codemode })).toEqual({
+      ok: false,
+      why: "ambiguous",
+    });
+    const twice = [...branch, assistant([toolCall("cm", "codemode", { code: "" })])];
+    expect(resolve(twice, ask("cm/1"), bash("cm"), { cm: codemode })).toEqual({
+      ok: false,
+      why: "ambiguous",
+    });
+    // The model can issue an id that looks nested; the nested call with it is not trusted.
+    const lookalike = [...branch, assistant([toolCall("cm/1", "bash", { command: "ls" })])];
+    expect(resolve(lookalike, ask("cm/1"), bash("cm"), { cm: codemode })).toEqual({
+      ok: false,
+      why: "ambiguous",
+    });
+  });
+
+  it("refuses a nested call for another tool, or under a root the transcript names differently", () => {
+    expect(
+      resolve(branch, { toolCallId: "cm/1", toolName: "slack_post" }, bash("cm"), { cm: codemode }),
+    ).toEqual({ ok: false, why: "mismatch" });
+    const notCodemode = { toolName: "bash", input: {} };
+    expect(resolve(branch, ask("cm/1"), bash("cm"), { cm: notCodemode })).toEqual({
+      ok: false,
+      why: "mismatch",
+    });
+  });
+
+  it("keeps an earlier codemode call's nested record out of earlier actions", () => {
+    const earlier = [
+      user("tidy the notes"),
+      assistant([toolCall("old", "codemode", { code: "…" })]),
+      {
+        type: "message",
+        message: {
+          role: "toolResult",
+          toolCallId: "old",
+          toolName: "codemode",
+          content: "",
+          nestedCalls: {
+            calls: [{ id: "old/1", name: "bash", arguments: { command: "rm x" }, status: "ok" }],
+          },
+        },
+      },
+      assistant([toolCall("cm", "codemode", { code: "…" })]),
+    ];
+    const result = resolve(earlier, ask("cm/1"), bash("cm"), { cm: codemode });
+    expect(result.ok && result.state.earlier_actions).toEqual([
+      { tool: "codemode", input: '{"code":"…"}' },
+    ]);
   });
 });
 

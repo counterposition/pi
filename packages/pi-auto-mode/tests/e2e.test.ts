@@ -22,12 +22,18 @@ const packageDir = join(here, "..");
 const modules = join(packageDir, "node_modules");
 const PI_CLI = join(modules, "@earendil-works/pi-coding-agent/dist/bundle/cli.js");
 const PERMISSIONS = join(modules, "@gotgenes/pi-permission-system");
+/** Nested tool calls (`ctx.executeTool`) and the codemode tool arrived in Pi 0.99. */
+const HAS_CODEMODE = existsSync(
+  join(modules, "@earendil-works/pi-coding-agent/dist/extensions/codemode"),
+);
 
 const POLICY = {
   authorizerChain: ["auto-mode"],
   permission: {
     "*": "ask",
     read: "allow",
+    codemode: "allow",
+    relay: "allow",
     grep: "allow",
     find: "allow",
     ls: "allow",
@@ -103,11 +109,19 @@ function run(command: string, args: string[], options: { cwd: string; env: NodeJ
 
 async function runPi(
   calls: { name: string; args: Record<string, unknown> }[],
-  order: "auto-mode first" | "permissions first" = "auto-mode first",
+  {
+    order = "auto-mode first",
+    nested = false,
+  }: {
+    order?: "auto-mode first" | "permissions first";
+    /** Adds codemode, MCP, and the nested-call fixture, which edits input after auto-mode. */
+    nested?: boolean;
+  } = {},
 ): Promise<string[]> {
   // auto-mode must load first so it sees each prepared call before the permission gate.
+  const autoMode = nested ? [packageDir, join(here, "fixtures/nested.ts")] : [packageDir];
   const extensions =
-    order === "auto-mode first" ? [packageDir, PERMISSIONS] : [PERMISSIONS, packageDir];
+    order === "auto-mode first" ? [...autoMode, PERMISSIONS] : [PERMISSIONS, ...autoMode];
   const { stdout } = await run(
     process.execPath,
     [
@@ -121,6 +135,16 @@ async function runPi(
       "-e",
       join(here, "fixtures/faux.ts"),
       ...extensions.flatMap((path) => ["-e", path]),
+      ...(nested
+        ? [
+            "-e",
+            "builtin:codemode",
+            "-e",
+            "builtin:mcp",
+            "--tools",
+            "bash,codemode,relay,mcp__tracker__create_issue",
+          ]
+        : []),
       "--model",
       "faux/faux-1",
       `Run these: ${JSON.stringify(calls)}`,
@@ -149,6 +173,15 @@ beforeAll(async () => {
   await writeFile(
     join(agent, "auto-mode.json"),
     JSON.stringify({ apiKey: "e2e-key", url, timeoutMs: 2000 }),
+  );
+  // Read only by Pi's MCP extension, which only the nested tests load.
+  await writeFile(
+    join(agent, "mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        tracker: { command: process.execPath, args: [join(here, "fixtures/mcp-server.ts")] },
+      },
+    }),
   );
 });
 
@@ -203,9 +236,104 @@ describe.skipIf(!existsSync(PI_CLI))("headless e2e", () => {
         { name: "bash", args: { command: "echo safe-again" } },
         { name: "slack_post", args: { channel: "#general", text: "hello" } },
       ],
-      "permissions first",
+      { order: "permissions first" },
     );
     expect(results[0]).toMatch(/RESULT bash isError=true .*requires approval/);
     expect(results[1]).toMatch(/RESULT slack_post isError=true .*requires approval/);
+  }, 90_000);
+});
+
+/** A codemode call running `code`. */
+const script = (code: string) => ({ name: "codemode", args: { code } });
+/** Runs nested calls in parallel and reports each one, short enough for one RESULT line. */
+const settle = (calls: string) =>
+  `const r = await Promise.allSettled([${calls}]);
+text(r.map((x) => x.status === "fulfilled"
+  ? "OK " + JSON.stringify(x.value).slice(0, 60)
+  : "ERR " + x.reason.message.replace(/^.*Reason: /, "")).join(" | "));`;
+
+describe.skipIf(!existsSync(PI_CLI) || !HAS_CODEMODE)("headless e2e, nested calls", () => {
+  const since = () => {
+    const start = requests.length;
+    return () => requests.slice(start).map((r) => r.state);
+  };
+
+  it("judges each call a codemode script makes, and denies a flagged one with a reason", async () => {
+    const seen = since();
+    const [result] = await runPi(
+      [
+        script(
+          settle(
+            `tools.bash({ command: "echo nested-safe" }), tools.bash({ command: "echo FLAG-nested" })`,
+          ),
+        ),
+      ],
+      { nested: true },
+    );
+    expect(result).toMatch(/RESULT codemode isError=false/);
+    expect(result).toMatch(/OK \{"output":"nested-safe/);
+    expect(result).toMatch(/ERR .*auto-mode blocked this call .*external 0\.97/);
+    const states = seen();
+    expect(states.map((s) => s.action.tool)).toEqual(["bash", "bash"]);
+    expect(states.map((s) => s.action.input)).toEqual(
+      expect.arrayContaining([{ command: "echo nested-safe" }, { command: "echo FLAG-nested" }]),
+    );
+    expect(states[0]?.user_messages[0]).toContain("Run these");
+  }, 90_000);
+
+  it("judges a grandchild, and the edited input a later handler left", async () => {
+    const seen = since();
+    const [result] = await runPi(
+      [
+        script(
+          settle(
+            `tools.relay({ tool: "bash", args: { command: "echo grandchild" } }), tools.bash({ command: "echo REWRITE-ME" })`,
+          ),
+        ),
+      ],
+      { nested: true },
+    );
+    expect(result).toMatch(/OK "relayed .*grandchild/);
+    expect(result).toMatch(/ERR .*auto-mode blocked this call/);
+    const inputs = seen().map((s) => JSON.stringify(s.action.input));
+    expect(inputs).toEqual(
+      expect.arrayContaining([
+        '{"command":"echo grandchild"}',
+        '{"command":"echo FLAG-rewritten"}',
+      ]),
+    );
+    expect(inputs.join()).not.toContain("REWRITE-ME");
+  }, 90_000);
+
+  it("judges an MCP tool called from codemode", async () => {
+    const seen = since();
+    const [result] = await runPi(
+      [
+        script(
+          settle(
+            `tools.mcp__tracker__create_issue({ title: "t" }), tools.mcp__tracker__create_issue({ title: "FLAG" })`,
+          ),
+        ),
+      ],
+      { nested: true },
+    );
+    expect(result).toMatch(/OK .*created t/);
+    expect(result).toMatch(/ERR .*auto-mode blocked this call/);
+    const states = seen();
+    expect(states.map((s) => s.action.tool)).toEqual([
+      "mcp__tracker__create_issue",
+      "mcp__tracker__create_issue",
+    ]);
+    expect(states[0]?.action.description).toBe("Creates an issue in the tracker");
+  }, 90_000);
+
+  it("sends nested asks to a human when it loads after the permission system", async () => {
+    const seen = since();
+    const [result] = await runPi([script(settle(`tools.bash({ command: "echo late-nested" })`))], {
+      order: "permissions first",
+      nested: true,
+    });
+    expect(result).toMatch(/ERR .*requires approval/);
+    expect(seen()).toEqual([]);
   }, 90_000);
 });

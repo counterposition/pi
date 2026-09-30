@@ -20,7 +20,8 @@ import { QUESTION_IDS } from "../src/questions.js";
 const { default: autoMode } = await import("../extensions/auto-mode.js");
 
 type Handler = (...args: unknown[]) => unknown;
-type Call = { id: string; command: string };
+/** `name` defaults to bash; `parent` makes it a call another tool made, not in the transcript. */
+type Call = { id: string; command: string; name?: string; parent?: string };
 
 function fakePi(sessionId = "s1") {
   const handlers = new Map<string, Handler[]>();
@@ -65,20 +66,26 @@ function fakePi(sessionId = "s1") {
         content: calls.map((c) => ({
           type: "toolCall",
           id: c.id,
-          name: "bash",
+          name: c.name ?? "bash",
           arguments: { command: c.command },
         })),
       },
     });
   /** Delivers one prepared call to auto-mode's tool_call handler. */
   const prepare = (call: Call) =>
-    fire("tool_call", { toolCallId: call.id, toolName: "bash", input: { command: call.command } });
+    fire("tool_call", {
+      toolCallId: call.id,
+      toolName: call.name ?? "bash",
+      input: { command: call.command },
+      ...(call.parent ? { parentToolCallId: call.parent } : {}),
+    });
   autoMode(pi as unknown as ExtensionAPI);
   return {
     fire,
     emit,
     ui,
     session,
+    branch,
     message,
     prepare,
     command: (args: string) => commands.get("auto")!.handler(args, ctx),
@@ -269,6 +276,17 @@ describe("auto-mode extension", () => {
       );
     });
 
+    it("says nothing about load order while off", async () => {
+      const { pi, ask } = await linked('{"mode": "off", "apiKey": "test-key"}');
+      const call = { id: "c1", command: "echo ok" };
+      pi.message([call]);
+      expect(await ask(call)).toEqual({ kind: "defer" });
+      expect(pi.ui.notify).not.toHaveBeenCalledWith(
+        expect.stringContaining("loaded too late"),
+        "warning",
+      );
+    });
+
     it("does not blame load order for a subagent's forwarded call", async () => {
       const { pi, ask } = await linked();
       expect(await ask({ id: "child-call", command: "echo ok" })).toEqual({ kind: "defer" });
@@ -296,6 +314,131 @@ describe("auto-mode extension", () => {
         expect.stringContaining("loaded too late"),
         "warning",
       );
+    });
+  });
+
+  describe("nested calls", () => {
+    const outer = { id: "cm", command: "", name: "codemode" };
+    const child = (n: number, command = "echo ok", parent = "cm") => ({
+      id: `${parent}/${n}`,
+      command,
+      parent,
+    });
+    const running = async (pi: ReturnType<typeof fakePi>) => {
+      pi.message([outer]);
+      await pi.prepare(outer);
+    };
+
+    it("judges calls a running tool makes, each on its own input", async () => {
+      const { pi, fetch, ask } = await linked();
+      await running(pi);
+      const safe = child(1);
+      const flagged = child(2, "git push FLAG");
+      await pi.prepare(safe);
+      await pi.prepare(flagged);
+      expect(await ask(safe)).toEqual({ kind: "allow" });
+      expect(await ask(flagged)).toEqual({ kind: "defer" });
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(String(fetch.mock.calls[1]?.[1]?.body)).toContain("git push FLAG");
+
+      const grandchild = child(1, "echo deeper", "cm/1");
+      await pi.prepare(grandchild);
+      expect(await ask(grandchild)).toEqual({ kind: "allow" });
+    });
+
+    it("stops trusting a call's children once it ends, is blocked, or the agent stops", async () => {
+      const { pi, fetch, ask } = await linked();
+      await running(pi);
+      await pi.fire("tool_result", { toolCallId: "cm" });
+      const late = child(1);
+      await pi.prepare(late);
+      expect(await ask(late)).toEqual({ kind: "defer" });
+
+      const blocked = { id: "cm2", command: "", name: "codemode" };
+      pi.message([blocked]);
+      await pi.prepare(blocked);
+      await pi.fire("tool_execution_end", { toolCallId: "cm2" });
+      const underBlocked = child(1, "echo ok", "cm2");
+      await pi.prepare(underBlocked);
+      expect(await ask(underBlocked)).toEqual({ kind: "defer" });
+
+      const stopped = { id: "cm3", command: "", name: "codemode" };
+      pi.message([stopped]);
+      await pi.prepare(stopped);
+      await pi.fire("agent_end");
+      const underStopped = child(1, "echo ok", "cm3");
+      await pi.prepare(underStopped);
+      expect(await ask(underStopped)).toEqual({ kind: "defer" });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("does not trust a parent captured after its session ended", async () => {
+      const { pi, fetch, ask } = await linked();
+      pi.message([outer]);
+      await pi.fire("session_shutdown");
+      await pi.prepare(outer);
+      await pi.fire("session_start");
+      pi.emit("permissions:ready", { sessionId: "s1" });
+      const call = child(1);
+      await pi.prepare(call);
+      expect(await ask(call)).toEqual({ kind: "defer" });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it("defers when the parent ends while Jev is answering", async () => {
+      const { pi, fetch, ask } = await linked();
+      const answer = fetch.getMockImplementation()!;
+      fetch.mockImplementationOnce(async (...args) => {
+        await pi.fire("tool_result", { toolCallId: "cm" });
+        return answer(...args);
+      });
+      await running(pi);
+      const call = child(1);
+      await pi.prepare(call);
+      expect(await ask(call)).toEqual({ kind: "defer" });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("defers when a new call with the same id replaces it while Jev is answering", async () => {
+      const { pi, fetch, ask } = await linked();
+      const answer = fetch.getMockImplementation()!;
+      fetch.mockImplementationOnce(async (...args) => {
+        await pi.fire("agent_end");
+        pi.branch.length = 0;
+        await running(pi);
+        await pi.prepare(child(1, "echo other"));
+        return answer(...args);
+      });
+      await running(pi);
+      const call = child(1);
+      await pi.prepare(call);
+      expect(await ask(call)).toEqual({ kind: "defer" });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("defers when the session is replaced while Jev is answering", async () => {
+      const { pi, fetch, ask } = await linked();
+      const call = child(1);
+      // The same input object, so only the session check can tell the captures apart.
+      const input = { command: call.command };
+      const capture = () =>
+        pi.fire("tool_call", {
+          toolCallId: call.id,
+          toolName: "bash",
+          input,
+          parentToolCallId: "cm",
+        });
+      const answer = fetch.getMockImplementation()!;
+      fetch.mockImplementationOnce(async (...args) => {
+        await pi.fire("session_shutdown");
+        await pi.fire("session_start");
+        await pi.prepare(outer);
+        await capture();
+        return answer(...args);
+      });
+      await running(pi);
+      await capture();
+      expect(await ask(call)).toEqual({ kind: "defer" });
     });
   });
 
