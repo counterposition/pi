@@ -9,6 +9,7 @@ import type {
 
 import { DEFAULT_CONFIG, loadConfig, MODES, resolveApiKey } from "../src/config.js";
 import type { LoadedConfig, Mode } from "../src/config.js";
+import { jevModel } from "../src/jev.js";
 import { authorize, LINK_NAME } from "../src/link.js";
 import type { LinkContext } from "../src/link.js";
 import { callsWithId, parseRemotes, remotesEnvironment } from "../src/state.js";
@@ -50,6 +51,7 @@ export default function autoMode(pi: ExtensionAPI): void {
   const consulted = new Set<string>();
   let keyMissing = false;
   let keyRejected = false;
+  let oldPi = false;
   let notInChain = false;
   /** Set once the permission system has consulted this link, proving it is in the chain. */
   let confirmed = false;
@@ -84,6 +86,7 @@ export default function autoMode(pi: ExtensionAPI): void {
   };
   const problems = (): string[] => [
     ...loaded.errors.map((error) => `config error: ${error}`),
+    ...(oldPi ? ["needs Pi 0.99 or newer: update Pi"] : []),
     ...(!registration?.dispose
       ? [
           `not connected to the permission system (${registration?.error ?? "is @gotgenes/pi-permission-system installed?"})`,
@@ -139,6 +142,8 @@ export default function autoMode(pi: ExtensionAPI): void {
       prepared: (toolCallId) => (generation === born ? running.get(toolCallId) : undefined),
       tools: () => pi.getAllTools(),
       apiKey: checkKey,
+      models: current.modelRegistry,
+      signal: () => current.signal,
       setStatus,
       jevResult: (error) => {
         // Only a success clears a rejected key; other failures say nothing about it.
@@ -200,6 +205,10 @@ export default function autoMode(pi: ExtensionAPI): void {
     loaded = await loadConfig(join(getAgentDir(), "auto-mode.json"));
     if (loaded.errors.length > 0) {
       c.ui.notify(`Auto mode is off: ${loaded.errors.join("; ")}`, "warning");
+    }
+    oldPi = !jevModel(c.modelRegistry, loaded.config);
+    if (oldPi && loaded.config.mode !== "off") {
+      warn("pi", "Auto mode needs Pi 0.99 or newer, so every ask comes to you. To fix: update Pi.");
     }
     if (loaded.config.mode !== "off") void checkKey();
     const result = await pi.exec("git", ["remote", "-v"], { cwd: c.cwd, timeout: 5000 });

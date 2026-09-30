@@ -16,6 +16,7 @@ vi.mock("@gotgenes/pi-permission-system", async () => {
 });
 
 import { QUESTION_IDS } from "../src/questions.js";
+import { models } from "./fixtures/models.js";
 
 const { default: autoMode } = await import("../extensions/auto-mode.js");
 
@@ -23,7 +24,7 @@ type Handler = (...args: unknown[]) => unknown;
 /** `name` defaults to bash; `parent` makes it a call another tool made, not in the transcript. */
 type Call = { id: string; command: string; name?: string; parent?: string };
 
-function fakePi(sessionId = "s1") {
+function fakePi(sessionId = "s1", modelRegistry: unknown = models) {
   const handlers = new Map<string, Handler[]>();
   const bus = new Map<string, Handler[]>();
   const commands = new Map<string, { handler: Handler }>();
@@ -49,6 +50,8 @@ function fakePi(sessionId = "s1") {
     cwd: "/repo",
     ui,
     hasPendingMessages: () => false,
+    modelRegistry,
+    signal: undefined,
     sessionManager: { getBranch: () => branch, getSessionId: () => session.id },
   };
   const fire = async (name: string, event: unknown = {}) => {
@@ -113,7 +116,7 @@ afterEach(async () => {
 });
 
 /** A registered link against a Jev that finds everything safe unless the command says FLAG. */
-async function linked(config = '{"apiKey": "test-key"}') {
+async function linked(config = '{"apiKey": "test-key"}', modelRegistry: unknown = models) {
   await writeFile(join(agentDir, "auto-mode.json"), config);
   const fetch = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
     const flagged = String(init?.body).includes("FLAG");
@@ -130,7 +133,7 @@ async function linked(config = '{"apiKey": "test-key"}') {
   vi.stubGlobal("fetch", fetch);
   const svc = service();
   services.byId.set("s1", svc);
-  const pi = fakePi();
+  const pi = fakePi("s1", modelRegistry);
   await pi.fire("session_start");
   pi.emit("permissions:ready", { sessionId: "s1" });
   await vi.waitFor(() => expect(svc.registerAuthorizer).toHaveBeenCalled());
@@ -484,6 +487,21 @@ describe("auto-mode extension", () => {
     await pi.prepare(call);
     expect(await ask(call)).toEqual({ kind: "allow" });
     expect(pi.ui.setStatus).toHaveBeenLastCalledWith("auto-mode", "auto");
+  });
+
+  it("says once, with the fix, when Pi is too old to ask Jev", async () => {
+    const { pi, fetch, ask } = await linked(undefined, { find: () => undefined });
+    for (const id of ["p1", "p2"]) {
+      const call = { id, command: "echo ok" };
+      pi.message([call]);
+      await pi.prepare(call);
+      expect(await ask(call)).toEqual({ kind: "defer" });
+    }
+    const warnings = pi.ui.notify.mock.calls.filter(([m]) => String(m).includes("Pi 0.99"));
+    expect(warnings).toHaveLength(1);
+    expect(fetch).not.toHaveBeenCalled();
+    await pi.command("status");
+    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).toContain("needs Pi 0.99 or newer");
   });
 
   it("says when the permission system is missing, at the first tool call", async () => {

@@ -1,10 +1,18 @@
+import type {
+  ClassifierApi,
+  ClassifierModel,
+  ClassifierResult,
+  JsonObject,
+} from "@earendil-works/pi-ai";
+import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
+
 import { QUESTION_IDS, QUESTIONS } from "./questions.js";
 import type { Answers } from "./questions.js";
 import type { JevState } from "./state.js";
 
 export const JEV_URL = "https://api.typesafe.ai/v1/systemone";
 
-export type JevErrorKind = "timeout" | "http" | "network" | "malformed";
+export type JevErrorKind = "timeout" | "aborted" | "http" | "network" | "malformed";
 
 export class JevError extends Error {
   constructor(
@@ -17,12 +25,29 @@ export class JevError extends Error {
   }
 }
 
+/**
+ * Pi's TypeSafe classifier, sent as `model` to `url`, or undefined when Pi is older
+ * than 0.99 and has no classifier runtime. `url` must end in `/systemone`.
+ */
+export function jevModel(
+  models: ModelRegistry,
+  { model, url }: { model: string; url: string },
+): ClassifierModel<ClassifierApi> | undefined {
+  if (typeof models.classify !== "function" || typeof models.findOfType !== "function") {
+    return undefined;
+  }
+  const typesafe = models.findOfType("classifier", "typesafe", "jev-latest");
+  return typesafe && { ...typesafe, id: model, baseUrl: url.slice(0, -"systemone".length) };
+}
+
 export interface JevRequest {
+  models: ModelRegistry;
+  model: ClassifierModel<ClassifierApi>;
   apiKey: string;
-  model: string;
   state: JevState;
   timeoutMs: number;
-  url?: string;
+  /** The agent run's signal: aborting the run stops the wait. */
+  signal?: AbortSignal;
   fetch?: typeof fetch;
 }
 
@@ -30,72 +55,57 @@ export interface JevResult {
   answers: Answers;
   model: string;
   latencyMs: number;
-  inputTokens?: number;
 }
 
+/** Pi sends the public `bool` type as TypeSafe's `noul`, so the wire request is unchanged. */
+const BOOL_QUESTIONS = Object.fromEntries(
+  QUESTION_IDS.map((id) => [id, { ...QUESTIONS[id], type: "bool" as const }]),
+);
+
 export async function askJev({
-  apiKey,
+  models,
   model,
+  apiKey,
   state,
   timeoutMs,
-  url = JEV_URL,
+  signal,
   fetch: doFetch = fetch,
 }: JevRequest): Promise<JevResult> {
   const started = performance.now();
-  const signal = AbortSignal.timeout(timeoutMs);
-  let response: Response;
-  let body: unknown;
-  try {
-    response = await doFetch(url, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model, state, questions: QUESTIONS }),
-      signal,
-    });
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new JevError("http", `HTTP ${response.status}: ${text.slice(0, 200)}`, response.status);
-    }
-    body = await response.json().catch(() => {
-      throw new JevError("malformed", "response is not JSON");
-    });
-  } catch (error: unknown) {
-    throw normalize(error, signal);
-  }
-  return { ...parseAnswers(body), latencyMs: Math.round(performance.now() - started) };
-}
-
-export function parseAnswers(body: unknown): Omit<JevResult, "latencyMs"> {
-  if (!isRecord(body) || !isRecord(body.answers)) {
-    throw new JevError("malformed", "response has no answers");
-  }
+  const timeout = AbortSignal.timeout(timeoutMs);
+  let response: Response | undefined;
+  const result = await models.classify(
+    model,
+    { state: state as unknown as JsonObject, questions: BOOL_QUESTIONS },
+    {
+      apiKey,
+      maxRetries: 0,
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      fetch: async (input, init) => (response = await doFetch(input, init)),
+    },
+  );
+  if (result.stopReason !== "stop") throw failure(result, timeout, response);
   const answers = {} as Answers;
   for (const id of QUESTION_IDS) {
-    const answer = body.answers[id];
-    const value = isRecord(answer) ? answer.noul : undefined;
-    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+    const answer = result.answers[id];
+    const value = answer?.type === "bool" ? answer.probability : undefined;
+    if (value === undefined || !Number.isFinite(value) || value < 0 || value > 1) {
       throw new JevError("malformed", `answer '${id}' is missing or out of range`);
     }
     answers[id] = value;
   }
-  const usage = isRecord(body.usage) ? body.usage : undefined;
-  return {
-    answers,
-    model: typeof body.model === "string" ? body.model : "unknown",
-    inputTokens: typeof usage?.input_tokens === "number" ? usage.input_tokens : undefined,
-  };
+  return { answers, model: result.model, latencyMs: Math.round(performance.now() - started) };
 }
 
-function normalize(error: unknown, signal: AbortSignal): JevError {
-  if (signal.aborted) return new JevError("timeout", "Jev did not answer in time");
-  if (error instanceof JevError) return error;
-  const err = error instanceof Error ? error : new Error(String(error));
-  if (err.name === "TimeoutError" || err.name === "AbortError") {
-    return new JevError("timeout", "Jev did not answer in time");
-  }
-  return new JevError("network", err.message);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+function failure(
+  result: ClassifierResult,
+  timeout: AbortSignal,
+  response: Response | undefined,
+): JevError {
+  if (timeout.aborted) return new JevError("timeout", "Jev did not answer in time");
+  if (result.stopReason === "aborted") return new JevError("aborted", "the agent run stopped");
+  const message = result.errorMessage ?? "Jev failed";
+  if (!response) return new JevError("network", message);
+  if (!response.ok) return new JevError("http", message, response.status);
+  return new JevError("malformed", message);
 }

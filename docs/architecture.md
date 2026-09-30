@@ -47,4 +47,4 @@ This repository separates canonical skill authoring from publishable Pi packages
 
 ## Pi Versions
 
-The extensions' Pi dev dependencies (`@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent`) track the latest tested Pi, and the lockfile pins it for the `check` CI job. The `compat` job in `.github/workflows/ci.yml` also runs the tests against the oldest supported Pi, set in its `pi` matrix. Peer ranges stay `"*"`.
+The extensions' Pi dev dependencies (`@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent`) track the latest tested Pi, and the lockfile pins it for the `check` CI job. The `compat` job in `.github/workflows/ci.yml` also runs the tests against the oldest supported Pi, set in its `pi` matrix. pi-auto-mode needs Pi 0.99 or newer for its classifier runtime, so that job skips it. Peer ranges stay `"*"`.

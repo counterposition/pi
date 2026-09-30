@@ -1,3 +1,4 @@
+import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 import type {
   AuthorizerLog,
   AuthorizerVerdict,
@@ -5,7 +6,7 @@ import type {
 } from "@gotgenes/pi-permission-system";
 
 import type { AutoModeConfig, Mode } from "./config.js";
-import { askJev, JevError } from "./jev.js";
+import { askJev, JevError, jevModel } from "./jev.js";
 import { flagText, route } from "./route.js";
 import { neverAutoAllow } from "./never.js";
 import { isOversized, resolveAction, resolveState } from "./state.js";
@@ -36,6 +37,10 @@ export interface LinkContext {
   prepared: PreparedLookup;
   tools(): readonly ToolDescription[];
   apiKey(): Promise<string | undefined>;
+  /** Pi's model registry, which runs the Jev request. */
+  models: ModelRegistry;
+  /** The agent run's abort signal, if it is running. */
+  signal(): AbortSignal | undefined;
   /** Shows a flagged call's hazard next to the approval dialog. */
   setStatus(label: string | undefined): void;
   /** Told whether each Jev request worked, so setup problems (a rejected key) can surface. */
@@ -46,6 +51,7 @@ export interface LinkContext {
 type Why =
   | Unresolved
   | "no_api_key"
+  | "old_pi"
   | "oversized"
   | "incomplete"
   | "capped"
@@ -136,17 +142,20 @@ export async function authorize(
     }
     if (ctx.pendingInput()) return defer("pending");
 
+    const model = jevModel(ctx.models, ctx.config);
+    if (!model) return defer("old_pi");
     const apiKey = await ctx.apiKey();
     if (!apiKey) return defer("no_api_key");
 
     let result;
     try {
       result = await askJev({
+        models: ctx.models,
+        model,
         apiKey,
-        model: ctx.config.model,
-        url: ctx.config.url,
         state: resolved.state,
         timeoutMs: ctx.config.timeoutMs,
+        signal: ctx.signal(),
         fetch: ctx.fetch,
       });
     } catch (error: unknown) {

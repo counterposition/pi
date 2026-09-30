@@ -59,6 +59,8 @@ describe("parseConfig", () => {
     [{ thresholds: { safe: 2 } }, "threshold 'safe'"],
     [{ thresholds: { unsafe: 0.2 } }, "unknown threshold"],
     [{ apiKey: "" }, "apiKey"],
+    [{ url: "https://proxy.example/jev" }, "url must be an http(s) URL ending in /systemone"],
+    [{ url: "https://api.typesafe.ai/v1/systemone?region=eu" }, "url"],
   ])("turns auto mode off for an invalid field: %j", (value, message) => {
     const { config, errors } = parseConfig(value, "cfg");
     expect(config.mode).toBe("off");

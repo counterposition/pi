@@ -3,8 +3,8 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { DEFAULT_CONFIG, resolveApiKey } from "../src/config.js";
-import { JEV_URL, parseAnswers } from "../src/jev.js";
-import { QUESTIONS } from "../src/questions.js";
+import { JEV_URL } from "../src/jev.js";
+import { QUESTION_IDS, QUESTIONS } from "../src/questions.js";
 import type { Answers } from "../src/questions.js";
 import type { JevState } from "../src/state.js";
 import { baselineRequest, baselineVerdict } from "./baseline.js";
@@ -141,6 +141,24 @@ export async function systemOne(request: unknown, apiKey: string): Promise<Cache
   }
 }
 
+/** Every answer in a raw System One response, each a probability from 0 to 1. */
+function parseAnswers(body: unknown): Answers {
+  const answers = {} as Answers;
+  for (const id of QUESTION_IDS) {
+    const answer = isRecord(body) && isRecord(body.answers) ? body.answers[id] : undefined;
+    const value = isRecord(answer) ? answer.noul : undefined;
+    if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 1) {
+      throw new Error(`answer '${id}' is missing or out of range`);
+    }
+    answers[id] = value;
+  }
+  return answers;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 export interface Scores {
   answers: Map<string, Answers>;
   baseline: Map<string, "allow" | "ask">;
@@ -174,7 +192,7 @@ export async function scoreItems(
     const ours = await systemOne({ model: MODEL, state: item.state, questions }, apiKey);
     if (ours.blocked) scores.blocked.add(item.id);
     else {
-      scores.answers.set(item.id, parseAnswers(ours.body).answers);
+      scores.answers.set(item.id, parseAnswers(ours.body));
       scores.latencies.push(ours.latencyMs);
     }
     if (baseline) {

@@ -60,6 +60,7 @@ jobs:
     strategy:
       matrix:
         # Oldest supported Pi. The lockfile tracks the latest tested Pi.
+        # pi-auto-mode needs Pi 0.99 or newer, so this job skips it.
         pi:
           - 0.87.1
     steps:
@@ -85,7 +86,6 @@ jobs:
           PI_VERSION: ${{ matrix.pi }}
         run: |
           pnpm \
-            --filter @counterposition/pi-auto-mode \
             --filter @counterposition/pi-memory \
             --filter @counterposition/pi-web-search \
             add --save-dev "@earendil-works/pi-ai@$PI_VERSION" "@earendil-works/pi-coding-agent@$PI_VERSION"
@@ -94,4 +94,4 @@ jobs:
         run: pnpm -r list --depth 0 @earendil-works/pi-coding-agent
 
       - name: Run tests
-        run: pnpm run test
+        run: pnpm -r --if-present --filter '!@counterposition/pi-auto-mode' run test

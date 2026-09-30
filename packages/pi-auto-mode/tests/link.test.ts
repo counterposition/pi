@@ -1,3 +1,4 @@
+import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 import type { AuthorizerLog, PromptPermissionDetails } from "@gotgenes/pi-permission-system";
 import { describe, expect, it, vi } from "vitest";
 
@@ -8,6 +9,7 @@ import type { LinkContext } from "../src/link.js";
 import { QUESTION_IDS } from "../src/questions.js";
 import { MAX_USER_MESSAGE_CHARS } from "../src/state.js";
 import type { Answers } from "../src/questions.js";
+import { models } from "./fixtures/models.js";
 
 const details = {
   requestId: "req-1",
@@ -60,6 +62,8 @@ const setup = (overrides: Partial<LinkContext> = {}) => {
     prepared: () => call,
     tools: () => [],
     apiKey: async () => "key",
+    models,
+    signal: () => undefined,
     setStatus: vi.fn(),
     fetch: jevReturning(),
     ...overrides,
@@ -256,6 +260,14 @@ describe("authorize", () => {
     });
     expect(await run()).toEqual({ kind: "defer" });
     expect(lastReview(log)[1]).toMatchObject({ why: "error", error: "http", status: 503 });
+  });
+
+  it("defers without asking Jev on a Pi too old to classify", async () => {
+    const old = { find: () => undefined } as unknown as ModelRegistry;
+    const { ctx, log, run } = setup({ models: old });
+    expect(await run()).toEqual({ kind: "defer" });
+    expect(ctx.fetch).not.toHaveBeenCalled();
+    expect(lastReview(log)[1]).toMatchObject({ why: "old_pi" });
   });
 
   it("defers without a key", async () => {

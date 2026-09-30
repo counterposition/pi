@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { QUESTION_IDS } from "../src/questions.js";
+import { QUESTION_IDS, QUESTIONS } from "../src/questions.js";
 import type { JevState } from "../src/state.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -46,7 +46,9 @@ const POLICY = {
 };
 
 interface JevRequest {
+  path: string | undefined;
   auth: string | undefined;
+  body: string;
   state: JevState;
 }
 
@@ -61,7 +63,12 @@ function startJev(): Promise<string> {
     req.on("data", (chunk: Buffer) => (body += chunk.toString()));
     req.on("end", () => {
       const parsed = JSON.parse(body) as { state: JevState };
-      requests.push({ auth: req.headers.authorization, state: parsed.state });
+      requests.push({
+        path: req.url,
+        auth: req.headers.authorization,
+        body,
+        state: parsed.state,
+      });
       const action = JSON.stringify(parsed.state.action);
       if (action.includes("BROKEN")) {
         res.writeHead(500).end("boom");
@@ -221,7 +228,16 @@ describe.skipIf(!existsSync(PI_CLI))("headless e2e", () => {
 
     const commands = requests.map((r) => JSON.stringify(r.state.action));
     expect(requests.every((r) => r.auth === "Bearer e2e-key")).toBe(true);
+    // Byte for byte the request auto-mode sent before it used Pi's classifier runtime.
+    for (const r of requests) {
+      expect(r.path).toBe("/v1/systemone");
+      expect(r.body).toBe(
+        JSON.stringify({ model: "jev-1.13.0", state: r.state, questions: QUESTIONS }),
+      );
+    }
     expect(commands.some((c) => c.includes("git status"))).toBe(false);
+    // One attempt: Pi's classifier runtime would retry a 500 by default.
+    expect(commands.filter((c) => c.includes("BROKEN"))).toHaveLength(1);
     expect(
       requests.find((r) => r.state.action.tool === "slack_post")?.state.action.description,
     ).toBe("Posts a message to a Slack channel");

@@ -14,7 +14,7 @@ export type Mode = (typeof MODES)[number];
 export interface AutoModeConfig {
   mode: Mode;
   model: string;
-  /** TypeSafe's endpoint; override only for a proxy or a local fake in tests. */
+  /** TypeSafe's endpoint, ending in `/systemone`; override only for a proxy or a local fake in tests. */
   url: string;
   apiKey: string;
   timeoutMs: number;
@@ -71,8 +71,10 @@ export function parseConfig(value: unknown, source: string): LoadedConfig {
     else errors.push("model must be a non-empty string");
   }
   if (value.url !== undefined) {
-    if (typeof value.url === "string" && /^https?:\/\//.test(value.url)) config.url = value.url;
-    else errors.push("url must be an http(s) URL");
+    // Pi's classifier runtime posts to `<base URL>/systemone`, with no query.
+    if (typeof value.url === "string" && /^https?:\/\/[^?#]*[^/?#]\/systemone$/.test(value.url)) {
+      config.url = value.url;
+    } else errors.push(`url must be an http(s) URL ending in /systemone, such as ${JEV_URL}`);
   }
   if (value.apiKey !== undefined) {
     if (typeof value.apiKey === "string" && value.apiKey) config.apiKey = value.apiKey;
