@@ -202,7 +202,7 @@ const disposition = await session.steer("Use a smaller diff");   // "queued" | "
 await session.followUp("Summarize the changes afterward");
 ```
 
-`prompt()` expands file-based prompt templates and resolves after an accepted run finishes. During active streaming, calling it without `streamingBehavior` throws. Since Pi 0.99.0 `steer()` and `followUp()` return a disposition: `"queued"` (also after an extension transformed the input) or `"handled"` (an extension consumed it, so nothing was queued). Read state through `session.messages`, `session.model`, `session.thinkingLevel`, `session.systemPrompt`, and `session.getActiveToolNames()`.
+`prompt()` expands file-based prompt templates and resolves after an accepted run finishes. During active streaming, calling it without `streamingBehavior` throws. Since Pi 0.99.0 `steer()` and `followUp()` return a disposition: `"queued"` (also after an extension transformed the input) or `"handled"` (an extension consumed it, so nothing was queued). Both throw for extension commands (`/name`); send those through `prompt()`, which runs them immediately, even while streaming. Read state through `session.messages`, `session.model`, `session.thinkingLevel`, `session.systemPrompt`, and `session.getActiveToolNames()`.
 
 ## Session Runtime
 
@@ -346,13 +346,18 @@ Pi 0.84.0 added transport-neutral remote-session client APIs: `@earendil-works/p
 To name an inline factory in the startup Extensions list (instead of `<inline:1>`), wrap it in an `InlineExtension` (Pi 0.80.4):
 
 ```typescript
-import type { InlineExtension } from "@earendil-works/pi-coding-agent";
+import { DefaultResourceLoader, getAgentDir, type InlineExtension } from "@earendil-works/pi-coding-agent";
 
 const myProvider: InlineExtension = {
   name: "my-provider",
   factory: (pi) => { /* ... */ },
 };
-const loader = new DefaultResourceLoader({ extensionFactories: [myProvider] });
+const loader = new DefaultResourceLoader({
+  cwd: process.cwd(),
+  agentDir: getAgentDir(),
+  extensionFactories: [myProvider],
+});
+await loader.reload();
 ```
 
 Bare factory functions are still accepted.

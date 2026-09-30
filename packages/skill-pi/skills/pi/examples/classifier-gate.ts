@@ -10,7 +10,8 @@ const QUESTIONS = {
   },
 } satisfies ClassifierContext["questions"];
 
-const THRESHOLD = 0.5;
+// Highest P(destructive) that runs without asking. Tune it for your model and question.
+const MAX_ALLOWED_PROBABILITY = 0.2;
 
 export default function (pi: ExtensionAPI) {
   pi.on("tool_call", async (event, ctx) => {
@@ -33,8 +34,8 @@ export default function (pi: ExtensionAPI) {
       }
     }
 
-    // Allow only a valid, confident "not destructive" answer; anything else needs a person.
-    if (probability !== undefined && probability >= 0 && probability < THRESHOLD) return;
+    // Allow only a valid answer at or below the threshold; anything else needs a person.
+    if (probability !== undefined && probability >= 0 && probability <= MAX_ALLOWED_PROBABILITY) return;
 
     const reason =
       probability === undefined ? "Classifier unavailable" : "Classifier flagged the command";

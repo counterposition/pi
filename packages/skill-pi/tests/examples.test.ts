@@ -2,17 +2,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import {
-  fauxAssistantMessage,
-  fauxProvider,
-  fauxToolCall,
-  InMemoryCredentialStore,
-} from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxProvider, fauxToolCall } from "@earendil-works/pi-ai";
 import {
   createAgentSession,
   createCodemodeExtension,
   DefaultResourceLoader,
-  ModelRuntime,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
@@ -20,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import structuredTool from "../skills/pi/examples/structured-tool.js";
 
+const originalOffline = process.env.PI_OFFLINE;
 let dir: string;
 
 beforeEach(async () => {
@@ -28,21 +23,28 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (originalOffline === undefined) {
+    delete process.env.PI_OFFLINE;
+  } else {
+    process.env.PI_OFFLINE = originalOffline;
+  }
   await rm(dir, { recursive: true, force: true });
 });
 
 describe("structured-tool example", () => {
-  it("hands structuredContent to codemode scripts", async () => {
+  it("hands structuredContent to codemode scripts, also for error results", async () => {
     await writeFile(join(dir, "a.txt"), "hello");
-    const faux = fauxProvider({ provider: "faux", models: [{ id: "faux-1" }] });
     const script = [
       'const stats = await tools.file_stats({ paths: ["a.txt", "gone.txt"] });',
-      "return { kind: typeof stats, bytes: stats.files[0].bytes, missing: stats.missing };",
+      'const none = await tools.file_stats({ paths: ["gone.txt"] });',
+      "return { kind: typeof stats, bytes: stats.files[0].bytes, missing: stats.missing, none };",
     ].join("\n");
+    const faux = fauxProvider({ provider: "faux", models: [{ id: "faux-1" }] });
     faux.setResponses([
       fauxAssistantMessage(fauxToolCall("codemode", { code: script }), { stopReason: "toolUse" }),
       fauxAssistantMessage("done"),
     ]);
+    const nestedErrors: boolean[] = [];
 
     const settingsManager = SettingsManager.inMemory({ defaultTools: ["+codemode"] });
     const resourceLoader = new DefaultResourceLoader({
@@ -54,20 +56,20 @@ describe("structured-tool example", () => {
       noThemes: true,
       noContextFiles: true,
       extensionFactories: [
-        (pi) => pi.registerProvider(faux.provider),
+        (pi) => {
+          pi.registerProvider(faux.provider);
+          pi.on("tool_result", (event) => {
+            if (event.toolName === "file_stats") nestedErrors.push(event.isError);
+          });
+        },
         createCodemodeExtension(),
         structuredTool,
       ],
     });
     await resourceLoader.reload();
-    const modelRuntime = await ModelRuntime.create({
-      credentials: new InMemoryCredentialStore(),
-      modelsPath: null,
-    });
     const { session } = await createAgentSession({
       cwd: dir,
       agentDir: dir,
-      modelRuntime,
       resourceLoader,
       settingsManager,
       sessionManager: SessionManager.inMemory(),
@@ -75,9 +77,7 @@ describe("structured-tool example", () => {
 
     try {
       await session.bindExtensions({});
-      const model = modelRuntime.getModel("faux", "faux-1");
-      if (!model) throw new Error("faux model not registered");
-      await session.setModel(model);
+      await session.setModel(faux.getModel());
       expect(session.getActiveToolNames()).toEqual(
         expect.arrayContaining(["codemode", "file_stats"]),
       );
@@ -95,6 +95,8 @@ describe("structured-tool example", () => {
       expect(text).toContain('"kind":"object"');
       expect(text).toContain('"bytes":5');
       expect(text).toContain('"missing":["gone.txt"]');
+      expect(text).toContain('"none":{"files":[],"missing":["gone.txt"]}');
+      expect(nestedErrors).toEqual([false, true]);
     } finally {
       session.dispose();
     }

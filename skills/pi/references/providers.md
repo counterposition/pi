@@ -223,7 +223,7 @@ Pi supports the llama.cpp router server (Pi 0.81.0): configure with `/login llam
 
 ## Model Types
 
-Since Pi 0.99.0 catalogs hold typed models: `type` is `"chat"` (the default when omitted), `"image"`, or `"classifier"`. Chat-facing reads (`getModels()`, `getAvailable()`, `/model`) stay chat-only. Typed reads work on `ModelRuntime`, `ctx.modelRegistry`, and pi-ai `Models`: `getModelsOfType(type, provider?)`, `getModelOfType(type, provider, id)`, `getAvailableOfType(type, provider?)`, `getAllModels()`, `getAllAvailable()`; `ctx.modelRegistry.findOfType(type, provider, id)` is the extension shorthand. pi-ai exports `isModelType()` and `getModelType()` for mixed lists. One upstream ID may have separate chat and image entries. Sources: [models.md](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/models.md#use-classifier-models), [pi-ai types](https://github.com/earendil-works/pi/blob/v0.99.1/packages/ai/src/types.ts).
+Since Pi 0.99.0 catalogs hold typed models: `type` is `"chat"` (the default when omitted), `"image"`, or `"classifier"`. Chat-facing reads (`getModels()`, `getAvailable()`, `ctx.modelRegistry.getAll()`, `/model`) stay chat-only. `ModelRuntime`, `ctx.modelRegistry`, and pi-ai `Models` all have `getModelsOfType(type, provider?)`, `getModelOfType(type, provider, id)`, and async `getAvailableOfType(type, provider?)`. Only `ModelRuntime` and `Models` have `getAllModels()` and `getAllAvailable()` for every type; `ctx.modelRegistry` adds `findOfType(type, provider, id)` instead. pi-ai exports `isModelType()` and `getModelType()` for mixed lists. One upstream ID may have separate chat and image entries. Sources: [models.md](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/models.md#use-classifier-models), [pi-ai types](https://github.com/earendil-works/pi/blob/v0.99.1/packages/ai/src/types.ts).
 
 ### Classifier Models
 
@@ -272,14 +272,14 @@ A gate that fails closed on classifier errors is in `examples/classifier-gate.ts
 
 `ModelRuntime.generateImages(model, { input }, options?)` (Pi 0.99.0) generates images with runtime-resolved auth; list image models with `getModelsOfType("image")`. OpenRouter image models appear under the `openrouter` provider with its credential. Like `classify()`, it returns an error result rather than rejecting.
 
-**Breaking (pi-ai 0.99.0):** the separate image API is gone: `createImagesModels()`, `createImagesProvider()`, `ImagesProvider`, `openrouterImagesProvider()`, `builtinImagesProviders()`, `builtinImagesModels()`, and the plural type names (`ImagesModel`, `ImagesApi`, `KnownImagesApi`, `KnownImagesProvider`, `ImagesProviderId`). Use `builtinModels()`, `models.getModelOfType("image", ...)`, `models.generateImages()`, `createProvider({ models, images })`, and the `ImageModel` type (`type: "image"`). Unqualified model reads remain chat-only.
+In pi-ai, image models live in the same catalog as chat models: `builtinModels()` includes them, `models.getModelOfType("image", provider, id)` finds one (type `ImageModel`), `models.generateImages()` runs it, and `createProvider({ models, images })` registers image implementations. The separate `*Images*` API was removed in pi-ai 0.99.0.
 
 ## Virtual Models
 
 A virtual model (experimental, Pi 0.99.0) is a selectable entry that routes each request to a physical model. It is for routing by task, cost, or conversation state, not for permission decisions. Source: [virtual-models.md](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/virtual-models.md), [`jev-router.ts`](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/examples/extensions/jev-router.ts).
 
 ```typescript
-pi.registerVirtualModel<{ phase: "plan" | "build" }>({
+pi.registerVirtualModel({
   provider: "router",
   id: "auto",
   name: "Auto",

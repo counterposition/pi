@@ -55,7 +55,7 @@ pi mcp logout sentry
 
 In a session, `/mcp` opens the server manager (state, tools, errors, sign in/out, reconnect, exposure, enable/disable). Changes are written back to the `mcp.json` that defines the server. Outside the TUI, `/mcp` prints status and `/mcp login|logout|reconnect <server>` run directly.
 
-Pi connects on session start; the first prompt waits up to 10 seconds for startup connections. OAuth tokens live in `~/.pi/agent/mcp-auth.json`; server log notifications go to `~/.pi/agent/mcp.log`. For servers without dynamic client registration, set `oauth: { clientId, clientSecret?, callbackPort? | callbackUrl?, scope? }`.
+Pi connects on session start; the first prompt waits up to 10 seconds for startup connections. OAuth tokens live in `~/.pi/agent/mcp-auth.json`; server log notifications go to `~/.pi/agent/mcp.log`. OAuth is used only for HTTP servers whose config has no `Authorization` header. The optional `oauth: { clientId?, clientSecret?, callbackPort?, callbackUrl?, scope? }` sets a pre-registered client for servers without dynamic client registration, the loopback redirect (`callbackPort` alone gives `http://127.0.0.1:<port>/callback`; a `callbackUrl` without a port gets `callbackPort` or a free one), and `scope`, space-separated scopes to request when the server does not advertise the ones it needs.
 
 ## Exposure
 
@@ -94,7 +94,7 @@ Undeclared tools (`codemode`, `codemode-deferred`, `deferred`) are reachable thr
 
 ## Permissions
 
-Every MCP call goes through Pi's tool pipeline, so `tool_call` and `tool_result` handlers (permission gates included) see MCP tools. Calls from codemode scripts carry the `codemode` call's id as `parentToolCallId`. `pi.getAllTools()` reports the server's `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` annotations. They are unverified hints; see [Tool Exposure](extensions.md#tool-exposure--structured-results).
+Every MCP call goes through Pi's tool pipeline, so `tool_call` and `tool_result` handlers (permission gates included) see MCP tools. Calls from codemode scripts are nested calls; see [Nested Calls and Permissions](codemode.md#nested-calls-and-permissions). `pi.getAllTools()` reports the server's `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` annotations. They are unverified hints; see [Tool Exposure](extensions.md#tool-exposure--structured-results).
 
 ## Servers From Extensions
 

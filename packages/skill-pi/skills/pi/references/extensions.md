@@ -122,7 +122,7 @@ Useful tool events:
 - `tool_result`
 - `tool_execution_end`
 
-Calls another tool makes through `ctx.executeTool()` (codemode scripts, orchestrating tools) fire the same `tool_call`, `tool_result`, and `tool_execution_*` events with `parentToolCallId` set; their `toolCallId` is `<parent id>/<n>` and never appears in the transcript. Permission gates therefore see nested calls, but must judge them from the event, not by finding the id in the last assistant message. See `references/codemode.md`.
+Calls another tool makes through `ctx.executeTool()` (codemode scripts, orchestrating tools) fire the same tool events, so permission gates see them; see [Nested Calls and Permissions](codemode.md#nested-calls-and-permissions).
 
 Since Pi 0.86.0, tool-call `arguments` and result `details` must be JSON-compatible values (no `Date`, `Map`, class instances, `undefined` array slots); use `details: undefined` when there is nothing structured to keep. Tools registered without a parameter schema are rejected at registration.
 
@@ -206,7 +206,7 @@ Pi 0.99.0 added fields for tools that other tools, codemode scripts, and permiss
 
 ## Dynamic Tool Loading
 
-For tools the model should find on demand, prefer `exposure: "deferred"` with the built-in `tool_search` (Pi 0.99.0), or `exposure: "codemode"` for tools scripts call. The manual loader pattern below still works.
+For tools the model should find on demand, prefer `exposure: "deferred"` with the built-in `tool_search` (Pi 0.99.0), or `exposure: "codemode"` for tools scripts call. `tool_search` is inactive by default: enable it with `"defaultTools": ["+tool_search"]` or `--tools`, or let a connected MCP server with `deferred` exposure turn it on. Without it, the model can reach `deferred` tools only through codemode. The manual loader pattern below still works.
 
 Pi 0.80.7 lets an extension register many tools while keeping only a small initial set active, then add more during execution — cache-friendly on models with native deferred loading. Lifecycle:
 

@@ -10,7 +10,7 @@ Both tools are registered inactive. The default tools stay `read`, `bash`, `edit
 { "defaultTools": ["+codemode"] }
 ```
 
-- `+name` adds to the default selection; `--tools` replaces it, so list everything: `pi --tools read,bash,edit,write,codemode`.
+- `+name` adds to the default selection; `--tools` replaces it, so list everything: `pi --tools read,bash,edit,write,codemode`. `--tools` is an allowlist over every tool, including extension and MCP `mcp__*` tools: unlisted tools are not registered, so scripts can call only the listed ones.
 - The MCP extension activates `codemode` for servers with `codemode`/`codemode-deferred` exposure and `tool_search` for `deferred` servers (see `references/mcp.md`).
 - SDK sessions need `createCodemodeExtension()` / `createToolSearchExtension()` in the resource loader (see `references/sdk.md`).
 

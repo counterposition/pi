@@ -27,6 +27,7 @@
         "Provides models.json with Ollama baseUrl containing localhost:11434",
         "Uses api type openai-completions (correct for Ollama)",
         "Includes model entry with id llama3.2",
+        "Writes models.json providers as an object keyed by provider id (e.g. \"ollama\"), not an array",
         "Provides settings.json with compaction.enabled set to false",
         "Sets sessionDir to ~/pi-sessions",
         "Correct file paths: ~/.pi/agent/models.json and ~/.pi/agent/settings.json"
@@ -122,6 +123,7 @@
         "Uses agent_settled (not agent_end) as the completion signal when a run did start",
         "Shows RpcClient.prompt()/steer()/followUp() returning the disposition, or reads data.disposition from the raw response",
         "Notes that session.prompt() resolves after an accepted run finishes",
+        "States that session.steer() and session.followUp() throw for extension commands, which must go through session.prompt()",
         "Does not suggest a timeout as the fix"
       ]
     }
