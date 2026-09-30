@@ -183,7 +183,7 @@ export default function autoMode(pi: ExtensionAPI): void {
           warned.delete("chain");
           clearStatus();
         }
-        checkOrder(details.toolCallId);
+        if (mode() !== "off") checkOrder(details.toolCallId);
         const link = linkContext();
         return link ? authorize(details, link, log) : { kind: "defer" };
       });

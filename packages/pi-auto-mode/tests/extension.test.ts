@@ -85,6 +85,7 @@ function fakePi(sessionId = "s1") {
     emit,
     ui,
     session,
+    branch,
     message,
     prepare,
     command: (args: string) => commands.get("auto")!.handler(args, ctx),
@@ -275,6 +276,17 @@ describe("auto-mode extension", () => {
       );
     });
 
+    it("says nothing about load order while off", async () => {
+      const { pi, ask } = await linked('{"mode": "off", "apiKey": "test-key"}');
+      const call = { id: "c1", command: "echo ok" };
+      pi.message([call]);
+      expect(await ask(call)).toEqual({ kind: "defer" });
+      expect(pi.ui.notify).not.toHaveBeenCalledWith(
+        expect.stringContaining("loaded too late"),
+        "warning",
+      );
+    });
+
     it("does not blame load order for a subagent's forwarded call", async () => {
       const { pi, ask } = await linked();
       expect(await ask({ id: "child-call", command: "echo ok" })).toEqual({ kind: "defer" });
@@ -387,19 +399,45 @@ describe("auto-mode extension", () => {
       expect(fetch).toHaveBeenCalledTimes(1);
     });
 
-    it("defers when the session is replaced while Jev is answering", async () => {
+    it("defers when a new call with the same id replaces it while Jev is answering", async () => {
       const { pi, fetch, ask } = await linked();
       const answer = fetch.getMockImplementation()!;
       fetch.mockImplementationOnce(async (...args) => {
-        await pi.fire("session_shutdown");
-        await pi.fire("session_start");
+        await pi.fire("agent_end");
+        pi.branch.length = 0;
         await running(pi);
-        await pi.prepare(child(1));
+        await pi.prepare(child(1, "echo other"));
         return answer(...args);
       });
       await running(pi);
       const call = child(1);
       await pi.prepare(call);
+      expect(await ask(call)).toEqual({ kind: "defer" });
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("defers when the session is replaced while Jev is answering", async () => {
+      const { pi, fetch, ask } = await linked();
+      const call = child(1);
+      // The same input object, so only the session check can tell the captures apart.
+      const input = { command: call.command };
+      const capture = () =>
+        pi.fire("tool_call", {
+          toolCallId: call.id,
+          toolName: "bash",
+          input,
+          parentToolCallId: "cm",
+        });
+      const answer = fetch.getMockImplementation()!;
+      fetch.mockImplementationOnce(async (...args) => {
+        await pi.fire("session_shutdown");
+        await pi.fire("session_start");
+        await pi.prepare(outer);
+        await capture();
+        return answer(...args);
+      });
+      await running(pi);
+      await capture();
       expect(await ask(call)).toEqual({ kind: "defer" });
     });
   });

@@ -167,9 +167,11 @@ export async function authorize(
     };
 
     // The call, or a call it runs under, may have ended while Jev was answering.
+    const again = resolveAction(ctx.branch(), details, ctx.prepared);
     if (
       !ctx.isCurrent() ||
-      typeof resolveAction(ctx.branch(), details, ctx.prepared) === "string"
+      typeof again === "string" ||
+      again.input !== resolved.state.action.input
     ) {
       return defer("stale", trail);
     }
