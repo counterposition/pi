@@ -46,8 +46,8 @@
     "review": "jiti eval/cli.ts review"
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "^0.87.1",
-    "@earendil-works/pi-coding-agent": "^0.87.1",
+    "@earendil-works/pi-ai": "^0.99.1",
+    "@earendil-works/pi-coding-agent": "^0.99.1",
     "@gotgenes/pi-permission-system": "33.0.7",
     "@types/node": "^25.5.0",
     "jiti": "^2.7.0",
