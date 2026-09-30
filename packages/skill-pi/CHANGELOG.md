@@ -1,5 +1,44 @@
 # @counterposition/skill-pi
 
+## 0.99.1
+
+### Minor Changes
+
+- Sync the Pi skill with Pi 0.99.1, covering changes across 0.99.0–0.99.1.
+  - MCP and codemode: MCP, `codemode`, and `tool_search` are built-in
+    extensions. Add `references/mcp.md` (`mcp.json` global and trusted-project
+    scopes, `pi mcp`, `/mcp`, the `codemode`, `codemode-deferred`, `deferred`,
+    `direct`, and `hidden` exposures, `toolExposure`, OAuth,
+    `pi.registerMcpServer()`) and `references/codemode.md` (script API,
+    structured results, active vs callable tools, nested calls and
+    permissions, `--tools` as an allowlist, `tool_search`).
+  - Extensions: tool `exposure` (`direct`, `model-only`, `codemode`,
+    `deferred`, `hidden`), `namespace`, `annotations`,
+    `outputSchema`/`structuredContent`, `isError` results, `prepareLoadout()`,
+    `ctx.tools`/`ctx.executeTool()` with `parentToolCallId` and bounded
+    `nestedCalls`, `provider_stream_event`, and experimental
+    `pi.registerVirtualModel()`.
+  - Providers: Sign in with ChatGPT on `openai` vs "OpenAI Codex (legacy)"
+    (default `gpt-6.1-sol`), typed chat/image/classifier catalogs, TypeSafe
+    `jev-latest` and other Jev classifiers via `classify()` (check
+    `stopReason`), `generateImages()`, and the removed pi-ai image API.
+  - SDK/RPC: explicit `createCodemodeExtension()`/`createToolSearchExtension()`/
+    `createMcpExtension()` opt-in with `session.bindExtensions()`, `builtin`/
+    `replaceable` inline extensions, `"started"`/`"queued"`/`"handled"` input
+    dispositions, and `steer()`/`followUp()` rejecting extension commands.
+  - Settings/packages: additive `+name`/`-name` `defaultTools`,
+    `codemode.mode`/`inlineBudget`, `-builtin:<name>`, `--no-extensions`
+    disabling built-ins, the `system` theme default,
+    `fullscreenWheelScrollLines`, host-peer install suppression,
+    duplicate-host dependency warnings, and separate module roots.
+  - Fixes: `models.json` `providers` is an object keyed by provider ID,
+    `models.json` `apiKey` precedes environment variables,
+    `DefaultResourceLoader` requires `{ cwd, agentDir }`, and drop the
+    discontinued `pi-web-ui` row.
+  - Add type-checked extension examples under `examples/` with a codemode
+    smoke test, and evals for MCP setup, nested approval, structured codemode
+    output, classifier failures, and input dispositions.
+
 ## 0.87.1
 
 ### Minor Changes
