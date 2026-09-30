@@ -8,7 +8,7 @@ This repo builds the pieces that extend Pi and teach other coding agents about i
 
 **[`skills/pi`](skills/pi/)** -- A skill that gives coding agents grounded knowledge of Pi's architecture, settings, and extension APIs. Pi's own system prompt already points it at its source documentation, but agents like Claude Code, OpenCode, and Codex CLI have no built-in awareness of Pi. This skill bridges that gap via the [Agent Skills](https://agentskills.io/home) standard. Also installable as a Pi package.
 
-**[`packages/pi-web-search`](packages/pi-web-search/)** -- An extension that adds `web_search` and `web_fetch` tools. Three search backends (Brave, Tavily, Exa) behind a single interface with automatic provider ranking and fallback. Page fetching via Jina Reader.
+**[`packages/pi-web-search`](packages/pi-web-search/)** -- An extension that adds `web_search` and `web_fetch` tools. Four search backends (Brave, Tavily, Exa, Parallel) behind a single interface with automatic provider ranking and fallback. Works with no API keys through Parallel's free tier. Page fetching via Jina Reader.
 
 **[`packages/pi-memory`](packages/pi-memory/)** -- An extension that adds explicit, Markdown-backed durable memory with global and project scopes. Not yet published to npm.
 

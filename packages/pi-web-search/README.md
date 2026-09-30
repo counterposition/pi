@@ -13,6 +13,8 @@ The extension manages four search backends ([Brave](https://brave.com/search/api
 pi install npm:@counterposition/pi-web-search
 ```
 
+Works with Pi 0.87.1 and newer (tested with 0.99.1).
+
 ## Tools
 
 ### `web_search`

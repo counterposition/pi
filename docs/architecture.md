@@ -43,3 +43,8 @@ This repository separates canonical skill authoring from publishable Pi packages
 - `packages/skill-pi` - single-skill npm distribution for `pi install` and local package smoke tests.
 - `packages/pi-web-search` - web search extension package and local package smoke-test target.
 - `packages/pi-memory` - durable memory extension package and local package smoke-test target.
+- `packages/pi-auto-mode` - auto mode extension package for `pi-permission-system` and local package smoke-test target.
+
+## Pi Versions
+
+The extensions' Pi dev dependencies (`@earendil-works/pi-ai` and `@earendil-works/pi-coding-agent`) track the latest tested Pi, and the lockfile pins it for the `check` CI job. The `compat` job in `.github/workflows/ci.yml` also runs the tests against the oldest supported Pi, set in its `pi` matrix. Peer ranges stay `"*"`.
