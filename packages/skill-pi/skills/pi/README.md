@@ -28,15 +28,16 @@ If you develop inside this repo, Pi already loads the skill via `.pi/settings.js
 
 ## What this covers
 
-Pi's architecture and package layout. Skill authoring, discovery, and routing. Extensions, tools, and UI hooks. Settings, models, providers, and packages. Sessions, forks, and compaction. The SDK and RPC interface.
+Pi's architecture and package layout. Skill authoring, discovery, and routing. Extensions, tools, and UI hooks. MCP servers, codemode, and nested tool calls. Settings, models, providers, classifiers, and packages. Sessions, forks, and compaction. The SDK and RPC interface. Checked against Pi 0.99.1.
 
 The reference material lives in `references/` as task-specific documents — not a single monolith, but pieces sized for injection into a conversation when relevant.
 
 ## Files
 
-| Path               | Purpose                               |
-| ------------------ | ------------------------------------- |
-| `SKILL.md`         | Trigger rules and routing description |
-| `references/`      | Task-specific Pi reference documents  |
-| `evals/evals.json` | Example evaluation cases              |
-| `LICENSE.md`       | GPLv3 license text                    |
+| Path               | Purpose                                       |
+| ------------------ | --------------------------------------------- |
+| `SKILL.md`         | Trigger rules and routing description         |
+| `references/`      | Task-specific Pi reference documents          |
+| `examples/`        | Extension examples that type-check against Pi |
+| `evals/evals.json` | Example evaluation cases                      |
+| `LICENSE.md`       | GPLv3 license text                            |

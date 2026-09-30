@@ -281,7 +281,26 @@ importers:
         specifier: ^4.1.2
         version: 4.1.2(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(vite@8.0.3(@types/node@25.5.0)(jiti@2.7.0)(yaml@2.9.0))
 
-  packages/skill-pi: {}
+  packages/skill-pi:
+    devDependencies:
+      '@earendil-works/pi-ai':
+        specifier: ^0.99.1
+        version: 0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.6.5)
+      '@earendil-works/pi-coding-agent':
+        specifier: ^0.99.1
+        version: 0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(zod@4.6.5)
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.0
+      typebox:
+        specifier: ^1.3.16
+        version: 1.3.27
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+      vitest:
+        specifier: ^4.1.2
+        version: 4.1.2(@opentelemetry/api@1.9.0)(@types/node@25.5.0)(vite@8.0.3(@types/node@25.5.0)(jiti@2.7.0)(yaml@2.9.0))
 
 packages:
 
@@ -2204,6 +2223,13 @@ snapshots:
     optionalDependencies:
       zod: 4.3.6
 
+  '@anthropic-ai/sdk@0.124.0(zod@4.6.5)':
+    dependencies:
+      json-schema-to-ts: 3.1.1
+      standardwebhooks: 1.1.1
+    optionalDependencies:
+      zod: 4.6.5
+
   '@aws-sdk/client-bedrock-runtime@3.1127.0':
     dependencies:
       '@aws-sdk/core': 3.978.0
@@ -2557,6 +2583,28 @@ snapshots:
       - ws
       - zod
 
+  '@earendil-works/pi-agent-core@0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.6.5)':
+    dependencies:
+      '@earendil-works/chord': 0.99.1
+      '@earendil-works/pi-ai': 0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.6.5)
+      '@earendil-works/pi-telemetry': 0.99.1
+      diff: 8.0.4
+      ignore: 7.0.8
+      typebox: 1.3.27
+      yaml: 2.9.0
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@modelcontextprotocol/sdk'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - bufferutil
+      - kerberos
+      - supports-color
+      - undici
+      - utf-8-validate
+      - ws
+      - zod
+
   '@earendil-works/pi-ai@0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.124.0(zod@4.3.6)
@@ -2582,6 +2630,31 @@ snapshots:
       - ws
       - zod
 
+  '@earendil-works/pi-ai@0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.6.5)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.124.0(zod@4.6.5)
+      '@aws-sdk/client-bedrock-runtime': 3.1127.0
+      '@earendil-works/pi-telemetry': 0.99.1
+      '@google/genai': 2.21.0
+      '@smithy/node-http-handler': 4.12.1
+      http-proxy-agent: 9.1.0
+      https-proxy-agent: 9.1.0
+      openai: 7.19.0(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.6.5)
+      partial-json: 0.1.7
+      typebox: 1.3.27
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@modelcontextprotocol/sdk'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - bufferutil
+      - kerberos
+      - supports-color
+      - undici
+      - utf-8-validate
+      - ws
+      - zod
+
   '@earendil-works/pi-codemode@0.99.1':
     dependencies:
       quickjs-wasi: 3.6.2
@@ -2591,6 +2664,42 @@ snapshots:
       '@earendil-works/chord': 0.99.1
       '@earendil-works/pi-agent-core': 0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.3.6)
       '@earendil-works/pi-ai': 0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.3.6)
+      '@earendil-works/pi-codemode': 0.99.1
+      '@earendil-works/pi-mcp': 0.99.1
+      '@earendil-works/pi-tui': 0.99.1
+      '@silvia-odwyer/photon-node': 0.3.4
+      chalk: 6.0.0
+      cross-spawn: 7.0.6
+      diff: 8.0.4
+      grok-mermaid: 0.2.3
+      highlight.js: 10.7.3
+      hosted-git-info: 9.0.3
+      ignore: 7.0.8
+      jiti: 2.7.0
+      minimatch: 10.2.6
+      proper-lockfile: 4.1.2
+      quickjs-wasi: 3.6.2
+      semver: 7.8.5
+      typebox: 1.3.27
+      undici: 8.10.2
+      yaml: 2.9.0
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-provider-node'
+      - '@modelcontextprotocol/sdk'
+      - '@smithy/hash-node'
+      - '@smithy/signature-v4'
+      - bufferutil
+      - kerberos
+      - supports-color
+      - utf-8-validate
+      - ws
+      - zod
+
+  '@earendil-works/pi-coding-agent@0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(zod@4.6.5)':
+    dependencies:
+      '@earendil-works/chord': 0.99.1
+      '@earendil-works/pi-agent-core': 0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.6.5)
+      '@earendil-works/pi-ai': 0.99.1(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.6.5)
       '@earendil-works/pi-codemode': 0.99.1
       '@earendil-works/pi-mcp': 0.99.1
       '@earendil-works/pi-tui': 0.99.1
@@ -3780,6 +3889,13 @@ snapshots:
       '@smithy/signature-v4': 5.7.3
       undici: 8.10.2
       zod: 4.3.6
+
+  openai@7.19.0(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.6.5):
+    optionalDependencies:
+      '@aws-sdk/credential-provider-node': 3.972.83
+      '@smithy/signature-v4': 5.7.3
+      undici: 8.10.2
+      zod: 4.6.5
 
   outdent@0.5.0: {}
 
