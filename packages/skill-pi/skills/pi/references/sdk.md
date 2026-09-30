@@ -30,10 +30,15 @@ session.subscribe((event) => {
   }
 });
 
-await session.prompt("What files are in the current directory?");
+try {
+  await session.prompt("What files are in the current directory?");
+  console.log(session.getLastAssistantText());
+} finally {
+  session.dispose();
+}
 ```
 
-Run with `npx tsx my-script.ts`.
+Run with `npx tsx my-script.ts` (or Node's built-in type stripping). `prompt()` resolves when the run finishes, including automatic retries. `session.dispose()` aborts active work, invalidates extension contexts, and removes listeners. Checked against Pi v0.99.1: [sdk.md](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/sdk.md), [SDK examples](https://github.com/earendil-works/pi/tree/v0.99.1/packages/coding-agent/examples/sdk).
 
 **Breaking (Pi 0.80.8):** `ModelRuntime` replaced the old `AuthStorage`/`ModelRegistry` pair as the SDK model/auth facade. `CreateAgentSessionOptions.authStorage` and `modelRegistry` are gone — pass the async `modelRuntime` instead. `AuthStorage` is no longer exported; use `ModelRuntime` (or a custom pi-ai `CredentialStore`), or `readStoredCredential()` for one-off reads of `auth.json`. `ModelRegistry` still exists only as the synchronous extension-facing compatibility facade, and its `refresh()` is now `Promise<void>`.
 
@@ -44,6 +49,7 @@ import {
   createAgentSession,
   DefaultResourceLoader,
   defineTool,
+  getAgentDir,
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
@@ -56,11 +62,14 @@ import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 
 ```typescript
 const cwd = "/path/to/project";
+const agentDir = getAgentDir();
 const modelRuntime = await ModelRuntime.create();
+const resourceLoader = new DefaultResourceLoader({ cwd, agentDir });
+await resourceLoader.reload();   // a loader you pass in is not reloaded for you
 
 const { session } = await createAgentSession({
   cwd,
-  agentDir: "~/.pi/agent",
+  agentDir,
   modelRuntime,
   model: getBuiltinModel("anthropic", "claude-opus-4-8"),
   thinkingLevel: "medium",  // off | minimal | low | medium | high | xhigh | max
@@ -69,7 +78,7 @@ const { session } = await createAgentSession({
   ],
   tools: ["read", "bash", "edit", "write"],
   customTools: [/* defineTool(...) entries */],
-  resourceLoader: new DefaultResourceLoader(),
+  resourceLoader,
   sessionManager: SessionManager.inMemory(),
 });
 ```
@@ -80,12 +89,61 @@ Notes:
 - Pi 0.68.0 changed the SDK `tools` option from `Tool[]` to a `string[]` allowlist of built-in, extension, and custom tool names. Use `noTools: "builtin"` to disable built-ins while keeping extension/custom tools enabled, or `noTools: "all"` for none.
 - `customTools` accepts `ToolDefinition[]`. Build them with `defineTool({...})` for full TypeScript inference.
 - The `create*Tool(cwd)` factories still exist for code that needs explicit `AgentTool` instances (e.g. when wiring tools into pi-agent-core directly), but they are no longer the value passed to `createAgentSession({ tools })`.
-- `DefaultResourceLoader` loads extensions, skills, prompt templates, themes, and context files. Replace it to drive resource discovery from custom sources (and it must implement `loadProjectContextFiles()` if you want `AGENTS.md`/`CLAUDE.md` discovery; that helper is also exported standalone).
+- `DefaultResourceLoader` requires `{ cwd, agentDir }` and loads extensions, skills, prompt templates, themes, and context files. Replace it to drive resource discovery from custom sources (and it must implement `loadProjectContextFiles()` if you want `AGENTS.md`/`CLAUDE.md` discovery; that helper is also exported standalone).
 - **Breaking (Pi 0.87.0):** pi-agent-core's `shouldStopAfterTurn` option was removed (it was never a `createAgentSession()` option). On a low-level `Agent`, set `finishTurn` instead: it runs after the assistant message and tool results are finalized but before `turn_end`, also for error/aborted responses. Return `{ action: "end" }` to stop, `{ action: "continue" }` to ensure one more request, or `undefined` for normal scheduling — guard hard exits first: `if (turn.message.stopReason === "error" || turn.message.stopReason === "aborted") return;`. Inside `createAgentSession()`, use an extension's actionable `turn_end` / `agent_before_settle` boundaries (see `references/extensions.md`).
+
+## Built-in Extensions: Codemode, Tool Search, MCP
+
+The CLI loads `codemode`, `tool_search`, MCP, and llama.cpp as built-in extensions. SDK sessions load none of them. Opt in through the resource loader (Pi 0.99.0, [example](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/examples/sdk/14-codemode-mcp.ts)):
+
+```typescript
+import {
+  createAgentSession,
+  createCodemodeExtension,
+  createMcpExtension,
+  createToolSearchExtension,
+  DefaultResourceLoader,
+  getAgentDir,
+  SessionManager,
+  SettingsManager,
+} from "@earendil-works/pi-coding-agent";
+
+const cwd = process.cwd();
+const resourceLoader = new DefaultResourceLoader({
+  cwd,
+  agentDir: getAgentDir(),
+  extensionFactories: [
+    createCodemodeExtension({ mode: "on" }),   // options override codemode.mode / inlineBudget
+    createToolSearchExtension(),
+    createMcpExtension(),                        // reads mcp.json like the CLI (project file only when trusted)
+  ],
+});
+await resourceLoader.reload();
+
+const settingsManager = SettingsManager.create(cwd);
+settingsManager.applyOverrides({ defaultTools: ["+codemode", "+tool_search"] });
+
+const { session } = await createAgentSession({
+  resourceLoader,
+  settingsManager,
+  sessionManager: SessionManager.inMemory(),
+});
+
+try {
+  await session.bindExtensions({});   // emits session_start; MCP connects here, in the background
+  await session.prompt("Use codemode to count the TypeScript files in src/.");
+} finally {
+  session.dispose();
+}
+```
+
+- `codemode` and `tool_search` are registered inactive. Enable them with `defaultTools` (`+name` keeps the other defaults), or let MCP activate them for servers that need them. Passing `tools: [...]` instead restricts the session to the named tools, which hides MCP tools.
+- Extension `session_start` handlers run only when the host calls `session.bindExtensions()`. Without it, MCP servers never connect.
+- Inline extensions can be named `{ name, factory, replaceable?: true, builtin?: true }`. `replaceable` drops the extension when another one registers the same tool, command, or flag name. `builtin` supplies the code for `builtin:<name>`: it loads by default, is listed in `pi config`, is disabled by `-builtin:<name>` or `noExtensions`, and loads after project trust (so it cannot handle `project_trust`).
 
 ## Models & Auth (`ModelRuntime`)
 
-`ModelRuntime` (Pi 0.80.8) implements the pi-ai `Models` interface and owns credential storage. Auth resolution priority: runtime overrides (`setRuntimeApiKey`, not persisted) → stored credentials in `auth.json` → environment variables → fallback resolver for `models.json` keys.
+`ModelRuntime` (Pi 0.80.8) implements the pi-ai `Models` interface and owns credential storage. Auth resolution priority: runtime overrides (`setRuntimeApiKey`, not persisted) → stored credentials in `auth.json` → `apiKey` from `models.json` or an extension registration → the provider's environment variables or ambient cloud credentials.
 
 ```typescript
 import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
@@ -115,6 +173,8 @@ const inMemory = await ModelRuntime.create({ credentials: new InMemoryCredential
 
 Pi 0.84.x made catalog refresh cancellation-aware: `refresh(options?)` accepts `{ providers?, allowNetwork?, force?, signal? }` and returns a `ModelsRefreshResult` (`{ errors, aborted }`) instead of discarding provider errors; `create({ signal })`, `login()`, `logout()`, and the now-async `setRuntimeApiKey()/removeRuntimeApiKey()` accept optional abort signals too (unbounded when omitted — applications own deadline policy). Credential mutations resolve once local state is consistent, without waiting for remote freshness; if that synchronization fails they reject with the exported `CredentialSynchronizationError` (inspect `providerId`, `operation`, `credential`, `cause` rather than retrying blindly). A failed refresh never undoes a committed credential change, and each `refresh()` starts a fresh generation so stale refreshes cannot publish afterward.
 
+Non-chat models (Pi 0.99.0): `getModelsOfType(type, provider?)`, `getModelOfType(type, provider, id)`, `getAvailableOfType()`, `getAllModels()`, and `getAllAvailable()` cover `"chat"`, `"image"`, and `"classifier"` entries; `getModels()` stays chat-only. `modelRuntime.classify(model, context, options?)` and `modelRuntime.generateImages(model, context, options?)` resolve auth at request time and return error results (`stopReason: "error" | "aborted"`) instead of rejecting. `modelRuntime.registerVirtualModel(definition)` registers a routing model without an extension. See `references/providers.md#model-types`.
+
 To match CLI model parsing, use the exported resolver helpers (Pi 0.80.4):
 
 ```typescript
@@ -138,11 +198,11 @@ await session.prompt("Review the current directory");
 await session.prompt("Stop and do this instead", { streamingBehavior: "steer" });
 await session.prompt("After you finish, also check tests", { streamingBehavior: "followUp" });
 
-await session.steer("Use a smaller diff");
+const disposition = await session.steer("Use a smaller diff");   // "queued" | "handled"
 await session.followUp("Summarize the changes afterward");
 ```
 
-`prompt()` expands file-based prompt templates. During active streaming, calling it without `streamingBehavior` throws.
+`prompt()` expands file-based prompt templates and resolves after an accepted run finishes. During active streaming, calling it without `streamingBehavior` throws. Since Pi 0.99.0 `steer()` and `followUp()` return a disposition: `"queued"` (also after an extension transformed the input) or `"handled"` (an extension consumed it, so nothing was queued). Both throw for extension commands (`/name`); send those through `prompt()`, which runs them immediately, even while streaming. Read state through `session.messages`, `session.model`, `session.thinkingLevel`, `session.systemPrompt`, and `session.getActiveToolNames()`.
 
 ## Session Runtime
 
@@ -230,7 +290,7 @@ session.subscribe((event) => {
         process.stdout.write(event.assistantMessageEvent.delta);
       }
       break;
-    case "tool_execution_start":
+    case "tool_execution_start":   // nested calls (ctx.executeTool, codemode) carry parentToolCallId
     case "tool_execution_update":
     case "tool_execution_end":
     case "agent_start":
@@ -261,8 +321,9 @@ Pi 0.84.0 added transport-neutral remote-session client APIs: `@earendil-works/p
 
 ## RPC Mode
 
-`pi --mode rpc` speaks newline-delimited JSON over stdio. Additions since Pi 0.79:
+`pi --mode rpc` speaks newline-delimited JSON over stdio ([rpc.md](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/rpc.md), [rpc-commands.md](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/rpc-commands.md)). Additions since Pi 0.79:
 
+- Input dispositions (Pi 0.99.0): a successful `prompt` response carries `data.disposition` — `"started"` (a run started), `"queued"` (queued during a run), or `"handled"` (an extension command or input handler consumed it). `steer` and `follow_up` responses carry `"queued"` or `"handled"`. On `"handled"` no run started for that input: do not wait for `agent_settled`. Otherwise keep consuming events and wait for `agent_settled`, not `agent_end`. Failures after acceptance arrive as events, never as a second response. `RpcClient.prompt(message, images?, streamingBehavior?)`, `steer()`, and `followUp()` return the disposition.
 - `agent_settled` event (Pi 0.80.4) fires when a run is fully settled — no automatic retry, compaction retry, or queued continuation remains; `agent_end` now carries `willRetry`. `set_thinking_level` accepts `"max"` where the model supports it.
 - `clear_queue` (Pi 0.84.4) returns and removes queued steering and follow-up messages; direct RPC `steer`/`follow_up` commands pass through extension `input` handlers since Pi 0.86.0.
 - `get_entries` / `get_tree` (Pi 0.80.3) read session entries and tree snapshots over RPC; `get_available_thinking_levels` (Pi 0.81.0) lists the current model's supported thinking levels.
@@ -285,13 +346,18 @@ Pi 0.84.0 added transport-neutral remote-session client APIs: `@earendil-works/p
 To name an inline factory in the startup Extensions list (instead of `<inline:1>`), wrap it in an `InlineExtension` (Pi 0.80.4):
 
 ```typescript
-import type { InlineExtension } from "@earendil-works/pi-coding-agent";
+import { DefaultResourceLoader, getAgentDir, type InlineExtension } from "@earendil-works/pi-coding-agent";
 
 const myProvider: InlineExtension = {
   name: "my-provider",
   factory: (pi) => { /* ... */ },
 };
-const loader = new DefaultResourceLoader({ extensionFactories: [myProvider] });
+const loader = new DefaultResourceLoader({
+  cwd: process.cwd(),
+  agentDir: getAgentDir(),
+  extensionFactories: [myProvider],
+});
+await loader.reload();
 ```
 
 Bare factory functions are still accepted.

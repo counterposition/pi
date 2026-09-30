@@ -103,6 +103,7 @@ Useful agent events:
 - `before_provider_headers` (Pi 0.80.4) — mutate `event.headers` in place after outgoing HTTP headers are assembled: set a key to a string to add/override, `null` to delete. Runs once per provider request; retries reuse the same headers
 - `before_provider_request`
 - `after_provider_response` — inspect the provider HTTP status and headers before stream consumption
+- `provider_stream_event` (Pi 0.99.0) — notification-only view of each parsed provider stream event before Pi normalizes it (`provider`, `api`, `model`, `data`). Treat `data` as read-only; handlers are awaited in stream order, so keep them fast. Not persisted
 - `model_select`
 - `thinking_level_select` — observe interactive thinking-level changes
 - `ui_prompt_start` / `ui_prompt_end` (Pi 0.84.4) — distinguish active agent work from time spent waiting on blocking `ctx.ui` prompts (`kind`: `select`/`confirm`/`input`/`editor`/`custom`)
@@ -121,6 +122,8 @@ Useful tool events:
 - `tool_result`
 - `tool_execution_end`
 
+Calls another tool makes through `ctx.executeTool()` (codemode scripts, orchestrating tools) fire the same tool events, so permission gates see them; see [Nested Calls and Permissions](codemode.md#nested-calls-and-permissions).
+
 Since Pi 0.86.0, tool-call `arguments` and result `details` must be JSON-compatible values (no `Date`, `Map`, class instances, `undefined` array slots); use `details: undefined` when there is nothing structured to keep. Tools registered without a parameter schema are rejected at registration.
 
 Tool results may include `terminate: true` to end the current tool batch without an automatic follow-up LLM turn — useful for tools that produce a structured final answer (see `examples/extensions/structured-output.ts` in the Pi repo). Since Pi 0.84.1, blocked `tool_call` results may also return `terminate: true`; the agent stops early only when every finalized result in the batch is terminating. Tools that make nested LLM calls can return their combined `Usage` as `usage` on the tool result — Pi persists it and includes it in footer, `/session`, and RPC session totals (Pi 0.81.0), and `tool_result` handlers may inspect or replace that value.
@@ -137,6 +140,7 @@ Tool results may include `terminate: true` to end the current tool batch without
 - `ctx.sessionManager` (read-only; `buildContextEntries()` returns active-branch entries with compaction applied, Pi 0.80.4)
 - `ctx.modelRegistry` / `ctx.model` / `ctx.thinkingLevel` / `ctx.scopedModels` (Pi 0.83.0) — `ctx.modelRegistry` is the synchronous extension-facing facade; its `refresh()` became `Promise<void>` in Pi 0.80.8 (await it before synchronous registry reads). Since Pi 0.84.x it also exposes `getProvider(id)` (effective pi-ai provider) and `getProviderAuth(id)` (API key, headers, base URL, provider-scoped env — no loaded model required). `ctx.scopedModels` is the read-only session model scope resolved from `--models`/`enabledModels` (`{ model, thinkingLevel? }[]`, empty when unscoped); prefer it over enumerating `getAvailable()` for model pickers
 - `ctx.modelRegistry.stream()` / `streamSimple()` / `complete()` (Pi 0.86.0) — nested model calls through configured providers with request-time auth; prefer `streamSimple()` for provider-neutral calls, pass `ctx.signal`, and report the combined `usage` on the tool result
+- `ctx.modelRegistry.findOfType(type, provider, id)`, `getModelsOfType()`, `getAvailableOfType()`, and `classify(model, { state, questions }, { signal })` (Pi 0.99.0) — classifier and image models live beside chat models; `classify()` never rejects, so check `result.stopReason` (see `references/providers.md`)
 - `ctx.hasUI` — `true` in TUI and RPC modes
 - `ctx.signal` — the active agent abort signal (or `undefined` when idle); pass it to `fetch`/model calls for abort-aware nested work
 - `ctx.isIdle()` / `ctx.hasPendingMessages()`
@@ -145,6 +149,8 @@ Tool results may include `terminate: true` to end the current tool batch without
 - `ctx.compact(options?)` — trigger compaction without awaiting completion
 - `ctx.getSystemPrompt()`
 - `ctx.isProjectTrusted()` — the effective project trust decision, including temporary `--approve`/`--no-approve` decisions
+
+Tool `execute()` receives `ExtensionToolContext`, which adds `ctx.tools` (the tools this call can reach) and `ctx.executeTool(name, args, { signal?, onUpdate? })` (Pi 0.99.0). `executeTool()` runs validation and the `tool_call`/`tool_result` hooks like a model call and never rejects: unknown tools, validation errors, blocks, and thrown errors come back as `{ isError: true }`, including after an abort. The signal defaults to the calling tool's. Nested usage is added to the calling tool's result, so report only the tool's own `usage`.
 
 Use `CONFIG_DIR_NAME` (exported from `@earendil-works/pi-coding-agent`) instead of hardcoding `.pi` when building project config paths, e.g. `join(ctx.cwd, CONFIG_DIR_NAME, "my-extension.json")`.
 
@@ -181,11 +187,26 @@ Important rules:
 
 1. Truncate large output.
 2. Respect `signal.aborted`.
-3. Throw on failure instead of returning fake success.
-4. Use the file-mutation queue for write/edit style tools.
+3. Throw on failure instead of returning fake success, or return `isError: true` when the failure still carries data. A returned object without `isError` counts as success.
+4. Use the file-mutation queue (`withFileMutationQueue()`) for write/edit style tools.
 5. Put reconstructable state in `details`; it persists in session history.
 
+## Tool Exposure & Structured Results
+
+Pi 0.99.0 added fields for tools that other tools, codemode scripts, and permission extensions consume ([docs](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/extensions.md#tool-exposure), [types](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/src/core/extensions/types.ts)):
+
+- `outputSchema` (TypeBox) plus `structuredContent` on every result: the model still reads `content`; codemode scripts receive `structuredContent` instead of text. Without `outputSchema`, scripts get the text. `structuredContent` must be JSON-compatible. A `tool_result` handler that replaces `content` must also return `structuredContent`, or it is dropped.
+- `isError: true` on a returned result: the model sees an error, while `details` and `structuredContent` are kept for the UI and scripts.
+- `exposure`: `direct` (default), `model-only`, `codemode`, `deferred`, or `hidden`. `direct` and `model-only` tools activate on registration; the others do not (`defaultActive: false` also keeps a `direct` tool inactive until `--tools`/`defaultTools`/`setActiveTools()` names it). Tools cannot be unregistered: re-register with `exposure: "hidden"` to withdraw one. The table of what each value declares and allows is in `references/codemode.md`.
+- `namespace: { name, description? }` groups related tools under one heading in the `codemode` description, as MCP servers do.
+- `annotations`: `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, with MCP meanings. Missing hints mean "not read-only, may be destructive, open world". They are unverified; mark writes neither read-only nor casually idempotent.
+- `prepareLoadout(loadout)`: for tools that orchestrate others. Runs whenever the active tools change with `declared`, `callable`, and `registered` tools, and returns replacement `descriptions` and `hiddenDeclarations` (active tools left out of requests but still callable). The built-in `codemode` and `tool_search` use only this, `exposure`, and `ctx.executeTool()`.
+
+`pi.getAllTools()` reports each tool's `exposure`, `namespace`, and `annotations`. `pi.setActiveTools()` ignores unknown and `hidden` names. Compilable examples: `examples/structured-tool.ts` and `examples/nested-tools.ts`.
+
 ## Dynamic Tool Loading
+
+For tools the model should find on demand, prefer `exposure: "deferred"` with the built-in `tool_search` (Pi 0.99.0), or `exposure: "codemode"` for tools scripts call. `tool_search` is inactive by default: enable it with `"defaultTools": ["+tool_search"]` or `--tools`, or let a connected MCP server with `deferred` exposure turn it on. Without it, the model can reach `deferred` tools only through codemode. The manual loader pattern below still works.
 
 Pi 0.80.7 lets an extension register many tools while keeping only a small initial set active, then add more during execution — cache-friendly on models with native deferred loading. Lifecycle:
 
@@ -311,6 +332,14 @@ pi.on("session_start", async (_event, ctx) => {
 });
 ```
 
+## MCP Servers
+
+`pi.registerMcpServer(name, config)` adds a server for the current session with the `mcp.json` entry shape; `pi.unregisterMcpServer(name)` closes it. Registrations are not saved, and an `mcp.json` server with the same name wins. Extensions that implement their own MCP client read `pi.getMcpServers()` on `session_start` and handle `mcp_servers_change`. See `references/mcp.md`.
+
+## Virtual Models
+
+`pi.registerVirtualModel({ provider, id, name, thinkingLevels?, route(request, ctx) })` (experimental, Pi 0.99.0) adds a selectable model that picks a physical model and thinking level for every request. See `references/providers.md#virtual-models`.
+
 ## Provider Integration
 
 Extensions can register or override providers:
@@ -341,6 +370,8 @@ pi.unregisterProvider("my-provider");
 
 Dynamic providers can implement `refreshModels(context)` (Pi 0.80.8) for model discovery: Pi calls it during catalog refresh (`/model`, `pi update --models`) and publishes the returned list; its models replace extension-provided `models`. Since Pi 0.84.0 the context is read-snapshot + generation-checked publication: read `context.stored` (the persisted provider snapshot) instead of `context.store`, and persist through `context.publish({ update?, persist? })` — `persist` omitted leaves storage unchanged, a `ModelsStoreEntry` writes it, `persist: null` deletes it. Config-form callbacks that only return models remain unchanged.
 
+A config-form `models` list replaces the provider's models across chat, image, and classifier operations (Pi 0.99.0). Omitted `type` means `"chat"`; image and classifier entries need an explicit `type` plus implementations keyed by `api` through `images`/`classifiers` (see `references/providers.md`).
+
 Since Pi 0.81.0, extensions can also register a complete pi-ai `Provider` via `pi.registerProvider(createProvider({...}))` — native auth (`login`/`resolve`), `getModels`, `refreshModels`, `filterModels`, and custom streaming. The registered provider becomes the composition base; `models.json` overrides still apply above it. Prefer this when you need real authentication or stream behavior rather than just a model list. The legacy config form (`name`, `baseUrl`, `apiKey`, `models`, `oauth`, `streamSimple`) remains supported. OAuth `refreshToken(credentials, signal)` callbacks must accept and honor the abort signal since Pi 0.84.0.
 
 If you need auth for a specific model request, use:
@@ -355,7 +386,9 @@ Custom `streamSimple` implementations receive a normalized `TranscriptContext` s
 
 ## Handy Patterns
 
-- Permission gates via `tool_call`
+- Permission gates via `tool_call` (they also see nested calls from codemode; see `references/codemode.md`)
+- Data tools for codemode via `outputSchema` + `structuredContent`
+- Orchestrating tools via `ctx.executeTool()` with `exposure: "model-only"`
 - Prompt injection via `before_agent_start` (`systemPromptOptions.sections`)
 - Model-context pruning via `context`, or durable omission via `context_edit` entries from `turn_end`/`agent_before_settle`
 - Branch or compaction customization via `session_before_tree` / `session_before_compact`

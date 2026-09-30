@@ -38,7 +38,7 @@ Edit JSON directly or use `/settings` for common interactive options.
 
 ```json
 {
-  "theme": "dark",
+  "theme": "system",
   "quietStartup": false,
   "collapseChangelog": false,
   "doubleEscapeAction": "tree",
@@ -54,7 +54,7 @@ Edit JSON directly or use `/settings` for common interactive options.
 - `doubleEscapeAction`: `"tree"`, `"fork"`, or `"none"`
 - `treeFilterMode`: `"default"`, `"no-tools"`, `"user-only"`, `"labeled-only"`, or `"all"`
 - In `/tree`, `Shift+T` toggles timestamps on entry labels
-- `theme` also accepts `"light-name/dark-name"` (Pi 0.79.7) to switch themes automatically with the terminal color scheme; `/` is reserved in theme names for this. On first run Pi detects the terminal background and defaults to `dark` or `light`. `--use-theme <name[/name]>` (Pi 0.84.2) sets a per-run initial theme without changing saved settings.
+- `theme` defaults to `"system"` (Pi 0.99.0), which builds Pi's colors from the terminal's reported foreground, background, and ANSI palette and follows light/dark switches; `system` is a reserved theme name. `dark` and `light` are the other built-ins. `"light-name/dark-name"` (Pi 0.79.7) switches themes with the terminal color scheme; `/` is reserved in theme names for this. `--use-theme <name[/name]>` (Pi 0.84.2) sets a per-run initial theme without changing saved settings.
 - `outputPad` (Pi 0.80.3, `0` or `1`) sets horizontal padding for user messages, assistant messages, and thinking blocks; custom message renderers receive it as `options.outputPad` (Pi 0.82.1).
 - `externalEditor` (Pi 0.80.3) sets the `Ctrl+G` external editor command and takes precedence over `$VISUAL`/`$EDITOR`.
 
@@ -67,7 +67,8 @@ Experimental since Pi 0.84.0:
   "tuiMode": "regular",
   "fullscreenExitOutput": "transcript",
   "fullscreenScrollbar": "auto",
-  "fullscreenCopyOnSelect": true
+  "fullscreenCopyOnSelect": true,
+  "fullscreenWheelScrollLines": "auto"
 }
 ```
 
@@ -75,6 +76,7 @@ Experimental since Pi 0.84.0:
 - `fullscreenExitOutput` (Pi 0.84.2): `"transcript"` prints the final transcript on exit; `"resume-hint"` restores the previous screen and prints only a resume hint
 - `fullscreenScrollbar`: `"auto"` shows while scrolling, `"always"` reserves the rightmost column, `"hidden"`
 - `fullscreenCopyOnSelect` (Pi 0.84.4, default `true`): when `false`, `Ctrl+X` copies the active selection (falling back to the last assistant message)
+- `fullscreenWheelScrollLines` (Pi 0.99.0): `"auto"` (default) or 1–100 lines per mouse-wheel event. `"auto"` moves one line per event in local macOS terminals and accelerates fast spins elsewhere (up to 6 lines); Alt+wheel moves five times as far
 - Fullscreen keeps editor/status/widgets/footer docked while the transcript scrolls independently; transcript search (`Ctrl+Shift+F`, Pi 0.84.2), page/half-page/line scrolling, and marked-message navigation are configurable via `tui.altScreen.*` keybindings
 - Theme tokens `scrollbarThumb`, `searchMatchBg`, `searchMatchText` are optional additions with fallbacks (`selectedBg`, `selectedBg`, `text`)
 
@@ -181,7 +183,6 @@ Notes:
 {
   "sessionDir": ".pi/sessions",
   "enabledModels": ["claude-*", "gpt-4o", "gemini-2*"],
-  "defaultTools": ["bash", "read", "edit"],
   "markdown": {
     "codeBlockIndent": "  ",
     "mermaid": "streaming"
@@ -191,12 +192,25 @@ Notes:
 
 When multiple sources specify a session directory, `--session-dir` takes precedence over `sessionDir` in settings. Pi 0.65.0 removed the old `session_directory` extension/settings hook.
 
-- `defaultTools` (Pi 0.84.2) picks the built-in tools enabled at startup (default `read`, `bash`, `edit`, `write`; also available: `grep`, `find`, `ls`, and `powershell` on Windows since Pi 0.84.3) (global or per project; project replaces global). An empty array starts with no built-in tools while keeping extension/SDK custom tools. `--tools` remains a strict allowlist for all tools, `--exclude-tools` filters the resulting list.
 - `markdown.mermaid` (Pi 0.84.0): `"off"`, `"final"`, or `"streaming"` — themed Unicode rendering of supported Mermaid diagrams in interactive messages. Pi 0.84.0 also renders terminal-friendly Unicode for LaTeX expressions.
+
+## Tools & Codemode
+
+```json
+{
+  "defaultTools": ["+codemode"],
+  "codemode": { "mode": "on", "inlineBudget": 3000 }
+}
+```
+
+- `defaultTools` picks the tools enabled at startup (default `read`, `bash`, `edit`, `write`; also `grep`, `find`, `ls`, `powershell`, and the built-in extension tools `codemode` and `tool_search`). Plain names replace the defaults. A list of only `+name`/`-name` entries (Pi 0.99.0) changes the inherited selection instead; in a mixed list the plain names form the selection and `+`/`-` apply in order. A project list of only `+`/`-` entries applies on top of the user setting; a project list with a plain name replaces it. An empty array disables built-in tools but keeps extension/SDK tools.
+- `--tools` replaces the whole selection for one run and does not accept `+`/`-`; `--exclude-tools` filters the result.
+- `codemode.mode`: `"on"` (default) keeps declared tools declared; `"only"` hides active built-in and extension tools from the model so it reaches them through `codemode`. `codemode.inlineBudget` (default `3000`, estimated tokens) caps tool declarations in the `codemode` description. See `references/codemode.md`.
+- MCP servers are configured in `~/.pi/agent/mcp.json` and the trust-gated `.pi/mcp.json`, not in `settings.json`. See `references/mcp.md`.
 
 ## Project Trust
 
-Since Pi 0.79.0, project-local settings, resources, and packages (`.pi/` settings/extensions/skills/prompts/themes, project packages) only load after the project is trusted. `AGENTS.md` / `CLAUDE.md` context files load regardless of trust. Trust is a loading gate, not a sandbox.
+Since Pi 0.79.0, project-local settings, resources, and packages (`.pi/` settings/extensions/skills/prompts/themes/`mcp.json`, project packages) only load after the project is trusted. `AGENTS.md` / `CLAUDE.md` context files load regardless of trust. Trust is a loading gate, not a sandbox.
 
 ```json
 {
@@ -238,6 +252,7 @@ Notes:
 - `packages` loads npm/git/local Pi packages.
 - `extensions`, `skills`, `prompts`, and `themes` are for local files/directories.
 - `enableSkillCommands` controls `/skill:name` registration.
+- Built-in extensions (Pi 0.99.0) are `builtin:mcp`, `builtin:llama.cpp`, `builtin:codemode`, and `builtin:tool-search`. They load by default; `"extensions": ["-builtin:mcp"]` disables one, and a project `+builtin:<name>`/`-builtin:<name>` entry overrides the user setting. `pi config` lists them under Built-in.
 
 ## Include / Exclude Patterns
 
@@ -266,6 +281,7 @@ Run `pi --help` for the authoritative list. Most commonly:
 pi [options] [@files...] [messages...]
 
 # package commands: install/remove/uninstall/update/list/config (all support -l for project scope)
+# MCP commands: pi mcp add|remove|list|login|logout (see references/mcp.md)
 
 # modes
 -p, --print                      single-shot text output
@@ -291,15 +307,16 @@ pi [options] [@files...] [messages...]
 --no-session                     ephemeral
 
 # tools and resources
---tools <list>, -t               name allowlist (read,bash,edit,write,grep,find,ls,...)
+--tools <list>, -t               name allowlist (read,bash,edit,write,grep,find,ls,codemode,...)
 --exclude-tools <list>, -xt      disable specific built-in/extension/custom tools, keep the rest
 --no-tools, -nt                  disable everything
 --no-builtin-tools, -nbt         disable built-ins, keep extension/custom
--e, --extension <source>         repeatable; npm/git/path
+-e, --extension <source>         repeatable; npm/git/path, or builtin:<name>
 --skill <path>                   repeatable
 --prompt-template <path>         repeatable
 --theme <path>                   repeatable
---no-extensions / --no-skills / --no-prompt-templates / --no-themes
+--no-extensions, -ne             also disables built-in extensions (pi -ne -e builtin:mcp keeps only MCP)
+--no-skills / --no-prompt-templates / --no-themes
 --no-context-files, -nc          skip AGENTS.md / CLAUDE.md discovery
 
 # trust and network
@@ -308,8 +325,8 @@ pi [options] [@files...] [messages...]
 --offline                        disable startup network operations (same as PI_OFFLINE=1)
 
 # prompts and misc
---system-prompt <text>           replace default
---append-system-prompt <text>    repeatable; appended with double newlines
+--system-prompt <text|path>      replace default
+--append-system-prompt <text|path>  repeatable; appended with double newlines
 --tui-mode regular|fullscreen    experimental fullscreen TUI (Pi 0.84.0)
 --use-theme <name[/name]>        per-run initial theme, saved settings untouched (Pi 0.84.2)
 --verbose

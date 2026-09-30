@@ -27,6 +27,7 @@
         "Provides models.json with Ollama baseUrl containing localhost:11434",
         "Uses api type openai-completions (correct for Ollama)",
         "Includes model entry with id llama3.2",
+        "Writes models.json providers as an object keyed by provider id (e.g. \"ollama\"), not an array",
         "Provides settings.json with compaction.enabled set to false",
         "Sets sessionDir to ~/pi-sessions",
         "Correct file paths: ~/.pi/agent/models.json and ~/.pi/agent/settings.json"
@@ -44,6 +45,86 @@
         "Includes separate reference files for Prisma, Drizzle, and raw SQL",
         "SKILL.md uses relative paths to reference files",
         "Body routes to the correct reference doc based on the user's framework choice"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Add the GitHub MCP server (https://api.githubcopilot.com/mcp/, token in GITHUB_TOKEN) to Pi for all my projects. It has ~90 tools, so keep them out of the model's tool list, but make search_code directly callable. Check that it works.",
+      "expected_output": "An entry in ~/.pi/agent/mcp.json under mcpServers with the url, an Authorization header referencing ${GITHUB_TOKEN}, a non-direct server exposure (codemode, codemode-deferred, or deferred), and toolExposure making search_code direct; then pi mcp list to verify and /reload for a running session.",
+      "files": [],
+      "assertions": [
+        "Writes the server to ~/.pi/agent/mcp.json (global), not settings.json and not the project .pi/mcp.json",
+        "Uses the mcpServers object with a url field (streamable HTTP), not an sse type",
+        "Keeps the secret out of the file with \"Authorization\": \"Bearer ${GITHUB_TOKEN}\" (or pi mcp add --bearer-token-env-var GITHUB_TOKEN)",
+        "Sets server exposure to codemode, codemode-deferred, or deferred rather than direct",
+        "Uses toolExposure with \"search_code\": \"direct\"",
+        "Runs pi mcp list to verify the connection",
+        "Tells the user to /reload or start a new session so a running session connects",
+        "Does not tell the user to install an MCP extension or package, since MCP is built in"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "My Pi permission extension asks before every bash call. It works for direct calls, but when the model runs bash from a codemode script the approval lookup fails because my code searches the last assistant message for event.toolCallId. Fix the extension so codemode calls are gated too.",
+      "expected_output": "A tool_call handler that judges each call from the event itself, recognises nested calls by event.parentToolCallId (ids like <parent>/<n>), does not require the id to exist in the assistant message, does not auto-approve children because the codemode call was approved, and blocks when there is no UI.",
+      "files": [],
+      "assertions": [
+        "Keeps using the tool_call event and checks event.toolName === 'bash' (or isToolCallEventType('bash', event))",
+        "Explains that nested calls carry event.parentToolCallId and have ids of the form <parent id>/<n> that never appear in the transcript",
+        "Stops requiring the tool call id to be found in the last assistant message for nested calls",
+        "Reads the command from event.input for the nested call instead of parsing the codemode script",
+        "Does not approve a nested call just because the parent codemode call was approved",
+        "Does not rely on the nestedCalls record on the tool result for approval",
+        "Checks ctx.hasUI and returns { block: true, reason } when no UI is available",
+        "Notes that a blocked nested call makes the script's tools.bash() promise reject"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "I have a Pi extension tool `list_issues` that returns a text table. When the model calls it from codemode, the script gets a string it has to parse. Change the tool so codemode scripts get the issue objects, and keep the model's view readable.",
+      "expected_output": "The tool declares outputSchema (TypeBox) and returns structuredContent matching it on every result, alongside the existing text content; failures that still carry data use isError: true; read-only annotations are set.",
+      "files": [],
+      "assertions": [
+        "Adds an outputSchema built with typebox Type.Object/Type.Array",
+        "Returns structuredContent matching the schema on every result",
+        "Keeps model-facing text in content",
+        "Explains that codemode scripts receive structuredContent instead of the text only when outputSchema is declared",
+        "Uses isError: true (not a thrown error) for a failure that should still return data, or throws for plain failures",
+        "Keeps structuredContent JSON-compatible (no Date objects, Maps, or class instances)",
+        "Marks the tool with annotations such as readOnlyHint: true if it does not modify anything",
+        "Does not claim the model itself receives structuredContent"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Write a Pi extension that uses the Jev classifier to decide whether a user prompt is a question or a coding task, and sets a status line accordingly. It should not break when TypeSafe is down or the key is missing.",
+      "expected_output": "An extension that finds the classifier with ctx.modelRegistry.findOfType('classifier', 'typesafe', 'jev-latest'), calls ctx.modelRegistry.classify with a choice or bool question and ctx.signal, checks stopReason and the answer type before using probabilities, and falls back cleanly when the model is missing or the result is an error.",
+      "files": [],
+      "assertions": [
+        "Uses ctx.modelRegistry.findOfType('classifier', 'typesafe', 'jev-latest') or getModelOfType with type 'classifier'",
+        "Handles the classifier model being undefined",
+        "Calls ctx.modelRegistry.classify(model, { state, questions }, { signal })",
+        "Uses a valid question shape: type 'choice' with a criteria record, or type 'bool' with criteria { true, false }",
+        "Checks result.stopReason === 'stop' before reading answers, and handles 'error' and 'aborted'",
+        "Does not wrap classify() in try/catch as the only error handling, since it returns error results instead of rejecting",
+        "Checks the answer type (choice/bool) before reading probabilities or probability",
+        "Mentions TYPESAFE_API_KEY (or another Jev provider credential) as the auth requirement"
+      ]
+    },
+    {
+      "id": 8,
+      "prompt": "I'm embedding Pi with the SDK. My host sends user input with session.prompt() while idle and session.steer() while streaming, then waits for agent_settled before showing 'done'. Sometimes it hangs forever on inputs that one of my extensions handles as a command. I also drive a separate Pi over RPC. How do I fix both?",
+      "expected_output": "Explains dispositions: session.steer()/followUp() return 'queued' or 'handled'; session.prompt() returns nothing and resolves after an accepted run finishes, so the SDK host should await it instead of waiting for agent_settled; RPC prompt responses carry data.disposition 'started' | 'queued' | 'handled' (steer/follow_up 'queued' | 'handled'); on 'handled' no run started, so the client must not wait for agent_settled. Shows code that branches on the disposition.",
+      "files": [],
+      "assertions": [
+        "States that session.steer() and session.followUp() return 'queued' or 'handled'",
+        "States that an RPC prompt response has data.disposition of 'started', 'queued', or 'handled'",
+        "Explains that 'handled' means no run started for that input, so the client must not wait for agent_settled",
+        "Uses agent_settled (not agent_end) as the completion signal when a run did start",
+        "Shows RpcClient.prompt()/steer()/followUp() returning the disposition, or reads data.disposition from the raw response",
+        "Notes that session.prompt() resolves after an accepted run finishes",
+        "States that session.steer() and session.followUp() throw for extension commands, which must go through session.prompt()",
+        "Does not suggest a timeout as the fix"
       ]
     }
   ]

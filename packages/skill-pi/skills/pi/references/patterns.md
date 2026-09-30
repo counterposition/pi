@@ -19,6 +19,11 @@ Practical recipes for extending Pi. Each pattern is a self-contained example.
 13. [File Watcher / Trigger](#file-watcher--trigger)
 14. [Input Transform](#input-transform)
 15. [Tool Override](#tool-override)
+16. [Structured Tool](#structured-tool)
+17. [Nested Tool Calls](#nested-tool-calls)
+18. [Classifier Gate](#classifier-gate)
+
+Patterns 16–18 are full files under `examples/` that type-check against Pi 0.99.1 in this skill's package; read them rather than retyping.
 
 ---
 
@@ -42,6 +47,8 @@ export default function (pi: ExtensionAPI) {
   });
 }
 ```
+
+The handler also runs for `bash` calls made by codemode scripts; see [Nested Calls and Permissions](codemode.md#nested-calls-and-permissions).
 
 ## Protected Paths
 
@@ -313,3 +320,30 @@ pi.on("tool_call", async (event, ctx) => {
   }
 });
 ```
+
+## Structured Tool
+
+`examples/structured-tool.ts` registers a read-only data tool:
+
+- `outputSchema` plus `structuredContent` on every result, so codemode scripts get `{ files, missing }` as an object while the model reads a text summary.
+- `annotations: { readOnlyHint: true, openWorldHint: false }` for permission extensions, and a `namespace` for grouping in the `codemode` description.
+- `isError: true` when no file was found: the model sees an error, scripts still get the data.
+- Only `ENOENT` is treated as "missing"; other errors are rethrown.
+
+## Nested Tool Calls
+
+`examples/nested-tools.ts` registers `read_many`, which reads several files in parallel through `ctx.executeTool("read", ...)`:
+
+- `exposure: "model-only"`: the model can call it, other tools and codemode cannot, so it cannot recurse.
+- Checks `ctx.tools` first: an inactive `direct` tool is not callable.
+- Each nested call runs every `tool_call` gate (see [Nested Calls and Permissions](codemode.md#nested-calls-and-permissions)). `executeTool()` never rejects, and aborted calls come back as `isError`, so the tool calls `signal?.throwIfAborted()` after the batch to report the abort as an abort rather than as failed reads.
+- Streams progress through `onUpdate`.
+
+## Classifier Gate
+
+`examples/classifier-gate.ts` asks a classifier model whether a `bash` command is destructive before it runs:
+
+- Finds Jev with `ctx.modelRegistry.findOfType("classifier", "typesafe", "jev-latest")` and calls `ctx.modelRegistry.classify(..., { signal: ctx.signal })`.
+- `classify()` never rejects: it checks `stopReason` (`"aborted"` blocks, `"error"` falls through to confirmation) and validates the `bool` answer's probability.
+- Fails closed: a missing model, an error, an out-of-range answer, or a probability above the strict `MAX_ALLOWED_PROBABILITY` (0.2; tune it) asks the user, and blocks when `ctx.hasUI` is false.
+- Uses `satisfies ClassifierContext["questions"]` so the question literal keeps its narrow types.

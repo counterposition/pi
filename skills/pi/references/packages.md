@@ -94,16 +94,21 @@ If there is no `pi` manifest, Pi auto-discovers:
 
 ## Dependencies
 
+Checked against Pi v0.99.1 [packages.md](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/packages.md#declare-dependencies).
+
 - Normal runtime dependencies belong in `dependencies`
-- Pi core libraries should be peer deps with `"*"` ranges:
+- Pi supplies these to extensions; declare them as peer deps with `"*"` ranges and never bundle them:
   - `@earendil-works/pi-ai`
   - `@earendil-works/pi-agent-core`
   - `@earendil-works/pi-coding-agent`
   - `@earendil-works/pi-tui`
   - `typebox`
-- Pin dev dependencies to a current Pi line (e.g. `^0.84.2`) so typecheck/tests validate against what users run; keep peers `"*"` so installs stay compatible across Pi versions
-- Other Pi packages must be bundled explicitly
-- Git package installs run `npm install --omit=dev` — runtime needs go in `dependencies`, not `devDependencies`
+- Do not list those host-provided packages in `dependencies`. A physical copy can bypass Pi's extension module mapping and create duplicate classes and registries; since Pi 0.99.0 Pi reports an extension warning for this manifest.
+- Pi suppresses automatic peer installation for managed npm packages and for git packages installed with npm (`--omit=dev --legacy-peer-deps`), pnpm (`--prod`, no auto-installed peers), or Bun (`--omit=dev --omit=peer`). Local path packages are not installed or modified; their dependency tree is the author's responsibility.
+- Git package installs omit dev dependencies — runtime needs go in `dependencies`, not `devDependencies`
+- Installed packages load with separate module roots. Do not rely on two packages sharing one dependency instance, or on one package resolving another package's undeclared dependency.
+- Other Pi packages used as dependencies must be included in the published tarball and referenced through their `node_modules` resource paths.
+- Pin dev dependencies to the Pi line you test against (e.g. `^0.99.1`) so typecheck/tests validate against what users run; keep peers `"*"` so installs stay compatible across Pi versions. `"*"` does not prove compatibility: document the minimum supported Pi version and feature-check newer APIs (for example `ctx.executeTool`, `pi.registerMcpServer`) if you support older hosts.
 
 ## Package Filtering
 
@@ -134,4 +139,5 @@ Rules:
 
 - Project settings override global settings for the same package identity — unless the project entry has `autoload: false`, in which case it is applied as a delta over the global entry (Pi 0.80.4)
 - Identity is package name for npm, repo URL for git, and resolved absolute path for local sources
-- `pi config` can enable or disable package resources after installation; since Pi 0.80.4 it manages global vs project-local scopes (Tab to switch, `pi config -l` to start in project mode with inherited global resources dimmed)
+- `pi config` can enable or disable package resources after installation; since Pi 0.80.4 it manages global vs project-local scopes (Tab to switch, `pi config -l` to start in project mode with inherited global resources dimmed). Since Pi 0.99.0 its Built-in section also disables the built-in `mcp`, `llama.cpp`, `codemode`, and `tool-search` extensions, stored as `-builtin:<name>` in `extensions`
+- The `codemode`, `tool-search`, and `mcp` built-ins are replaceable: an extension that registers one of their tools, commands, or flags (for example `/mcp`, `codemode`, or `tool_search`) replaces that built-in, and Pi warns
