@@ -37,3 +37,5 @@ Not yet published to npm. Install from a clone of this repo:
 ```bash
 pi install ./packages/pi-memory
 ```
+
+Works with Pi 0.87.1 and newer (tested with 0.99.1).
