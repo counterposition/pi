@@ -216,7 +216,10 @@ export default function (pi: ExtensionAPI) {
             text: formatSearchResultsText(response.results),
           },
         ],
-        details: structuredContent,
+        details: {
+          warnings: [...currentRuntime.config.warnings, ...loaded.warnings, ...response.warnings],
+          results: response.results,
+        },
         structuredContent,
       };
     },

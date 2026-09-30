@@ -28,6 +28,7 @@ const WEB_NAMESPACE = {
 };
 
 const SEARCH_DEPTHS = ["basic", "thorough"] as const;
+const SEARCH_RESULT_CONTENT_LIMIT = 3_000;
 
 const searchResultOutput = Type.Object({
   title: Type.String(),
@@ -35,7 +36,13 @@ const searchResultOutput = Type.Object({
   snippet: Type.String(),
   sourceDomain: Type.Optional(Type.String()),
   publishedAt: Type.Optional(Type.String({ description: "ISO 8601 publish date" })),
-  content: Type.Optional(Type.String({ description: "Extracted page content (thorough depth)" })),
+  content: Type.Optional(
+    Type.String({
+      description:
+        `First ${SEARCH_RESULT_CONTENT_LIMIT} characters of extracted page content (thorough depth). ` +
+        "For the full page, use web_fetch (paginated).",
+    }),
+  ),
 });
 
 const webSearchOutput = Type.Object({
@@ -316,7 +323,7 @@ function toResultOutput(result: SearchResult): Static<typeof searchResultOutput>
     snippet: result.snippet,
     sourceDomain: result.sourceDomain,
     publishedAt: result.publishedAt,
-    content: result.content,
+    content: result.content?.slice(0, SEARCH_RESULT_CONTENT_LIMIT),
   });
 }
 

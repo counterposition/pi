@@ -242,6 +242,51 @@ describe("web-search extension", () => {
     );
   });
 
+  it("caps structured search content without changing the model-facing text", async () => {
+    const results = [
+      {
+        title: "Long page",
+        url: "https://example.com/long",
+        snippet: "Long snippet",
+        content: "A".repeat(10_000),
+      },
+    ];
+    const provider = makeSearchProvider("tavily", async () => ({ results }));
+
+    state.providers = {
+      search: { tavily: provider },
+      fetch: {},
+    };
+    state.resolveSearchProviders.mockReturnValue({
+      providers: [provider],
+      servedDepth: "thorough",
+      notes: [],
+    });
+
+    const tools = registerTools();
+    const result = await tools.web_search.execute(
+      "tool-10",
+      { query: "long query", depth: "thorough" },
+      new AbortController().signal,
+    );
+
+    expect(result.structuredContent).toMatchObject({
+      results: [{ content: "A".repeat(3_000) }],
+    });
+    expect(result.content[0].text).toBe(
+      formatSearchResults({
+        results,
+        provider: "tavily",
+        requestedDepth: "thorough",
+        servedDepth: "thorough",
+        freshness: undefined,
+        domains: undefined,
+        appliedFilters: undefined,
+        notes: [],
+      }),
+    );
+  });
+
   it("returns structured fetch chunks that match the output schema", async () => {
     const page = "A".repeat(13_000);
     state.providers = {
