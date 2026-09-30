@@ -251,7 +251,7 @@ export default function (pi: ExtensionAPI) {
         description: "Logical topic name, not a file path.",
       }),
       scope: Type.Optional(
-        StringEnum(["global", "project"] as const, {
+        StringEnum(MEMORY_SCOPES, {
           default: "project",
           description: "Memory scope. Defaults to project.",
         }),
@@ -304,7 +304,7 @@ export default function (pi: ExtensionAPI) {
       entry_id: Type.String({
         description: "Existing memory entry ID to move.",
       }),
-      scope: StringEnum(["global", "project"] as const, {
+      scope: StringEnum(MEMORY_SCOPES, {
         description: "Destination memory scope.",
       }),
       topic: Type.Optional(
