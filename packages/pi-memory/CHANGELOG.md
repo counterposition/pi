@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+### Minor Changes
+
+- Return structured results to codemode scripts. `memory_search`,
+  `memory_write`, and `memory_move` declare output schemas, so a script gets
+  the ranked entries or the write/move result (entry ID, scope, paths) as an
+  object instead of text. The model still sees the same text. The tools are
+  grouped in a `memory` namespace and carry annotations: search is read-only,
+  writes are not idempotent, and moves are marked destructive because they
+  remove the source entry. Pi before 0.99 ignores the new fields.
+
 ## 0.2.5
 
 ### Patch Changes

@@ -21,6 +21,8 @@ explicit-only `memory_write`, corrective `memory_move`, and `/memory`,
   of being duplicated.
 - Invalid memories remain on disk with `Status: invalid` and are filtered from
   normal search.
+- In codemode scripts, `memory_search`, `memory_write`, and `memory_move`
+  return objects (entries, IDs, paths) instead of text.
 
 ## Non-Goals
 

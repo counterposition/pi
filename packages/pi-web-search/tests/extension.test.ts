@@ -1,5 +1,8 @@
+import type { TSchema } from "typebox";
+import { Value } from "typebox/value";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { formatFetchContent, formatSearchResults, paginateContent } from "../src/format.js";
 import { pageCache } from "../src/page-cache.js";
 import { ProviderError } from "../src/provider-utils.js";
 import type { FetchProvider, SearchProvider } from "../src/types.js";
@@ -22,17 +25,6 @@ const state = vi.hoisted(() => ({
   },
   normalizeDomains: vi.fn((domains?: string[]) => domains),
   resolveSearchProviders: vi.fn(),
-}));
-
-vi.mock("@earendil-works/pi-ai", () => ({
-  Type: {
-    Object: (value: unknown) => value,
-    String: (value?: unknown) => value ?? {},
-    Optional: (value: unknown) => value,
-    Array: (value: unknown, options?: unknown) => ({ value, options }),
-    Number: (value?: unknown) => value ?? {},
-  },
-  StringEnum: (values: string[], options?: unknown) => ({ values, options }),
 }));
 
 vi.mock("../src/config.js", () => ({
@@ -183,6 +175,113 @@ describe("web-search extension", () => {
     expect(result.details.warnings).toEqual([warning]);
   });
 
+  it("returns structured search results that match the output schema", async () => {
+    const results = [
+      {
+        title: "Docs",
+        url: "https://example.com/docs",
+        snippet: "Result snippet",
+        sourceDomain: "example.com",
+        publishedAt: "2026-04-01T00:00:00.000Z",
+        content: "Full extracted content",
+      },
+      {
+        title: "Blog",
+        url: "https://example.org/blog",
+        snippet: "Other snippet",
+        sourceDomain: undefined,
+        publishedAt: undefined,
+      },
+    ];
+    const provider = makeSearchProvider("tavily", async () => ({
+      results,
+      appliedFilters: { freshness: "native", domains: undefined },
+      notes: ["Dates: partial (missing publish dates)"],
+    }));
+
+    state.providers = {
+      search: { tavily: provider },
+      fetch: {},
+    };
+    state.resolveSearchProviders.mockReturnValue({
+      providers: [provider],
+      servedDepth: "thorough",
+      notes: ["Resolution note"],
+    });
+
+    const tools = registerTools();
+    const result = await tools.web_search.execute(
+      "tool-7",
+      { query: "docs query", depth: "thorough", freshness: "week" },
+      new AbortController().signal,
+    );
+
+    expect(Value.Check(tools.web_search.outputSchema, result.structuredContent)).toBe(true);
+    expect(result.structuredContent).toStrictEqual({
+      provider: "tavily",
+      requestedDepth: "thorough",
+      servedDepth: "thorough",
+      appliedFilters: { freshness: "native" },
+      notes: ["Resolution note", "Dates: partial (missing publish dates)"],
+      results: [
+        results[0],
+        { title: "Blog", url: "https://example.org/blog", snippet: "Other snippet" },
+      ],
+    });
+    expect(result.content[0].text).toBe(
+      formatSearchResults({
+        results,
+        provider: "tavily",
+        requestedDepth: "thorough",
+        servedDepth: "thorough",
+        freshness: "week",
+        domains: undefined,
+        appliedFilters: { freshness: "native", domains: undefined },
+        notes: ["Resolution note", "Dates: partial (missing publish dates)"],
+      }),
+    );
+  });
+
+  it("returns structured fetch chunks that match the output schema", async () => {
+    const page = "A".repeat(13_000);
+    state.providers = {
+      search: {},
+      fetch: { jina: makeFetchProvider("jina", async () => page) },
+    };
+
+    const tools = registerTools();
+    const url = "https://example.com/page";
+    const first = await tools.web_fetch.execute("tool-8", { url }, new AbortController().signal);
+    const last = await tools.web_fetch.execute(
+      "tool-9",
+      { url, offset: 8_000 },
+      new AbortController().signal,
+    );
+
+    expect(Value.Check(tools.web_fetch.outputSchema, first.structuredContent)).toBe(true);
+    expect(Value.Check(tools.web_fetch.outputSchema, last.structuredContent)).toBe(true);
+    expect(first.structuredContent).toStrictEqual({
+      url,
+      provider: "jina",
+      content: "A".repeat(8_000),
+      offset: 0,
+      returnedChars: 8_000,
+      totalChars: 13_000,
+      nextOffset: 8_000,
+      hasMore: true,
+    });
+    expect(last.structuredContent).toStrictEqual({
+      url,
+      provider: "jina",
+      content: "A".repeat(5_000),
+      offset: 8_000,
+      returnedChars: 5_000,
+      totalChars: 13_000,
+      hasMore: false,
+    });
+    expect(first.content[0].text).toBe(formatFetchContent(url, "jina", paginateContent(page, 0)));
+  });
+
   it("fetches through Jina and serves later pages from cache", async () => {
     const fetchImpl = vi.fn(async () => "A".repeat(13_000));
     const jina = makeFetchProvider("jina", fetchImpl);
@@ -295,6 +394,7 @@ interface RegisteredExtension {
 
 interface RegisteredTestTool {
   name: string;
+  outputSchema: TSchema;
   execute(
     toolCallId: string,
     params: Record<string, unknown>,
@@ -309,6 +409,7 @@ interface TestToolResult {
     text: string;
   }>;
   details: Record<string, unknown>;
+  structuredContent?: unknown;
 }
 
 interface BeforeAgentStartTestEvent {

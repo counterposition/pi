@@ -33,6 +33,8 @@ Returns titles, URLs, snippets, and dates. Parameters:
 
 Fetches a URL through Jina Reader and returns the page content as markdown. Long pages are paginated: use `offset` and `max_chars` to page through content in 8,000-character windows by default (up to 20,000 per call). Fetched pages are cached in an LRU cache (20 entries, 5-minute TTL) so repeated reads of the same URL within a session are free.
 
+In [codemode](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/extensions.md#tool-exposure) scripts, both tools return objects instead of text: search results with their provider and filters, or a page chunk with `nextOffset` and `hasMore`.
+
 ## Providers
 
 Each search provider has different capabilities. The extension routes requests to the provider best suited for the job:

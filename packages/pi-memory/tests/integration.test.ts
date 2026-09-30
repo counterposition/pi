@@ -2,10 +2,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import type { TSchema } from "typebox";
+import { Value } from "typebox/value";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import memoryExtension from "../extensions/memory.js";
 import { resolveProjectIdentity } from "../src/identity.js";
+import { formatSearchResultsText } from "../src/search.js";
 import { resolveMemoryRoots } from "../src/storage.js";
 import { cleanupTempDir, createRuntimeFixtureEnvironment } from "./helpers.js";
 
@@ -123,6 +126,70 @@ describe("integration", () => {
     expect(result.details.results[1].scope).toBe("global");
     expect(result.details.results[0].updatedLabel).toBe("2026-03-29 (8 days ago)");
     expect(result.details.results[0].lineSpan.start).toBeGreaterThan(1);
+  });
+
+  it("returns structured results that match each tool's output schema", async () => {
+    const environment = await createRuntimeFixtureEnvironment();
+    tempDirs.push(environment.tempDir);
+    process.env.PI_CODING_AGENT_DIR = environment.roots.agentDir;
+
+    const harness = registerExtension();
+    await callHandler(harness, "session_start", {}, { cwd: environment.cwd, hasUI: false });
+
+    const execute = async (name: string, params: unknown) => {
+      const tool = harness.tools.get(name);
+      const result = (await tool?.execute(
+        "tool-structured",
+        params,
+        new AbortController().signal,
+      )) as {
+        content: Array<{ text: string }>;
+        structuredContent: Record<string, unknown>;
+      };
+      expect(tool?.outputSchema && Value.Check(tool.outputSchema, result.structuredContent)).toBe(
+        true,
+      );
+      expect(result.structuredContent).toStrictEqual(
+        JSON.parse(JSON.stringify(result.structuredContent)),
+      );
+      return result;
+    };
+
+    const search = await execute("memory_search", { query: "package management" });
+    const written = await execute("memory_write", {
+      topic: "Architecture",
+      content: "## Structured note\n\nScripts read this as an object.",
+    });
+    const entryId = String(written.structuredContent.entryId);
+    const moved = await execute("memory_move", { entry_id: entryId, scope: "global" });
+
+    expect(search.structuredContent).toMatchObject({
+      results: [{ id: "mem_01JW2ZZB7N6K4Q2R1P8D5H3C9F", scope: "project" }, { scope: "global" }],
+      warnings: expect.any(Array),
+    });
+    expect(search.content[0]?.text).toBe(
+      formatSearchResultsText(
+        search.structuredContent.results as Parameters<typeof formatSearchResultsText>[0],
+      ),
+    );
+    expect(written.structuredContent).toMatchObject({
+      scope: "project",
+      heading: "Structured note",
+      createdTopic: true,
+      topicFileName: "architecture.md",
+    });
+    expect(written.content[0]?.text).toBe(
+      `Stored memory ${entryId} in project scope at ${String(written.structuredContent.filePath)}.`,
+    );
+    expect(moved.structuredContent).toMatchObject({
+      entryId,
+      sourceScope: "project",
+      targetScope: "global",
+      targetTopicFileName: "architecture.md",
+    });
+    expect(moved.content[0]?.text).toBe(
+      `Moved memory ${entryId} from project to global scope at ${String(moved.structuredContent.targetFilePath)}.`,
+    );
   });
 
   it("creates the full memory directory structure on first session_start", async () => {
@@ -441,6 +508,7 @@ function registerExtension(): {
   tools: Map<
     string,
     {
+      outputSchema?: TSchema;
       execute: (
         toolCallId: string,
         params: unknown,
@@ -458,6 +526,7 @@ function registerExtension(): {
   const tools = new Map<
     string,
     {
+      outputSchema?: TSchema;
       execute: (
         toolCallId: string,
         params: unknown,

@@ -9,6 +9,7 @@ import type {
   ToolCallEventResult,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import type { Static } from "typebox";
 
 import {
   formatForgetCandidate,
@@ -69,6 +70,55 @@ interface MemoryCommandDetails {
   command: string;
 }
 
+const MEMORY_NAMESPACE = {
+  name: "memory",
+  description: "Durable Markdown memory in global and project scopes.",
+};
+
+const MEMORY_SCOPES = ["global", "project"] as const;
+
+const memorySearchOutput = Type.Object({
+  results: Type.Array(
+    Type.Object({
+      id: Type.String(),
+      syntheticId: Type.Boolean(),
+      scope: StringEnum(MEMORY_SCOPES),
+      filePath: Type.String(),
+      heading: Type.String(),
+      status: StringEnum(["active", "invalid"] as const),
+      updated: Type.String(),
+      relativeAge: Type.String(),
+      updatedLabel: Type.String(),
+      excerpt: Type.String(),
+      lineSpan: Type.Object({ start: Type.Number(), end: Type.Number() }),
+    }),
+  ),
+  warnings: Type.Array(Type.String()),
+});
+
+const memoryWriteOutput = Type.Object({
+  entryId: Type.String(),
+  filePath: Type.String(),
+  scope: StringEnum(MEMORY_SCOPES),
+  heading: Type.String(),
+  updated: Type.String(),
+  createdTopic: Type.Boolean(),
+  topicFileName: Type.String(),
+});
+
+const memoryMoveOutput = Type.Object({
+  entryId: Type.String(),
+  sourceFilePath: Type.String(),
+  sourceScope: StringEnum(MEMORY_SCOPES),
+  targetFilePath: Type.String(),
+  targetScope: StringEnum(MEMORY_SCOPES),
+  heading: Type.String(),
+  updated: Type.String(),
+  createdTopic: Type.Boolean(),
+  targetTopicFileName: Type.String(),
+  syntheticIdBackfilled: Type.Boolean(),
+});
+
 type ResolvedCommandText =
   | { kind: "value"; text: string }
   | { kind: "missing" }
@@ -120,6 +170,8 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "`memory_search`: Search memory only when prior-session durable facts may matter and the current conversation or repository cannot answer directly.",
     ],
+    namespace: MEMORY_NAMESPACE,
+    annotations: { readOnlyHint: true, openWorldHint: false },
     parameters: Type.Object({
       query: Type.String({ description: "Natural-language or keyword query." }),
       scope: Type.Optional(
@@ -137,6 +189,7 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
     }),
+    outputSchema: memorySearchOutput,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const currentRuntime = await ensureRuntime(resolveRuntimeCwd(ctx, runtime));
       ensureEnabled(currentRuntime);
@@ -147,6 +200,14 @@ export default function (pi: ExtensionAPI) {
         scope: params.scope ?? "all",
         maxResults: params.max_results ?? 10,
       });
+      const structuredContent: Static<typeof memorySearchOutput> = {
+        results: response.results,
+        warnings: [
+          ...currentRuntime.config.warnings,
+          ...loaded.warnings,
+          ...response.warnings.map((warning) => warning.message),
+        ],
+      };
 
       return {
         content: [
@@ -155,10 +216,8 @@ export default function (pi: ExtensionAPI) {
             text: formatSearchResultsText(response.results),
           },
         ],
-        details: {
-          warnings: [...currentRuntime.config.warnings, ...loaded.warnings, ...response.warnings],
-          results: response.results,
-        },
+        details: structuredContent,
+        structuredContent,
       };
     },
   });
@@ -173,6 +232,13 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "`memory_write`: Use only for explicit user requests to remember durable preferences, conventions, constraints, or findings; never store secrets or transient task state.",
     ],
+    namespace: MEMORY_NAMESPACE,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     parameters: Type.Object({
       content: Type.String({
         description:
@@ -188,6 +254,7 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
     }),
+    outputSchema: memoryWriteOutput,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const currentRuntime = await ensureRuntime(resolveRuntimeCwd(ctx, runtime));
       ensureEnabled(currentRuntime);
@@ -198,6 +265,7 @@ export default function (pi: ExtensionAPI) {
         scope: params.scope ?? "project",
       });
       runtime = await refreshOrientation(currentRuntime);
+      const structuredContent: Static<typeof memoryWriteOutput> = result;
 
       return {
         content: [
@@ -207,6 +275,7 @@ export default function (pi: ExtensionAPI) {
           },
         ],
         details: result,
+        structuredContent,
       };
     },
   });
@@ -221,6 +290,13 @@ export default function (pi: ExtensionAPI) {
     promptGuidelines: [
       "`memory_move`: Use when an existing memory belongs in a different scope or topic; do not copy it with `memory_write` and leave the old entry behind.",
     ],
+    namespace: MEMORY_NAMESPACE,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     parameters: Type.Object({
       entry_id: Type.String({
         description: "Existing memory entry ID to move.",
@@ -234,6 +310,7 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
     }),
+    outputSchema: memoryMoveOutput,
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const currentRuntime = await ensureRuntime(resolveRuntimeCwd(ctx, runtime));
       ensureEnabled(currentRuntime);
@@ -245,6 +322,7 @@ export default function (pi: ExtensionAPI) {
         targetTopic: params.topic,
       });
       runtime = await refreshOrientation(currentRuntime);
+      const structuredContent: Static<typeof memoryMoveOutput> = result;
 
       return {
         content: [
@@ -256,6 +334,7 @@ export default function (pi: ExtensionAPI) {
           },
         ],
         details: result,
+        structuredContent,
       };
     },
   });
