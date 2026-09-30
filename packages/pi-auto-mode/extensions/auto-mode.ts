@@ -54,31 +54,27 @@ export default function autoMode(pi: ExtensionAPI): void {
   /** Set once the permission system has consulted this link, proving it is in the chain. */
   let confirmed = false;
   /**
-   * Calls as the `tool_call` event carried them. Pi runs handlers in load order,
-   * so this sees a call before the permission gate only if auto-mode loads first;
-   * `resolveState` trusts a capture only when the transcript holds exactly one call
-   * with its id, so a late load costs prompts, never safety.
+   * Calls still running, as the `tool_call` event carried them, with the session they
+   * started in. Pi runs handlers in load order, so this sees a call before the permission
+   * gate only if auto-mode loads first; `resolveState` trusts a capture only when it ties
+   * to exactly one call in the transcript, so a late load costs prompts, never safety.
    */
-  const prepared = new Map<string, PreparedCall | "duplicate">();
+  const running = new Map<string, (PreparedCall & { generation: number }) | "duplicate">();
   let loadsLate = false;
 
   const mode = (): Mode => sessionMode ?? loaded.config.mode;
 
-  const preparedCall = (toolCallId: string | undefined) => {
-    if (toolCallId === undefined) return undefined;
-    const call = prepared.get(toolCallId);
+  const checkOrder = (toolCallId: string | undefined) => {
+    if (toolCallId === undefined || running.has(toolCallId) || loadsLate || !ctx) return;
     // A call on this session's own branch that the tool_call handler has not seen can
     // only mean the gate ran first: this extension loaded after the permission system.
-    if (call === undefined && !loadsLate && ctx) {
-      if (callsWithId(ctx.sessionManager.getBranch(), toolCallId).length > 0) {
-        loadsLate = true;
-        warn(
-          "order",
-          `Auto mode loaded too late to check calls, so they all come to you. To fix: ${ORDER_FIX}.`,
-        );
-      }
+    if (callsWithId(ctx.sessionManager.getBranch(), toolCallId).length > 0) {
+      loadsLate = true;
+      warn(
+        "order",
+        `Auto mode loaded too late to check calls, so they all come to you. To fix: ${ORDER_FIX}.`,
+      );
     }
-    return call;
   };
 
   const warn = (problem: string, message: string) => {
@@ -140,7 +136,10 @@ export default function autoMode(pi: ExtensionAPI): void {
       cwd: current.cwd,
       environment: [...loaded.config.environment, ...remotesEnvironment(remotes)],
       branch: () => current.sessionManager.getBranch(),
-      prepared: preparedCall,
+      prepared: (toolCallId) => {
+        const call = running.get(toolCallId);
+        return call === "duplicate" || call?.generation === born ? call : undefined;
+      },
       tools: () => pi.getAllTools(),
       apiKey: checkKey,
       setStatus,
@@ -184,6 +183,7 @@ export default function autoMode(pi: ExtensionAPI): void {
           warned.delete("chain");
           clearStatus();
         }
+        checkOrder(details.toolCallId);
         const link = linkContext();
         return link ? authorize(details, link, log) : { kind: "defer" };
       });
@@ -233,11 +233,16 @@ export default function autoMode(pi: ExtensionAPI): void {
       clearStatus();
     }
     // Keep the live input object: the gate and the tool read this same object.
-    prepared.set(
+    running.set(
       event.toolCallId,
-      prepared.has(event.toolCallId)
+      running.has(event.toolCallId)
         ? "duplicate"
-        : { toolName: event.toolName, input: event.input as Record<string, unknown> },
+        : {
+            toolName: event.toolName,
+            input: event.input as Record<string, unknown>,
+            parentToolCallId: event.parentToolCallId,
+            generation,
+          },
     );
   });
 
@@ -263,11 +268,15 @@ export default function autoMode(pi: ExtensionAPI): void {
   });
   pi.on("tool_result", (event) => {
     clearStatus();
-    prepared.delete(event.toolCallId);
+    running.delete(event.toolCallId);
+  });
+  // A blocked call has no tool_result, but every call, nested or not, ends.
+  pi.on("tool_execution_end", (event) => {
+    running.delete(event.toolCallId);
   });
   pi.on("agent_end", () => {
     clearStatus();
-    prepared.clear();
+    running.clear();
   });
 
   pi.on("session_shutdown", () => {
@@ -276,7 +285,7 @@ export default function autoMode(pi: ExtensionAPI): void {
     clearStatus();
     registration?.dispose?.();
     registration = undefined;
-    prepared.clear();
+    running.clear();
     ctx = undefined;
   });
 

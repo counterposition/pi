@@ -8,8 +8,8 @@ import type { AutoModeConfig, Mode } from "./config.js";
 import { askJev, JevError } from "./jev.js";
 import { flagText, route } from "./route.js";
 import { neverAutoAllow } from "./never.js";
-import { isOversized, resolveState } from "./state.js";
-import type { BranchEntry, PreparedCall, ToolDescription, Unresolved } from "./state.js";
+import { isOversized, resolveAction, resolveState } from "./state.js";
+import type { BranchEntry, PreparedLookup, ToolDescription, Unresolved } from "./state.js";
 
 export const LINK_NAME = "auto-mode";
 
@@ -29,8 +29,11 @@ export interface LinkContext {
   /** Config prose plus the trusted-remotes entry. */
   environment: readonly string[];
   branch(): readonly BranchEntry[];
-  /** The call Pi's `tool_call` event carried for this id, if this extension saw it first. */
-  prepared(toolCallId: string | undefined): PreparedCall | "duplicate" | undefined;
+  /**
+   * The still-running call Pi's `tool_call` event carried for this id in this session,
+   * if this extension saw it first.
+   */
+  prepared: PreparedLookup;
   tools(): readonly ToolDescription[];
   apiKey(): Promise<string | undefined>;
   /** Shows a flagged call's hazard next to the approval dialog. */
@@ -99,7 +102,7 @@ export async function authorize(
     const resolved = resolveState({
       branch: ctx.branch(),
       details,
-      prepared: ctx.prepared(details.toolCallId),
+      prepared: ctx.prepared,
       tools: ctx.tools(),
       cwd: ctx.cwd,
       environment: ctx.environment,
@@ -163,7 +166,13 @@ export async function authorize(
       ...(routed.kind === "allow" ? {} : { hazard: routed.flag.hazard }),
     };
 
-    if (!ctx.isCurrent()) return defer("stale", trail);
+    // The call, or a call it runs under, may have ended while Jev was answering.
+    if (
+      !ctx.isCurrent() ||
+      typeof resolveAction(ctx.branch(), details, ctx.prepared) === "string"
+    ) {
+      return defer("stale", trail);
+    }
     if (routed.kind === "allow" && ctx.pendingInput()) return defer("pending", trail);
     const mode = ctx.mode();
     if (mode === "off") return DEFER;
