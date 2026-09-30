@@ -54,12 +54,12 @@ export default function autoMode(pi: ExtensionAPI): void {
   /** Set once the permission system has consulted this link, proving it is in the chain. */
   let confirmed = false;
   /**
-   * Calls still running, as the `tool_call` event carried them, with the session they
-   * started in. Pi runs handlers in load order, so this sees a call before the permission
-   * gate only if auto-mode loads first; `resolveState` trusts a capture only when it ties
-   * to exactly one call in the transcript, so a late load costs prompts, never safety.
+   * Calls still running in this session, as the `tool_call` event carried them. Pi runs
+   * handlers in load order, so this sees a call before the permission gate only if
+   * auto-mode loads first; `resolveState` trusts a capture only when it ties to exactly
+   * one call in the transcript, so a late load costs prompts, never safety.
    */
-  const running = new Map<string, (PreparedCall & { generation: number }) | "duplicate">();
+  const running = new Map<string, PreparedCall | "duplicate">();
   let loadsLate = false;
 
   const mode = (): Mode => sessionMode ?? loaded.config.mode;
@@ -136,10 +136,7 @@ export default function autoMode(pi: ExtensionAPI): void {
       cwd: current.cwd,
       environment: [...loaded.config.environment, ...remotesEnvironment(remotes)],
       branch: () => current.sessionManager.getBranch(),
-      prepared: (toolCallId) => {
-        const call = running.get(toolCallId);
-        return call === "duplicate" || call?.generation === born ? call : undefined;
-      },
+      prepared: (toolCallId) => (generation === born ? running.get(toolCallId) : undefined),
       tools: () => pi.getAllTools(),
       apiKey: checkKey,
       setStatus,
@@ -197,6 +194,7 @@ export default function autoMode(pi: ExtensionAPI): void {
 
   pi.on("session_start", async (_event, c) => {
     generation++;
+    running.clear();
     ctx = c;
     sessionMode = undefined;
     loaded = await loadConfig(join(getAgentDir(), "auto-mode.json"));
@@ -241,7 +239,6 @@ export default function autoMode(pi: ExtensionAPI): void {
             toolName: event.toolName,
             input: event.input as Record<string, unknown>,
             parentToolCallId: event.parentToolCallId,
-            generation,
           },
     );
   });
