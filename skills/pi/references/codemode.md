@@ -26,7 +26,7 @@ The script body is an async function: top-level `await` and `return` work.
 - `await tools.<name>(args)` calls a tool. Characters that are not valid in an identifier become `_` (`mcp__dev-radius__search` → `tools.mcp__dev_radius__search`).
 - Since Pi 1.0.0, reading a member of `tools`, `models`, or another global namespace that does not exist throws an error naming the close matches (`tools.Bash` suggests `tools.bash`). Check for a tool with `"name" in tools`; `typeof tools.name` now throws.
 - `ALL_TOOLS` lists `{ name, description }`. `await searchTools(query, { limit, namespace })` ranks tools with BM25; `await describeTool(name)` returns one declaration; `await describeNamespace(name)` returns `{ name, description?, instructions?, tools }` for a namespace such as an MCP server (`mcp__dev-radius`, `dev_radius`, and similar spellings all work).
-- Output: `text(value)`, `image(dataUrlOrImageContent)`, `console.*`, and the returned value. `exit()` ends early and keeps output.
+- Output: `text(value)`, `image(dataUrlOrImageContent)`, `console.*`, and the returned value. Since Pi 0.99.2 `image()` accepts only base64 PNG, JPEG, GIF, or WebP (a `data:` URL, `{ image_url }`, or an image block); it derives the MIME type from the image bytes, rejects remote URLs, and throws a `TypeError` for anything else, such as an SVG. `exit()` ends early and keeps output.
 - `store(key, value)` / `load(key)` keep JSON values across `codemode` calls (storing `undefined` deletes). Successful scripts append a `codemode-store` custom entry, so values follow the session branch. Limits: 262144 characters of JSON per value, 1048576 in total; do not store image data.
 - `models.getModelsOfType`, `getAvailableOfType`, `getModelOfType`, `models.classify(model, { state, questions })`, and `models.generateImages(model, { input })` (Pi 1.0.0) reach the model catalog, classifiers, and image models with session credentials. Both calls use only the model's `provider` and `id`, never throw on provider errors (check `stopReason`), and run at most four at a time per script. Their usage and cost are added to the `codemode` result. Show generated images with `image(block)` rather than printing `data`; they are not saved to disk, and generation can take minutes, so avoid a short `timeout_ms`.
 - Malformed `classify()`/`generateImages()` arguments are rejected with the expected shape, and an unknown model points to `models.getAvailableOfType()`.
@@ -64,7 +64,7 @@ So an inactive `codemode`/`deferred` tool is still callable, while an inactive `
 
 ## Nested Calls and Permissions
 
-Each script call runs through `ctx.executeTool()`, the same pipeline as a model-issued call:
+Each `tools.*` call runs through `ctx.executeTool()`, the same pipeline as a model-issued call. `models.classify()` and `models.generateImages()` do not: they run with the session's credentials and fire no `tool_call`/`tool_result` events, so a permission extension cannot gate them separately from the `codemode` call itself.
 
 - Argument validation, then `tool_call` and `tool_result` handlers, then `tool_execution_start`/`update`/`end` events.
 - Every event carries `parentToolCallId` (the `codemode` call's id); the nested call's `toolCallId` is `<parent id>/<n>`. Deeper calls nest the same way.
@@ -87,6 +87,6 @@ For a permission extension this means:
 
 - An extension that registers a tool named `codemode` or `tool_search` replaces the built-in one.
 - `"extensions": ["-builtin:codemode"]` or `["-builtin:tool-search"]` disables one (note the hyphen in the extension name); `pi config` lists them under Built-in.
-- Both built-ins use only `exposure`, `prepareLoadout()`, and `ctx.executeTool()`, so an extension can build the same behavior under another name.
+- `codemode` uses only `exposure`, `prepareLoadout()`, and `ctx.executeTool()`, and `tool_search` only ranks registered tools (`pi.getAllTools()`) and adds matches with `pi.setActiveTools()`, so an extension can build either under another name.
 
 `@earendil-works/pi-codemode` publishes the sandbox (`CodemodeSandbox`) without Pi dependencies, for exposing any functions to model-written scripts.

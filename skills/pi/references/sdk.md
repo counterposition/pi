@@ -56,6 +56,8 @@ import {
 import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
 ```
 
+**Lightweight model construction (pi-ai 0.99.2):** `@earendil-works/pi-ai/models` builds model collections and providers without loading TypeBox, the built-in catalogs, or provider SDKs; use it in startup-sensitive code that brings its own models.
+
 **pi-ai 0.80.0 API move:** the old global API (`getModel`, `getModels`, `getProviders`, `stream`, `complete`, `completeSimple`, `registerApiProvider`, `getEnvApiKey`, ...) moved off the `@earendil-works/pi-ai` root entrypoint to `@earendil-works/pi-ai/compat` (a deprecated shim slated for removal). For built-in model lookup use `getBuiltinModel(provider, modelId)` from `@earendil-works/pi-ai/providers/all`, or the provider-factory API (`createModels()` / `Models.getModel()`). Extensions loaded by Pi are unaffected at runtime — the extension loader aliases the pi-ai root to the compat superset — but standalone SDK scripts and typechecked extension sources must use the new paths. The selective `@earendil-works/pi-ai/base` / `@earendil-works/pi-agent-core/base` entrypoints introduced in 0.79.8 were removed again in 0.80.0.
 
 ## Core Options
