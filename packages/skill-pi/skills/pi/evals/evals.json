@@ -50,13 +50,13 @@
     {
       "id": 4,
       "prompt": "Add the GitHub MCP server (https://api.githubcopilot.com/mcp/, token in GITHUB_TOKEN) to Pi for all my projects. It has ~90 tools, so keep them out of the model's tool list, but make search_code directly callable. Check that it works.",
-      "expected_output": "An entry in ~/.pi/agent/mcp.json under mcpServers with the url, an Authorization header referencing ${GITHUB_TOKEN}, a non-direct server exposure (codemode, codemode-deferred, or deferred), and toolExposure making search_code direct; then pi mcp list to verify and /reload for a running session.",
+      "expected_output": "An entry in ~/.pi/agent/mcp.json under mcpServers with the url, an Authorization header referencing ${GITHUB_TOKEN}, a non-direct server exposure (codemode or deferred), and toolExposure making search_code direct; then pi mcp list to verify and /reload for a running session.",
       "files": [],
       "assertions": [
         "Writes the server to ~/.pi/agent/mcp.json (global), not settings.json and not the project .pi/mcp.json",
         "Uses the mcpServers object with a url field (streamable HTTP), not an sse type",
         "Keeps the secret out of the file with \"Authorization\": \"Bearer ${GITHUB_TOKEN}\" (or pi mcp add --bearer-token-env-var GITHUB_TOKEN)",
-        "Sets server exposure to codemode, codemode-deferred, or deferred rather than direct",
+        "Sets server exposure to codemode or deferred (or the codemode-deferred alias) rather than direct",
         "Uses toolExposure with \"search_code\": \"direct\"",
         "Runs pi mcp list to verify the connection",
         "Tells the user to /reload or start a new session so a running session connects",

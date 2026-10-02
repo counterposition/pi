@@ -94,7 +94,7 @@ If there is no `pi` manifest, Pi auto-discovers:
 
 ## Dependencies
 
-Checked against Pi v0.99.1 [packages.md](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/packages.md#declare-dependencies).
+Checked against Pi v1.0.0 [packages.md](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/packages.md#declare-dependencies).
 
 - Normal runtime dependencies belong in `dependencies`
 - Pi supplies these to extensions; declare them as peer deps with `"*"` ranges and never bundle them:
@@ -108,7 +108,7 @@ Checked against Pi v0.99.1 [packages.md](https://github.com/earendil-works/pi/bl
 - Git package installs omit dev dependencies — runtime needs go in `dependencies`, not `devDependencies`
 - Installed packages load with separate module roots. Do not rely on two packages sharing one dependency instance, or on one package resolving another package's undeclared dependency.
 - Other Pi packages used as dependencies must be included in the published tarball and referenced through their `node_modules` resource paths.
-- Pin dev dependencies to the Pi line you test against (e.g. `^0.99.1`) so typecheck/tests validate against what users run; keep peers `"*"` so installs stay compatible across Pi versions. `"*"` does not prove compatibility: document the minimum supported Pi version and feature-check newer APIs (for example `ctx.executeTool`, `pi.registerMcpServer`) if you support older hosts.
+- Pin dev dependencies to the Pi line you test against (e.g. `^1.0.0`) so typecheck/tests validate against what users run; keep peers `"*"` so installs stay compatible across Pi versions. `"*"` does not prove compatibility: document the minimum supported Pi version and feature-check newer APIs (for example `ctx.executeTool`, `pi.registerMcpServer`) if you support older hosts.
 
 ## Package Filtering
 

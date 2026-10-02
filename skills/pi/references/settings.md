@@ -51,6 +51,7 @@ Edit JSON directly or use `/settings` for common interactive options.
 }
 ```
 
+- `quietStartup`: `true` hides the startup header and loaded-resource listing; `"header"` (Pi 1.0.0) keeps the header (version and key hints) but hides the model scope line and resource listing
 - `doubleEscapeAction`: `"tree"`, `"fork"`, or `"none"`
 - `treeFilterMode`: `"default"`, `"no-tools"`, `"user-only"`, `"labeled-only"`, or `"all"`
 - In `/tree`, `Shift+T` toggles timestamps on entry labels
@@ -60,11 +61,11 @@ Edit JSON directly or use `/settings` for common interactive options.
 
 ## Fullscreen TUI Mode
 
-Experimental since Pi 0.84.0:
+Fullscreen is the default since Pi 1.0.0 (added in 0.84.0):
 
 ```json
 {
-  "tuiMode": "regular",
+  "tuiMode": "fullscreen",
   "fullscreenExitOutput": "transcript",
   "fullscreenScrollbar": "auto",
   "fullscreenCopyOnSelect": true,
@@ -72,7 +73,7 @@ Experimental since Pi 0.84.0:
 }
 ```
 
-- `tuiMode`: `"regular"` (default) or `"fullscreen"`; `/settings` switches at runtime, `--tui-mode` overrides per run
+- `tuiMode`: `"fullscreen"` (default since Pi 1.0.0) or `"regular"` for the terminal's normal scrollback; `/settings` switches at runtime, `--tui-mode` overrides per run. Scripts that capture Pi's screen (VHS, tmux) see the fullscreen layout unless they set `regular`
 - `fullscreenExitOutput` (Pi 0.84.2): `"transcript"` prints the final transcript on exit; `"resume-hint"` restores the previous screen and prints only a resume hint
 - `fullscreenScrollbar`: `"auto"` shows while scrolling, `"always"` reserves the rightmost column, `"hidden"`
 - `fullscreenCopyOnSelect` (Pi 0.84.4, default `true`): when `false`, `Ctrl+X` copies the active selection (falling back to the last assistant message)
@@ -205,6 +206,7 @@ When multiple sources specify a session directory, `--session-dir` takes precede
 
 - `defaultTools` picks the tools enabled at startup (default `read`, `bash`, `edit`, `write`; also `grep`, `find`, `ls`, `powershell`, and the built-in extension tools `codemode` and `tool_search`). Plain names replace the defaults. A list of only `+name`/`-name` entries (Pi 0.99.0) changes the inherited selection instead; in a mixed list the plain names form the selection and `+`/`-` apply in order. A project list of only `+`/`-` entries applies on top of the user setting; a project list with a plain name replaces it. An empty array disables built-in tools but keeps extension/SDK tools.
 - `--tools` replaces the whole selection for one run and does not accept `+`/`-`; `--exclude-tools` filters the result.
+- `/reload` (Pi 0.99.2) enables tools newly added to `defaultTools`. It does not disable tools removed from it or re-enable unchanged tools turned off in the session; `--tools`, `--no-tools`, and `--no-builtin-tools` still win on reload.
 - `codemode.mode`: `"on"` (default) keeps declared tools declared; `"only"` hides active built-in and extension tools from the model so it reaches them through `codemode`. `codemode.inlineBudget` (default `3000`, estimated tokens) caps tool declarations in the `codemode` description. See `references/codemode.md`.
 - MCP servers are configured in `~/.pi/agent/mcp.json` and the trust-gated `.pi/mcp.json`, not in `settings.json`. See `references/mcp.md`.
 
@@ -289,7 +291,7 @@ pi [options] [@files...] [messages...]
 --export <in> [out]              export a session to HTML
 
 # model
---provider <name>                e.g. anthropic, openai, google
+--provider <name>                e.g. anthropic, openai, google; needs --model (Pi 1.0.0)
 --model <pattern>                supports provider/id and optional :<thinking>
 --api-key <key>
 --thinking off|minimal|low|medium|high|xhigh|max
@@ -327,7 +329,7 @@ pi [options] [@files...] [messages...]
 # prompts and misc
 --system-prompt <text|path>      replace default
 --append-system-prompt <text|path>  repeatable; appended with double newlines
---tui-mode regular|fullscreen    experimental fullscreen TUI (Pi 0.84.0)
+--tui-mode regular|fullscreen    fullscreen is the default (Pi 1.0.0)
 --use-theme <name[/name]>        per-run initial theme, saved settings untouched (Pi 0.84.2)
 --verbose
 ```
