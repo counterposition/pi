@@ -40,4 +40,4 @@ Not yet published to npm. Install from a clone of this repo:
 pi install ./packages/pi-memory
 ```
 
-Works with Pi 0.87.1 and newer (tested with 0.99.1).
+Needs Pi 1.0.0 or newer.

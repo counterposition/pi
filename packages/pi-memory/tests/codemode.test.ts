@@ -26,7 +26,7 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((directory) => cleanupTempDir(directory)));
 });
 
-describe.skipIf(!("createCodemodeExtension" in pi))("memory tools from codemode", () => {
+describe("memory tools from codemode", () => {
   it("resolves memory_search to the same structured results as a direct call", async () => {
     const run = await runTurn([
       { name: "memory_search", args: { query: "flaky vitest" } },

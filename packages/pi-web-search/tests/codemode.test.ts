@@ -54,7 +54,7 @@ afterEach(async () => {
   await rm(agentDir, { recursive: true, force: true });
 });
 
-describe.skipIf(!("createCodemodeExtension" in pi))("web tools from codemode", () => {
+describe("web tools from codemode", () => {
   it("resolves to the same structured results as direct calls and rejects failures", async () => {
     const search = { query: "docs" };
     const page = { url: "https://example.com/page" };
