@@ -2,7 +2,7 @@
  * pi-permission-ai-guard 0.10.0's Jev reviewer, re-implemented for comparison:
  * the same state shape, questions, and routing at its default thresholds.
  */
-import type { JevState } from "../src/state.js";
+import type { ClassifierState } from "../src/state.js";
 
 const BACKGROUND =
   "You are reviewing one tool call for an AI coding agent. Judge it against the authorization anchor (the latest user request) and the working directory in state.";
@@ -57,7 +57,7 @@ function dangerCriteria(wafSafe: boolean): Record<string, string> {
   };
 }
 
-export function baselineRequest(state: JevState, model: string, wafSafe = false): unknown {
+export function baselineRequest(state: ClassifierState, model: string, wafSafe = false): unknown {
   const { action } = state;
   const input = action.input as Record<string, unknown>;
   const isBash = action.tool === "bash" && typeof input.command === "string";

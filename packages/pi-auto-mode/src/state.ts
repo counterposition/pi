@@ -1,4 +1,4 @@
-export interface JevAction {
+export interface ClassifierAction {
   tool: string;
   input: unknown;
   description?: string;
@@ -10,7 +10,7 @@ export interface EarlierAction {
   input: string;
 }
 
-export interface JevState {
+export interface ClassifierState {
   user_messages: string[];
   /**
    * The agent's own earlier calls that ran and succeeded, as context for what the work is.
@@ -18,7 +18,7 @@ export interface JevState {
    * question treats them as evidence that something is safe to lose.
    */
   earlier_actions: EarlierAction[];
-  action: JevAction;
+  action: ClassifierAction;
   cwd: string;
   environment: string[];
 }
@@ -95,14 +95,14 @@ export interface ToolDescription {
 }
 
 /**
- * User text beyond these budgets never reaches Jev, so it cannot rule out a limit set
+ * User text beyond these budgets never reaches the classifier, so it cannot rule out a limit set
  * there; such calls go to a human (about 3% of pooled calls, mostly a few huge sessions).
  * Each message keeps both ends within this many characters.
  */
 export const MAX_USER_MESSAGE_CHARS = 16_000;
 /** User messages are kept newest first until this many characters. */
 export const MAX_USER_CHARS = 64_000;
-/** Actions larger than this skip Jev and go to a human: truncating could hide the risky part. */
+/** Actions larger than this skip the classifier and go to a human: truncating could hide the risky part. */
 export const MAX_ACTION_CHARS = 16_000;
 
 const BUILT_IN_TOOLS = new Set(["read", "bash", "edit", "write", "grep", "find", "ls"]);
@@ -152,7 +152,7 @@ export function userContext(branch: readonly BranchEntry[]): UserContext {
   const texts: { text: string; trusted: boolean }[] = [];
   for (const entry of branch) {
     if (entry.type !== "message" || entry.message?.role !== "user") continue;
-    // Jev reads only text; an instruction that exists only in an image is not seen
+    // The classifier reads only text; an instruction that exists only in an image is not seen
     // (a documented residual risk, like commands built at run time).
     const stripped = stripSkillBlock(textOf(entry.message.content).trim());
     if (stripped.text) texts.push(stripped);
@@ -204,7 +204,10 @@ function namesMatch(name: string, details: AskDetails): boolean {
   return name === details.toolName || name === details.payload?.request?.invokedToolName;
 }
 
-export function describeAction(action: JevAction, tools: readonly ToolDescription[]): JevAction {
+export function describeAction(
+  action: ClassifierAction,
+  tools: readonly ToolDescription[],
+): ClassifierAction {
   if (BUILT_IN_TOOLS.has(action.tool)) return action;
   const description = tools.find((t) => t.name === action.tool)?.description;
   return description ? { ...action, description: capText(description, 1000) } : action;
@@ -221,11 +224,11 @@ export interface BuildStateInput {
 }
 
 export type Resolution =
-  | { ok: true; state: JevState; intentTrusted: boolean }
+  | { ok: true; state: ClassifierState; intentTrusted: boolean }
   | { ok: false; why: Unresolved };
 
 /**
- * The input Jev should judge: the prepared call and nothing else. The transcript
+ * The input the classifier should judge: the prepared call and nothing else. The transcript
  * is not what runs, and no field of the ask carries the complete input. `root` is
  * the model's own call the action runs under: itself, or the call whose tool made it.
  */
@@ -286,7 +289,7 @@ export function callsWithId(
 }
 
 /**
- * Builds Jev's state for an ask, or says why it cannot be trusted to describe the
+ * Builds the classifier state for an ask, or says why it cannot be trusted to describe the
  * call that will run. Asks forwarded from a subagent are not on this branch.
  */
 export function resolveState({
@@ -316,7 +319,7 @@ export function resolveState({
   };
 }
 
-export function isOversized(state: JevState): boolean {
+export function isOversized(state: ClassifierState): boolean {
   return JSON.stringify(state.action.input).length > MAX_ACTION_CHARS;
 }
 

@@ -10,8 +10,21 @@ export interface Thresholds {
   hard: number;
 }
 
-/** Tuned on the eval's tuning split; see eval/REPORT.md. */
-export const DEFAULT_THRESHOLDS: Thresholds = { safe: 0.3, intent: 0.58, hard: 0.5 };
+/** Tuned for Jev 1.13 on the eval's tuning split; see eval/REPORT.md. */
+export const DEFAULT_THRESHOLDS: Thresholds = { safe: 0.3, intent: 0.5, hard: 0.5 };
+
+/**
+ * Thresholds for the classifier models they were tuned for, by `provider/id`.
+ * Probabilities from different models are not comparable, so any other model
+ * needs its own thresholds in the config.
+ */
+export const TUNED_THRESHOLDS: Readonly<Record<string, Thresholds>> = {
+  // jev-latest served jev-1.13.0 when this was checked.
+  "typesafe/jev-latest": DEFAULT_THRESHOLDS,
+  "openrouter/typesafe/jev-1.13": DEFAULT_THRESHOLDS,
+  "opencode/jev-1.13": DEFAULT_THRESHOLDS,
+  "opencode/jev-1.13-free": DEFAULT_THRESHOLDS,
+};
 
 export interface Flag {
   hazard: QuestionId;

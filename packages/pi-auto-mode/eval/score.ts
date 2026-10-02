@@ -2,11 +2,15 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { DEFAULT_CONFIG, resolveApiKey } from "../src/config.js";
-import { JEV_URL, parseAnswers } from "../src/jev.js";
-import { QUESTIONS } from "../src/questions.js";
+import type { JsonObject } from "@earendil-works/pi-ai";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+
+import { parseModel } from "../src/classifier.js";
+import type { Classifier } from "../src/classifier.js";
+import { DEFAULT_CONFIG } from "../src/config.js";
+import { QUESTION_IDS, QUESTIONS } from "../src/questions.js";
 import type { Answers } from "../src/questions.js";
-import type { JevState } from "../src/state.js";
+import type { ClassifierState } from "../src/state.js";
 import { baselineRequest, baselineVerdict } from "./baseline.js";
 import { EVAL_ENVIRONMENT } from "./ingest.js";
 import type { ToolClass } from "./ingest.js";
@@ -14,7 +18,11 @@ import { mapLimit, readJsonl } from "./jsonl.js";
 import { CACHE_DIR, MUST_CATCH_FILE, POOL_FILE } from "./paths.js";
 import type { PoolItem, Split } from "./pool.js";
 
-export const MODEL = DEFAULT_CONFIG.model;
+/** The classifier under evaluation, as `provider/id`; Pi supplies its credentials. */
+export const MODEL = process.env.AUTO_MODE_EVAL_MODEL ?? DEFAULT_CONFIG.model;
+/** ai-guard's reviewer, sent straight to TypeSafe as it ships. */
+const BASELINE_MODEL = "jev-1.13.0";
+const TYPESAFE_URL = "https://api.typesafe.ai/v1/systemone";
 
 interface CacheEntry {
   body: unknown;
@@ -28,7 +36,7 @@ export interface MustCatchCase {
   expect: "ask" | "allow";
   category: string;
   user_messages: string[];
-  action: JevState["action"];
+  action: ClassifierState["action"];
 }
 
 /** Every scored item, pool and must-catch alike. */
@@ -38,7 +46,7 @@ export interface ScoredItem {
   split: Split;
   toolClass: ToolClass;
   stratum: string;
-  state: JevState;
+  state: ClassifierState;
   intentTrusted: boolean;
   /** The gate asks about a path outside cwd whatever the link says. */
   pathAsk: boolean;
@@ -94,14 +102,14 @@ function cachePath(body: unknown): string {
 }
 
 /** Atomic, so identical concurrent requests cannot tear the file. */
-async function writeCache(path: string, entry: CacheEntry): Promise<void> {
+async function writeEntry(path: string, entry: CacheEntry | ClassifiedEntry): Promise<void> {
   await mkdir(join(path, ".."), { recursive: true });
   const temp = `${path}.${process.pid}.${Math.random().toString(36).slice(2)}`;
   await writeFile(temp, JSON.stringify(entry));
   await rename(temp, path);
 }
 
-/** One raw System One call, cached by request body. */
+/** One raw TypeSafe System One call, cached by request body. */
 export async function systemOne(request: unknown, apiKey: string): Promise<CacheEntry> {
   const path = cachePath(request);
   const cached = await readFile(path, "utf8").catch(() => undefined);
@@ -115,7 +123,7 @@ export async function systemOne(request: unknown, apiKey: string): Promise<Cache
 
   for (let attempt = 1; ; attempt++) {
     const started = performance.now();
-    const response = await fetch(JEV_URL, {
+    const response = await fetch(TYPESAFE_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       body: JSON.stringify(request),
@@ -124,7 +132,7 @@ export async function systemOne(request: unknown, apiKey: string): Promise<Cache
     const latencyMs = Math.round(performance.now() - started);
     if (response instanceof Response && response.ok) {
       const entry: CacheEntry = { body: await response.json(), latencyMs };
-      await writeCache(path, entry);
+      await writeEntry(path, entry);
       return entry;
     }
     const why =
@@ -133,10 +141,91 @@ export async function systemOne(request: unknown, apiKey: string): Promise<Cache
         : response.message;
     if (response instanceof Response && response.status === 403) {
       const entry: CacheEntry = { body: null, latencyMs, blocked: true };
-      await writeCache(path, entry);
+      await writeEntry(path, entry);
       return entry;
     }
-    if (attempt >= 5) throw new Error(`Jev failed after ${attempt} attempts: ${why}`);
+    if (attempt >= 5) throw new Error(`TypeSafe failed after ${attempt} attempts: ${why}`);
+    await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));
+  }
+}
+
+interface ClassifiedEntry {
+  /** Null when the service's edge refused the request; the link defers such calls. */
+  answers: Answers | null;
+  latencyMs: number;
+}
+
+/** Pi's model runtime with the user's credentials, as a session would build it. */
+let runtime: Promise<{ runtime: ModelRuntime; model: Classifier }> | undefined;
+
+function classifier() {
+  runtime ??= (async () => {
+    const parsed = parseModel(MODEL);
+    if (!parsed) throw new Error(`AUTO_MODE_EVAL_MODEL must be provider/id, not ${MODEL}`);
+    const created = await ModelRuntime.create();
+    const model = created.getModelOfType("classifier", parsed.provider, parsed.id);
+    if (!model) throw new Error(`Pi has no classifier model ${MODEL}`);
+    return { runtime: created, model };
+  })();
+  return runtime;
+}
+
+/** One classification of `state` through Pi's runtime, cached by model, state, and questions. */
+export async function classify(
+  state: ClassifierState,
+  questions: typeof QUESTIONS,
+): Promise<ClassifiedEntry> {
+  const hash = createHash("sha256")
+    .update(JSON.stringify({ model: MODEL, state, questions }))
+    .digest("hex");
+  const path = join(CACHE_DIR, "classifier", hash.slice(0, 2), `${hash}.json`);
+  const cached = await readFile(path, "utf8").catch(() => undefined);
+  if (cached) {
+    try {
+      return JSON.parse(cached) as ClassifiedEntry;
+    } catch {
+      // A torn write from an older run; classify again.
+    }
+  }
+
+  const { runtime: models, model } = await classifier();
+  for (let attempt = 1; ; attempt++) {
+    const started = performance.now();
+    let status: number | undefined;
+    const result = await models.classify(
+      model,
+      { state: state as unknown as JsonObject, questions },
+      {
+        maxRetries: 0,
+        signal: AbortSignal.timeout(30_000),
+        // Pi reports no HTTP status for a failed request, and a 403 is an edge refusal.
+        fetch: async (input, init) => {
+          const response = await fetch(input, init);
+          status = response.status;
+          return response;
+        },
+      },
+    );
+    const latencyMs = Math.round(performance.now() - started);
+    if (result.stopReason === "stop") {
+      const answers = {} as Answers;
+      for (const id of QUESTION_IDS) {
+        const answer = result.answers[id];
+        if (answer?.type !== "bool") throw new Error(`${MODEL} gave no bool answer for '${id}'`);
+        answers[id] = answer.probability;
+      }
+      const entry: ClassifiedEntry = { answers, latencyMs };
+      await writeEntry(path, entry);
+      return entry;
+    }
+    if (status === 403) {
+      const entry: ClassifiedEntry = { answers: null, latencyMs };
+      await writeEntry(path, entry);
+      return entry;
+    }
+    if (attempt >= 5) {
+      throw new Error(`${MODEL} failed after ${attempt} attempts: ${result.errorMessage}`);
+    }
     await new Promise((resolve) => setTimeout(resolve, 500 * 2 ** attempt));
   }
 }
@@ -158,8 +247,8 @@ export async function scoreItems(
   questions: typeof QUESTIONS = QUESTIONS,
   { baseline = true }: { baseline?: boolean } = {},
 ): Promise<Scores> {
-  const apiKey = await resolveApiKey(DEFAULT_CONFIG.apiKey);
-  if (!apiKey) throw new Error("No TypeSafe API key: set TYPESAFE_API_KEY");
+  const apiKey = process.env.TYPESAFE_API_KEY;
+  if (baseline && !apiKey) throw new Error("The baseline needs TYPESAFE_API_KEY");
 
   const scores: Scores = {
     answers: new Map(),
@@ -171,16 +260,16 @@ export async function scoreItems(
   };
   let done = 0;
   await mapLimit(items, 8, async (item) => {
-    const ours = await systemOne({ model: MODEL, state: item.state, questions }, apiKey);
-    if (ours.blocked) scores.blocked.add(item.id);
+    const ours = await classify(item.state, questions);
+    if (!ours.answers) scores.blocked.add(item.id);
     else {
-      scores.answers.set(item.id, parseAnswers(ours.body).answers);
+      scores.answers.set(item.id, ours.answers);
       scores.latencies.push(ours.latencyMs);
     }
-    if (baseline) {
-      const base = await systemOne(baselineRequest(item.state, MODEL), apiKey);
+    if (baseline && apiKey) {
+      const base = await systemOne(baselineRequest(item.state, BASELINE_MODEL), apiKey);
       scores.baseline.set(item.id, base.blocked ? "ask" : baselineVerdict(base.body));
-      const safe = await systemOne(baselineRequest(item.state, MODEL, true), apiKey);
+      const safe = await systemOne(baselineRequest(item.state, BASELINE_MODEL, true), apiKey);
       scores.baselineWafSafe.set(item.id, safe.blocked ? "ask" : baselineVerdict(safe.body));
       if (base.blocked) scores.baselineBlocked.shipped++;
       if (safe.blocked) scores.baselineBlocked.wafSafe++;

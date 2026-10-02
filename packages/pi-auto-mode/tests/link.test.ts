@@ -1,6 +1,8 @@
 import type { AuthorizerLog, PromptPermissionDetails } from "@gotgenes/pi-permission-system";
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { findClassifier } from "../src/classifier.js";
+import type { Classifier } from "../src/classifier.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
 import type { Mode } from "../src/config.js";
 import { authorize } from "../src/link.js";
@@ -8,6 +10,7 @@ import type { LinkContext } from "../src/link.js";
 import { QUESTION_IDS } from "../src/questions.js";
 import { MAX_USER_MESSAGE_CHARS } from "../src/state.js";
 import type { Answers } from "../src/questions.js";
+import { testModels } from "./fixtures/models.js";
 
 const details = {
   requestId: "req-1",
@@ -17,14 +20,31 @@ const details = {
   command: "git push origin main",
 } as PromptPermissionDetails;
 
-const jevBody = (overrides: Partial<Answers> = {}) => ({
+const answerBody = (overrides: Partial<Answers> = {}) => ({
   model: "jev-1.13.0",
   answers: Object.fromEntries(
     QUESTION_IDS.map((id) => [id, { type: "noul", noul: overrides[id] ?? 0.05 }]),
   ),
 });
-const jevReturning = (overrides: Partial<Answers> = {}) =>
-  vi.fn<typeof fetch>(async () => Response.json(jevBody(overrides)));
+const answering = (overrides: Partial<Answers> = {}) =>
+  vi.fn<typeof fetch>(async () => Response.json(answerBody(overrides)));
+
+process.env.TYPESAFE_API_KEY = "key";
+const models = await testModels();
+let classifier: Classifier;
+
+beforeAll(async () => {
+  const found = await findClassifier(models, DEFAULT_CONFIG.model);
+  if ("problem" in found) throw new Error(found.problem);
+  classifier = found;
+});
+afterEach(() => vi.unstubAllGlobals());
+afterAll(() => {
+  delete process.env.TYPESAFE_API_KEY;
+});
+
+/** The link's context, plus the fetch Pi's classifier request goes through. */
+type TestContext = LinkContext & { fetch: ReturnType<typeof vi.fn<typeof fetch>> };
 
 const pushBranch = [
   { type: "message", message: { role: "user", content: "commit and push" } },
@@ -44,11 +64,11 @@ const pushBranch = [
   },
 ];
 
-const setup = (overrides: Partial<LinkContext> = {}) => {
+const setup = (overrides: Partial<TestContext> = {}) => {
   const log = { review: vi.fn(), debug: vi.fn() } satisfies AuthorizerLog;
   // One live capture, as the extension keeps it: the re-check compares its input by identity.
   const call = { toolName: "bash", input: { command: "git push origin main" } };
-  const ctx: LinkContext = {
+  const ctx: TestContext = {
     mode: () => "on",
     isCurrent: () => true,
     pendingInput: () => false,
@@ -59,11 +79,14 @@ const setup = (overrides: Partial<LinkContext> = {}) => {
     branch: () => pushBranch,
     prepared: () => call,
     tools: () => [],
-    apiKey: async () => "key",
+    models,
+    classifier: async () => classifier,
+    signal: () => undefined,
     setStatus: vi.fn(),
-    fetch: jevReturning(),
+    fetch: answering(),
     ...overrides,
   };
+  vi.stubGlobal("fetch", ctx.fetch);
   return { ctx, log, run: (d: PromptPermissionDetails = details) => authorize(d, ctx, log) };
 };
 
@@ -71,7 +94,7 @@ const lastReview = (log: { review: ReturnType<typeof vi.fn> }) =>
   log.review.mock.calls.at(-1) as [string, Record<string, unknown>];
 
 describe("authorize", () => {
-  it("defers path and outside-project asks without sending them to Jev", async () => {
+  it("defers path and outside-project asks without sending them to the classifier", async () => {
     for (const surface of ["path", "external_directory", "external_directory_write", undefined]) {
       const { ctx, run } = setup();
       expect(await run({ ...details, surface } as PromptPermissionDetails)).toEqual({
@@ -81,7 +104,7 @@ describe("authorize", () => {
     }
   });
 
-  it("defers without calling Jev when auto mode is off", async () => {
+  it("defers without calling the classifier when auto mode is off", async () => {
     const { ctx, run } = setup({ mode: () => "off" });
     expect(await run()).toEqual({ kind: "defer" });
     expect(ctx.fetch).not.toHaveBeenCalled();
@@ -99,12 +122,16 @@ describe("authorize", () => {
 
     const [event, entry] = lastReview(log);
     expect(event).toBe("auto_mode_verdict");
-    expect(entry).toMatchObject({ requestId: "req-1", verdict: "allow", model: "jev-1.13.0" });
+    expect(entry).toMatchObject({
+      requestId: "req-1",
+      verdict: "allow",
+      model: "typesafe/jev-latest",
+    });
     expect(entry.probabilities).toMatchObject({ external: 0.05 });
   });
 
   it("defers a flagged call to the dialog with the hazard in the status line", async () => {
-    const { ctx, log, run } = setup({ fetch: jevReturning({ external: 0.93 }) });
+    const { ctx, log, run } = setup({ fetch: answering({ external: 0.93 }) });
     expect(await run()).toEqual({ kind: "defer" });
     expect(ctx.setStatus).toHaveBeenCalledWith(
       "asking you: changes something outside this machine",
@@ -113,7 +140,7 @@ describe("authorize", () => {
   });
 
   it("denies a flagged call headless with a reason the model reads", async () => {
-    const { ctx, run } = setup({ hasUI: false, fetch: jevReturning({ irreversible: 0.9 }) });
+    const { ctx, run } = setup({ hasUI: false, fetch: answering({ irreversible: 0.9 }) });
     const verdict = await run();
     expect(verdict.kind).toBe("deny");
     expect(verdict.kind === "deny" && verdict.reason).toContain("irreversible 0.90");
@@ -123,7 +150,7 @@ describe("authorize", () => {
   it("only observes in shadow mode", async () => {
     const { log, run } = setup({
       mode: () => "shadow",
-      fetch: jevReturning({ irreversible: 0.9 }),
+      fetch: answering({ irreversible: 0.9 }),
     });
     expect(await run()).toEqual({ kind: "defer" });
     expect(lastReview(log)[1]).toMatchObject({ why: "shadow", wouldBe: "defer" });
@@ -132,7 +159,7 @@ describe("authorize", () => {
   it.each<[Mode, string | undefined]>([
     ["off", undefined],
     ["shadow", "shadow"],
-  ])("honors /auto %s issued while Jev is answering", async (next, why) => {
+  ])("honors /auto %s issued while the classifier is answering", async (next, why) => {
     let mode: Mode = "on";
     let answer: (response: Response) => void = () => {};
     const fetch = vi.fn<typeof globalThis.fetch>(
@@ -142,7 +169,7 @@ describe("authorize", () => {
     const pending = run();
     await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
     mode = next;
-    answer(Response.json(jevBody()));
+    answer(Response.json(answerBody()));
     expect(await pending).toEqual({ kind: "defer" });
     expect((log.review.mock.calls.at(-1)?.[1] as { why?: string } | undefined)?.why).toBe(why);
   });
@@ -153,33 +180,33 @@ describe("authorize", () => {
     expect(waiting.ctx.fetch).not.toHaveBeenCalled();
     expect(lastReview(waiting.log)[1]).toMatchObject({ why: "pending" });
 
-    // The user steers ("Stop. Do not push.") while Jev is answering.
+    // The user steers ("Stop. Do not push.") while the classifier is answering.
     let pending = false;
     const steered = setup({
       pendingInput: () => pending,
       fetch: vi.fn<typeof fetch>(async () => {
         pending = true;
-        return Response.json(jevBody());
+        return Response.json(answerBody());
       }),
     });
     expect(await steered.run()).toEqual({ kind: "defer" });
     expect(lastReview(steered.log)[1]).toMatchObject({ why: "pending" });
   });
 
-  it("defers when the session was replaced while Jev was answering", async () => {
+  it("defers when the session was replaced while the classifier was answering", async () => {
     let current = true;
     const { log, run } = setup({
       isCurrent: () => current,
       fetch: vi.fn<typeof fetch>(async () => {
         current = false;
-        return Response.json(jevBody());
+        return Response.json(answerBody());
       }),
     });
     expect(await run()).toEqual({ kind: "defer" });
     expect(lastReview(log)[1]).toMatchObject({ why: "stale" });
   });
 
-  it("sends a call to a human, without asking Jev, when user text was cut", async () => {
+  it("sends a call to a human, without asking the classifier, when user text was cut", async () => {
     const long = {
       type: "message",
       message: {
@@ -190,7 +217,7 @@ describe("authorize", () => {
     const { ctx, log, run } = setup({ branch: () => [long, ...pushBranch] });
     expect(await run()).toEqual({ kind: "defer" });
     expect(ctx.fetch).not.toHaveBeenCalled();
-    expect(ctx.setStatus).toHaveBeenCalledWith("asking you: too long for Jev to read");
+    expect(ctx.setStatus).toHaveBeenCalledWith("asking you: too long for the classifier to read");
     expect(lastReview(log)[1]).toMatchObject({ why: "incomplete" });
   });
 
@@ -217,7 +244,7 @@ describe("authorize", () => {
     ]);
   });
 
-  it("sends a never-auto-allowed command to a human without asking Jev", async () => {
+  it("sends a never-auto-allowed command to a human without asking the classifier", async () => {
     const cron = { toolName: "bash", input: { command: "crontab -e" } };
     const ui = setup({ prepared: () => cron });
     expect(await ui.run({ ...details, command: "crontab -e" })).toEqual({ kind: "defer" });
@@ -240,7 +267,7 @@ describe("authorize", () => {
     'brew services --file "dev file.plist" start redis',
     "printf 'echo later\\n' | at Monday",
     "printf 'echo later\\n' | at next minute",
-  ])("sends %s to a human without asking Jev", async (command) => {
+  ])("sends %s to a human without asking the classifier", async (command) => {
     const call = { toolName: "bash", input: { command } };
     const ui = setup({ prepared: () => call });
     expect(await ui.run({ ...details, command })).toEqual({ kind: "defer" });
@@ -250,19 +277,19 @@ describe("authorize", () => {
     expect(headless.ctx.fetch).not.toHaveBeenCalled();
   });
 
-  it("defers when Jev fails", async () => {
+  it("defers when the classifier fails", async () => {
     const { log, run } = setup({
       fetch: vi.fn<typeof fetch>(async () => new Response("down", { status: 503 })),
     });
     expect(await run()).toEqual({ kind: "defer" });
-    expect(lastReview(log)[1]).toMatchObject({ why: "error", error: "http", status: 503 });
+    expect(lastReview(log)[1]).toMatchObject({ why: "error", error: "failed", status: 503 });
   });
 
-  it("defers without a key", async () => {
-    const { ctx, log, run } = setup({ apiKey: async () => undefined });
+  it("defers without a usable classifier", async () => {
+    const { ctx, log, run } = setup({ classifier: async () => undefined });
     expect(await run()).toEqual({ kind: "defer" });
     expect(ctx.fetch).not.toHaveBeenCalled();
-    expect(lastReview(log)[1]).toMatchObject({ why: "no_api_key" });
+    expect(lastReview(log)[1]).toMatchObject({ why: "no_classifier" });
   });
 
   it("defers instead of throwing when a collaborator fails", async () => {
@@ -271,9 +298,9 @@ describe("authorize", () => {
     };
     for (const overrides of [
       { branch: boom },
-      { apiKey: async () => boom() },
-      { setStatus: boom, fetch: jevReturning({ opaque: 0.9 }) },
-    ] satisfies Partial<LinkContext>[]) {
+      { classifier: async () => boom() },
+      { setStatus: boom, fetch: answering({ opaque: 0.9 }) },
+    ] satisfies Partial<TestContext>[]) {
       expect(await setup(overrides).run()).toEqual({ kind: "defer" });
     }
   });
@@ -289,14 +316,14 @@ describe("authorize", () => {
     expect(await authorize(details, ctx, log)).toEqual({ kind: "allow" });
   });
 
-  it("sends oversized actions to a human without calling Jev", async () => {
+  it("sends oversized actions to a human without calling the classifier", async () => {
     const huge = "echo ok; ".repeat(3000) + "rm -rf ~";
     const { ctx, log, run } = setup({
       prepared: () => ({ toolName: "bash", input: { command: huge } }),
     });
     expect(await run({ ...details, command: "rm -rf ~" })).toEqual({ kind: "defer" });
     expect(ctx.fetch).not.toHaveBeenCalled();
-    expect(ctx.setStatus).toHaveBeenCalledWith("asking you: too long for Jev to read");
+    expect(ctx.setStatus).toHaveBeenCalledWith("asking you: too long for the classifier to read");
     expect(lastReview(log)[1]).toMatchObject({ why: "oversized" });
   });
 });

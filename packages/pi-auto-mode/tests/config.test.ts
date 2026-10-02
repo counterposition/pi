@@ -1,10 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { DEFAULT_CONFIG, loadConfig, parseConfig, resolveApiKey } from "../src/config.js";
+import { DEFAULT_CONFIG, loadConfig, parseConfig } from "../src/config.js";
+import { DEFAULT_THRESHOLDS } from "../src/route.js";
 
 let dir: string;
 
@@ -14,7 +15,6 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });
-  delete process.env.AUTO_MODE_TEST_KEY;
 });
 
 describe("loadConfig", () => {
@@ -58,7 +58,9 @@ describe("parseConfig", () => {
     [{ environment: "trusted" }, "environment"],
     [{ thresholds: { safe: 2 } }, "threshold 'safe'"],
     [{ thresholds: { unsafe: 0.2 } }, "unknown threshold"],
-    [{ apiKey: "" }, "apiKey"],
+    [{ model: "jev-1.13.0" }, "model must be provider/id"],
+    [{ apiKey: "$TYPESAFE_API_KEY" }, "apiKey is no longer read"],
+    [{ url: "https://api.typesafe.ai/v1/systemone" }, "url is no longer read"],
   ])("turns auto mode off for an invalid field: %j", (value, message) => {
     const { config, errors } = parseConfig(value, "cfg");
     expect(config.mode).toBe("off");
@@ -71,24 +73,27 @@ describe("parseConfig", () => {
   });
 });
 
-describe("resolveApiKey", () => {
-  it("resolves literals, environment variables, and commands", async () => {
-    process.env.AUTO_MODE_TEST_KEY = "from-env";
-    expect(await resolveApiKey("literal-key")).toBe("literal-key");
-    expect(await resolveApiKey("$AUTO_MODE_TEST_KEY")).toBe("from-env");
-    expect(await resolveApiKey("!printf ' from-cmd\\n'")).toBe("from-cmd");
+describe("model thresholds", () => {
+  it("uses the tuned thresholds of a tuned model, with overrides on top", () => {
+    const { config, errors } = parseConfig(
+      { model: "openrouter/typesafe/jev-1.13", thresholds: { safe: 0.2 } },
+      "cfg",
+    );
+    expect(errors).toEqual([]);
+    expect(config.thresholds).toEqual({ ...DEFAULT_THRESHOLDS, safe: 0.2 });
   });
 
-  it("resolves to undefined when the key cannot be found", async () => {
-    expect(await resolveApiKey("$AUTO_MODE_MISSING_KEY")).toBeUndefined();
-    expect(await resolveApiKey("!exit 1")).toBeUndefined();
-  });
+  it("turns auto mode off for an untuned model without all three thresholds", () => {
+    const partial = parseConfig(
+      { model: "openrouter/upstage/solar-decide", thresholds: { safe: 0.2 } },
+      "cfg",
+    );
+    expect(partial.config.mode).toBe("off");
+    expect(partial.errors.join()).toContain("has no tuned thresholds");
 
-  it("runs a key command once per process", async () => {
-    const counter = join(dir, "count");
-    const spec = `!echo x >> ${counter}; echo key`;
-    await resolveApiKey(spec);
-    await resolveApiKey(spec);
-    expect((await readFile(counter, "utf8")).trim().split("\n")).toHaveLength(1);
+    const thresholds = { safe: 0.2, intent: 0.6, hard: 0.4 };
+    const full = parseConfig({ model: "openrouter/upstage/solar-decide", thresholds }, "cfg");
+    expect(full.errors).toEqual([]);
+    expect(full.config.thresholds).toEqual(thresholds);
   });
 });

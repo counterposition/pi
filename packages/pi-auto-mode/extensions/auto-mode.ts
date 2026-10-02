@@ -7,7 +7,9 @@ import type {
   PermissionsReadyEvent,
 } from "@gotgenes/pi-permission-system";
 
-import { DEFAULT_CONFIG, loadConfig, MODES, resolveApiKey } from "../src/config.js";
+import { findClassifier } from "../src/classifier.js";
+import type { Classifier } from "../src/classifier.js";
+import { DEFAULT_CONFIG, loadConfig, MODES } from "../src/config.js";
 import type { LoadedConfig, Mode } from "../src/config.js";
 import { authorize, LINK_NAME } from "../src/link.js";
 import type { LinkContext } from "../src/link.js";
@@ -18,7 +20,8 @@ const STATUS_KEY = "auto-mode";
 const CHAIN_FIX =
   'add "authorizerChain": ["auto-mode"] to ~/.pi/agent/extensions/pi-permission-system/config.json';
 const UNCONFIRMED = `Not confirmed yet: nothing has needed permission since Pi started. If the first ask ever skips auto mode, you'll be told to ${CHAIN_FIX}.`;
-const KEY_FIX = "set TYPESAFE_API_KEY, or apiKey in ~/.pi/agent/auto-mode.json";
+const MODEL_FIX =
+  "give Pi the provider's credentials (/login, or its API key variable such as TYPESAFE_API_KEY), or set model in ~/.pi/agent/auto-mode.json";
 const ORDER_FIX =
   "list @counterposition/pi-auto-mode before @gotgenes/pi-permission-system in your Pi packages";
 
@@ -30,7 +33,7 @@ If a tool call is blocked or denied, it did not run. Do not retry it, work aroun
 
 const SUMMARY: Record<Mode, string> = {
   on: "Routine calls run without asking you; risky ones still ask.",
-  shadow: "Every call still asks you; Jev's verdicts are only logged.",
+  shadow: "Every call still asks you; the classifier's verdicts are only logged.",
   off: "Every permission ask comes to you.",
 };
 
@@ -48,8 +51,10 @@ export default function autoMode(pi: ExtensionAPI): void {
   const warned = new Set<string>();
   /** Asks this link was consulted on, to spot asks that bypass it. */
   const consulted = new Set<string>();
-  let keyMissing = false;
-  let keyRejected = false;
+  /** Why the configured classifier cannot be used, while it cannot. */
+  let classifierProblem: string | undefined;
+  /** The last classifier failure, until a request works again. */
+  let classifierFailure: string | undefined;
   let notInChain = false;
   /** Set once the permission system has consulted this link, proving it is in the chain. */
   let confirmed = false;
@@ -90,8 +95,8 @@ export default function autoMode(pi: ExtensionAPI): void {
         ]
       : []),
     ...(notInChain ? [`not in the permission system's chain: ${CHAIN_FIX}`] : []),
-    ...(keyMissing ? [`no TypeSafe API key: ${KEY_FIX}`] : []),
-    ...(keyRejected ? [`TypeSafe rejected the API key: ${KEY_FIX}`] : []),
+    ...(classifierProblem ? [`${classifierProblem}: ${MODEL_FIX}`] : []),
+    ...(classifierFailure ? [`the classifier failed: ${classifierFailure}`] : []),
     ...(loadsLate ? [`loaded after the permission system: ${ORDER_FIX}`] : []),
   ];
   /** "auto" while on; "auto: asking you: ..." while a call waits for the user. */
@@ -108,19 +113,22 @@ export default function autoMode(pi: ExtensionAPI): void {
     ctx.ui.setStatus(STATUS_KEY, label && base ? `auto: ${label}` : base);
   };
   const clearStatus = () => setStatus(undefined);
-  const checkKey = async () => {
-    const key = await resolveApiKey(loaded.config.apiKey);
-    if (!key !== keyMissing) {
-      keyMissing = !key;
-      if (keyMissing) {
+  const checkClassifier = async (): Promise<Classifier | undefined> => {
+    if (!ctx) return undefined;
+    const found = await findClassifier(ctx.modelRegistry, loaded.config.model);
+    const problem = "problem" in found ? found.problem : undefined;
+    if (problem !== classifierProblem) {
+      classifierProblem = problem;
+      if (problem) {
+        warned.delete("classifier");
         warn(
-          "key",
-          `Auto mode can't find a TypeSafe API key, so every ask comes to you. To fix: ${KEY_FIX}.`,
+          "classifier",
+          `Auto mode can't use the classifier (${problem}), so every ask comes to you. To fix: ${MODEL_FIX}.`,
         );
       }
       clearStatus();
     }
-    return key;
+    return "problem" in found ? undefined : found;
   };
 
   const linkContext = (): LinkContext | undefined => {
@@ -138,20 +146,23 @@ export default function autoMode(pi: ExtensionAPI): void {
       branch: () => current.sessionManager.getBranch(),
       prepared: (toolCallId) => (generation === born ? running.get(toolCallId) : undefined),
       tools: () => pi.getAllTools(),
-      apiKey: checkKey,
+      models: current.modelRegistry,
+      classifier: checkClassifier,
+      signal: () => current.signal,
       setStatus,
-      jevResult: (error) => {
-        // Only a success clears a rejected key; other failures say nothing about it.
-        const rejected = error?.status === 401 || (keyRejected && error !== undefined);
-        if (rejected && !keyRejected) {
+      classifierResult: (error) => {
+        // A slow answer or a stopped run says nothing about the setup.
+        if (error?.kind === "timeout" || error?.kind === "aborted") return;
+        const failure = error?.message;
+        if (failure && !classifierFailure) {
           warn(
-            "rejected",
-            `TypeSafe rejected the API key, so every ask comes to you. To fix: ${KEY_FIX}.`,
+            "failed",
+            `Auto mode's classifier failed (${failure}), so asks come to you until it works.`,
           );
         }
-        if (rejected !== keyRejected) {
-          keyRejected = rejected;
-          if (!rejected) warned.delete("rejected");
+        if (failure !== classifierFailure) {
+          classifierFailure = failure;
+          if (!failure) warned.delete("failed");
           clearStatus();
         }
       },
@@ -201,7 +212,8 @@ export default function autoMode(pi: ExtensionAPI): void {
     if (loaded.errors.length > 0) {
       c.ui.notify(`Auto mode is off: ${loaded.errors.join("; ")}`, "warning");
     }
-    if (loaded.config.mode !== "off") void checkKey();
+    classifierFailure = undefined;
+    if (loaded.config.mode !== "off") void checkClassifier();
     const result = await pi.exec("git", ["remote", "-v"], { cwd: c.cwd, timeout: 5000 });
     remotes = result.code === 0 ? parseRemotes(result.stdout) : [];
   });
@@ -296,7 +308,7 @@ export default function autoMode(pi: ExtensionAPI): void {
       const arg = args.trim();
       if ((MODES as readonly string[]).includes(arg)) {
         sessionMode = arg as Mode;
-        if (arg !== "off") await checkKey();
+        if (arg !== "off") await checkClassifier();
         clearStatus();
         const issues = arg === "off" ? [] : problems();
         c.ui.notify(
@@ -313,7 +325,7 @@ export default function autoMode(pi: ExtensionAPI): void {
         return;
       }
       const { config } = loaded;
-      if (mode() !== "off") await checkKey();
+      if (mode() !== "off") await checkClassifier();
       const issues = mode() === "off" ? loaded.errors.map((e) => `config error: ${e}`) : problems();
       const lines = [
         `Auto mode is ${mode()}${sessionMode ? " for this session" : ""}. ${SUMMARY[mode()]}`,
@@ -321,7 +333,7 @@ export default function autoMode(pi: ExtensionAPI): void {
         ...(mode() !== "off" && issues.length === 0 && !confirmed ? [UNCONFIRMED] : []),
         "",
         `Trusted git remotes: ${remotes.join(", ") || "none"}`,
-        `Jev ${config.model}, timeout ${config.timeoutMs} ms, thresholds safe ${config.thresholds.safe} / intent ${config.thresholds.intent} / hard ${config.thresholds.hard}`,
+        `Classifier ${config.model}, timeout ${config.timeoutMs} ms, thresholds safe ${config.thresholds.safe} / intent ${config.thresholds.intent} / hard ${config.thresholds.hard}`,
       ];
       c.ui.notify(lines.join("\n"), issues.length > 0 ? "warning" : "info");
     },

@@ -1,11 +1,11 @@
 /**
- * Shell commands that go to a human whatever Jev says: they weaken security or add
- * persistence, where a classifier's mistake is too costly. A backstop for Jev, not a
+ * Shell commands that go to a human whatever the classifier says: they weaken security or add
+ * persistence, where a classifier's mistake is too costly. A backstop for the classifier, not a
  * parser: any mention of such a command in the text asks, wherever it appears (in a
  * wrapper, a nested shell, a heredoc, a pipe into a shell, or plain data), after quotes,
  * backslashes, and line continuations are removed so they cannot split a word. Text
  * built while the command runs (variables, command output, decoded or escaped bytes)
- * is left to Jev, whose `opaque` question covers it. Only the `bash` tool's `command`
+ * is left to the classifier, whose `opaque` question covers it. Only the `bash` tool's `command`
  * (or `cmd`) is read.
  */
 
@@ -65,7 +65,7 @@ const RULES: [(text: string) => boolean, string][] = [
   [after(/curl/i, /\s-(?!-)\S*k/), "turns off certificate checks"],
 ];
 
-/** Why a shell call must reach a human, or undefined when Jev may judge it. */
+/** Why a shell call must reach a human, or undefined when the classifier may judge it. */
 export function neverAutoAllow(input: unknown): string | undefined {
   if (typeof input !== "object" || input === null) return undefined;
   const record = input as Record<string, unknown>;

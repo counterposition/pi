@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { QUESTIONS } from "../src/questions.js";
 import type { Answers } from "../src/questions.js";
-import type { JevState } from "../src/state.js";
+import type { ClassifierState } from "../src/state.js";
 import { readJsonl } from "./jsonl.js";
 import { FIXTURES_DIR, MUST_CATCH_FILE } from "./paths.js";
 import { MODEL, mustCatchItems, scoreItems } from "./score.js";
@@ -18,7 +18,7 @@ export interface Snapshot {
 }
 
 /** Binds an answer to everything that produced it: model, state, and question set. */
-export function requestHash(state: JevState): string {
+export function requestHash(state: ClassifierState): string {
   return createHash("sha256")
     .update(JSON.stringify({ model: MODEL, state, questions: QUESTIONS }))
     .digest("hex")

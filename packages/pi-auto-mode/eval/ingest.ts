@@ -6,7 +6,7 @@ import { basename, join, relative } from "node:path";
 import { migrateSessionEntries, parseSessionEntries } from "@earendil-works/pi-coding-agent";
 
 import { earlierActions, remotesEnvironment, userContext } from "../src/state.js";
-import type { BranchEntry, JevState } from "../src/state.js";
+import type { BranchEntry, ClassifierState } from "../src/state.js";
 import { writeJsonl } from "./jsonl.js";
 import { HF_DIR, ITEMS_FILE } from "./paths.js";
 
@@ -17,7 +17,7 @@ export interface EvalItem {
   dataset: string;
   session: string;
   toolClass: ToolClass;
-  state: JevState;
+  state: ClassifierState;
   /** False when a user message was cut; the link then ignores `requested`. */
   intentTrusted: boolean;
 }

@@ -1,7 +1,7 @@
 /**
  * Headless end to end: the repo's Pi binary, a scripted faux model,
  * pi-permission-system with the base policy, the auto-mode link, and a local
- * fake Jev server. No network.
+ * fake classifier server. No network.
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -15,7 +15,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { QUESTION_IDS } from "../src/questions.js";
-import type { JevState } from "../src/state.js";
+import type { ClassifierState } from "../src/state.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const packageDir = join(here, "..");
@@ -41,22 +41,22 @@ const POLICY = {
   },
 };
 
-interface JevRequest {
+interface ClassifierRequest {
   auth: string | undefined;
-  state: JevState;
+  state: ClassifierState;
 }
 
 let server: Server;
 let root: string;
-const requests: JevRequest[] = [];
+const requests: ClassifierRequest[] = [];
 
 /** Flags anything mentioning FLAG, fails anything mentioning BROKEN, and is happy otherwise. */
-function startJev(): Promise<string> {
+function startClassifier(): Promise<string> {
   server = createServer((req, res) => {
     let body = "";
     req.on("data", (chunk: Buffer) => (body += chunk.toString()));
     req.on("end", () => {
-      const parsed = JSON.parse(body) as { state: JevState };
+      const parsed = JSON.parse(body) as { state: ClassifierState };
       requests.push({ auth: req.headers.authorization, state: parsed.state });
       const action = JSON.stringify(parsed.state.action);
       if (action.includes("BROKEN")) {
@@ -71,15 +71,13 @@ function startJev(): Promise<string> {
         ]),
       );
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ model: "jev-1.13.0", answers }));
+      res.end(JSON.stringify({ model: "jev-latest", answers }));
     });
   });
   return new Promise((resolve) =>
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
-      resolve(
-        `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/v1/systemone`,
-      );
+      resolve(`http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}/v1/`);
     }),
   );
 }
@@ -154,7 +152,7 @@ async function runPi(
 }
 
 beforeAll(async () => {
-  const url = await startJev();
+  const baseUrl = await startClassifier();
   root = await mkdtemp(join(tmpdir(), "auto-mode-e2e-"));
   const agent = join(root, "agent");
   await mkdir(join(agent, "extensions/pi-permission-system"), { recursive: true });
@@ -166,9 +164,11 @@ beforeAll(async () => {
     join(agent, "extensions/pi-permission-system/config.json"),
     JSON.stringify(POLICY),
   );
+  await writeFile(join(agent, "auto-mode.json"), JSON.stringify({ timeoutMs: 2000 }));
+  // Pi's own TypeSafe provider, pointed at the fake.
   await writeFile(
-    join(agent, "auto-mode.json"),
-    JSON.stringify({ apiKey: "e2e-key", url, timeoutMs: 2000 }),
+    join(agent, "models.json"),
+    JSON.stringify({ providers: { typesafe: { baseUrl, apiKey: "e2e-key" } } }),
   );
   // Read only by Pi's MCP extension, which only the nested tests load.
   await writeFile(
