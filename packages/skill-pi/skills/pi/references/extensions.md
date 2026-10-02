@@ -140,7 +140,7 @@ Tool results may include `terminate: true` to end the current tool batch without
 - `ctx.sessionManager` (read-only; `buildContextEntries()` returns active-branch entries with compaction applied, Pi 0.80.4)
 - `ctx.modelRegistry` / `ctx.model` / `ctx.thinkingLevel` / `ctx.scopedModels` (Pi 0.83.0) — `ctx.modelRegistry` is the synchronous extension-facing facade; its `refresh()` became `Promise<void>` in Pi 0.80.8 (await it before synchronous registry reads). Since Pi 0.84.x it also exposes `getProvider(id)` (effective pi-ai provider) and `getProviderAuth(id)` (API key, headers, base URL, provider-scoped env — no loaded model required). `ctx.scopedModels` is the read-only session model scope resolved from `--models`/`enabledModels` (`{ model, thinkingLevel? }[]`, empty when unscoped); prefer it over enumerating `getAvailable()` for model pickers
 - `ctx.modelRegistry.stream()` / `streamSimple()` / `complete()` (Pi 0.86.0) — nested model calls through configured providers with request-time auth; prefer `streamSimple()` for provider-neutral calls, pass `ctx.signal`, and report the combined `usage` on the tool result
-- `ctx.modelRegistry.findOfType(type, provider, id)`, `getModelsOfType()`, `getAvailableOfType()`, and `classify(model, { state, questions }, { signal })` (Pi 0.99.0) — classifier and image models live beside chat models; `classify()` never rejects, so check `result.stopReason` (see `references/providers.md`)
+- `ctx.modelRegistry.findOfType(type, provider, id)`, `getModelsOfType()`, `getAvailableOfType()`, and `classify(model, { state, questions }, { signal })` (Pi 0.99.0), plus `generateImages(model, { input }, options?)` (Pi 1.0.0) — classifier and image models live beside chat models; neither call rejects, so check `result.stopReason` (see `references/providers.md`)
 - `ctx.hasUI` — `true` in TUI and RPC modes
 - `ctx.signal` — the active agent abort signal (or `undefined` when idle); pass it to `fetch`/model calls for abort-aware nested work
 - `ctx.isIdle()` / `ctx.hasPendingMessages()`
@@ -193,12 +193,12 @@ Important rules:
 
 ## Tool Exposure & Structured Results
 
-Pi 0.99.0 added fields for tools that other tools, codemode scripts, and permission extensions consume ([docs](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/extensions.md#tool-exposure), [types](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/src/core/extensions/types.ts)):
+Pi 0.99.0 added fields for tools that other tools, codemode scripts, and permission extensions consume ([docs](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/extensions.md#tool-exposure), [types](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/src/core/extensions/types.ts)):
 
 - `outputSchema` (TypeBox) plus `structuredContent` on every result: the model still reads `content`; codemode scripts receive `structuredContent` instead of text. Without `outputSchema`, scripts get the text. `structuredContent` must be JSON-compatible. A `tool_result` handler that replaces `content` must also return `structuredContent`, or it is dropped.
 - `isError: true` on a returned result: the model sees an error, while `details` and `structuredContent` are kept for the UI and scripts.
 - `exposure`: `direct` (default), `model-only`, `codemode`, `deferred`, or `hidden`. `direct` and `model-only` tools activate on registration; the others do not (`defaultActive: false` also keeps a `direct` tool inactive until `--tools`/`defaultTools`/`setActiveTools()` names it). Tools cannot be unregistered: re-register with `exposure: "hidden"` to withdraw one. The table of what each value declares and allows is in `references/codemode.md`.
-- `namespace: { name, description? }` groups related tools under one heading in the `codemode` description, as MCP servers do.
+- `namespace: { name, description?, instructions? }` groups related tools, as MCP servers do. Codemode lists a namespace under one heading with its short `description`. `instructions` (Pi 0.99.2) holds longer usage guidance that is not listed; scripts read it with `describeNamespace(name)`.
 - `annotations`: `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, with MCP meanings. Missing hints mean "not read-only, may be destructive, open world". They are unverified; mark writes neither read-only nor casually idempotent.
 - `prepareLoadout(loadout)`: for tools that orchestrate others. Runs whenever the active tools change with `declared`, `callable`, and `registered` tools, and returns replacement `descriptions` and `hiddenDeclarations` (active tools left out of requests but still callable). The built-in `codemode` and `tool_search` use only this, `exposure`, and `ctx.executeTool()`.
 

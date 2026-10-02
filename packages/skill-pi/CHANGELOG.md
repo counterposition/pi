@@ -1,5 +1,28 @@
 # @counterposition/skill-pi
 
+## 1.0.0
+
+### Major Changes
+
+- Sync the Pi skill with Pi 1.0.0, covering changes across 0.99.2–1.0.0.
+  - Codemode: reading a missing `tools` member now throws, so scripts check
+    `"name" in tools`; `models.generateImages()`, `describeNamespace()`, store
+    and VM limits; MCP tools with the default exposure are no longer listed in
+    the `codemode` description.
+  - MCP: `codemode-deferred` is an alias for `codemode`; the `mcp_servers`
+    system prompt section; server `description`; tool names replace `-` with
+    `_`; background connection; `oauth.clientName`,
+    `oauth.authServerMetadataUrl`, `"auth": { "provider" }`, per-server
+    credentials, RFC 9207 `iss` checks, and step-up sign-in.
+  - Settings and providers: fullscreen is the default `tuiMode`,
+    `quietStartup: "header"`, `/reload` enables new `defaultTools`,
+    `--provider` needs `--model`, Anthropic copy code login and workload
+    identity federation, Radius in `/login`, and image models through
+    `ctx.modelRegistry.generateImages()`.
+  - Extensions: tool namespaces gain `instructions`.
+  - Packages: `pi-agent-core` keeps only `Agent`, the loop, and the proxy
+    stream; the new experimental `pi-durable` replaces its harness.
+
 ## 0.99.1
 
 ### Minor Changes

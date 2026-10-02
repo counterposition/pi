@@ -1,6 +1,6 @@
 # Codemode and Tool Search
 
-`codemode` is a built-in tool (Pi 0.99) that runs model-written JavaScript in a QuickJS sandbox. Scripts call Pi's other tools, filter their results, and return only what the model needs. `tool_search` declares tools the model cannot see yet. Checked against Pi v0.99.1: [cli.md#tools](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/cli.md#tools), [extensions.md#tool-exposure](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/extensions.md#tool-exposure), [settings.md#tools](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/docs/settings.md#tools), [codemode tool source](https://github.com/earendil-works/pi/blob/v0.99.1/packages/coding-agent/src/extensions/codemode/tool.ts).
+`codemode` is a built-in tool (Pi 0.99) that runs model-written JavaScript in a QuickJS sandbox. Scripts call Pi's other tools, filter their results, and return only what the model needs. `tool_search` declares tools the model cannot see yet. Checked against Pi v1.0.0: [codemode.md](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/codemode.md), [cli.md#tools](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/cli.md#tools), [extensions.md#tool-exposure](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/extensions.md#tool-exposure), [settings.md#tools](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/settings.md#tools), [codemode tool source](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/src/extensions/codemode/tool.ts).
 
 ## Enable
 
@@ -11,7 +11,7 @@ Both tools are registered inactive. The default tools stay `read`, `bash`, `edit
 ```
 
 - `+name` adds to the default selection; `--tools` replaces it, so list everything: `pi --tools read,bash,edit,write,codemode`. `--tools` is an allowlist over every tool, including extension and MCP `mcp__*` tools: unlisted tools are not registered, so scripts can call only the listed ones.
-- The MCP extension activates `codemode` for servers with `codemode`/`codemode-deferred` exposure and `tool_search` for `deferred` servers (see `references/mcp.md`).
+- The MCP extension activates `codemode` for servers with `codemode` exposure and `tool_search` for `deferred` servers (see `references/mcp.md`).
 - SDK sessions need `createCodemodeExtension()` / `createToolSearchExtension()` in the resource loader (see `references/sdk.md`).
 
 | Setting | Default | Effect |
@@ -23,13 +23,15 @@ Both tools are registered inactive. The default tools stay `read`, `bash`, `edit
 
 The script body is an async function: top-level `await` and `return` work.
 
-- `await tools.<name>(args)` calls a tool. Names that are not identifiers are mangled (`my-tool` → `tools.my_tool`); `tools["my-tool"]` also works.
-- `ALL_TOOLS` lists `{ name, description }`. `await searchTools(query, { limit, namespace })` ranks tools with BM25; `await describeTool(name)` returns one declaration.
+- `await tools.<name>(args)` calls a tool. Characters that are not valid in an identifier become `_` (`mcp__dev-radius__search` → `tools.mcp__dev_radius__search`).
+- Since Pi 1.0.0, reading a member of `tools`, `models`, or another global namespace that does not exist throws an error naming the close matches (`tools.Bash` suggests `tools.bash`). Check for a tool with `"name" in tools`; `typeof tools.name` now throws.
+- `ALL_TOOLS` lists `{ name, description }`. `await searchTools(query, { limit, namespace })` ranks tools with BM25; `await describeTool(name)` returns one declaration; `await describeNamespace(name)` returns `{ name, description?, instructions?, tools }` for a namespace such as an MCP server (`mcp__dev-radius`, `dev_radius`, and similar spellings all work).
 - Output: `text(value)`, `image(dataUrlOrImageContent)`, `console.*`, and the returned value. `exit()` ends early and keeps output.
-- `store(key, value)` / `load(key)` keep JSON values across `codemode` calls. Successful scripts append a `codemode-store` custom entry, so values follow the session branch.
-- `models.getModelsOfType`, `getAvailableOfType`, `getModelOfType`, and `models.classify(model, { state, questions })` reach the model catalog and classifiers with session credentials (at most four classifications at a time). Their usage and cost are added to the `codemode` result.
+- `store(key, value)` / `load(key)` keep JSON values across `codemode` calls (storing `undefined` deletes). Successful scripts append a `codemode-store` custom entry, so values follow the session branch. Limits: 262144 characters of JSON per value, 1048576 in total; do not store image data.
+- `models.getModelsOfType`, `getAvailableOfType`, `getModelOfType`, `models.classify(model, { state, questions })`, and `models.generateImages(model, { input })` (Pi 1.0.0) reach the model catalog, classifiers, and image models with session credentials. Both calls use only the model's `provider` and `id`, never throw on provider errors (check `stopReason`), and run at most four at a time per script. Their usage and cost are added to the `codemode` result. Show generated images with `image(block)` rather than printing `data`; they are not saved to disk, and generation can take minutes, so avoid a short `timeout_ms`.
+- Malformed `classify()`/`generateImages()` arguments are rejected with the expected shape, and an unknown model points to `models.getAvailableOfType()`.
 - An optional first line `// @options: {"max_output_tokens": 2000, "timeout_ms": 60000}`. Output is capped at 10000 estimated tokens by default (start and end kept, full text in a temp file); there is no timeout unless set.
-- No timers, `fetch`, `process`, `require`, or modules.
+- No timers, `fetch`, `process`, `require`, or modules. The VM has 256 MB of memory; a script awaiting a promise that can never settle fails at once; scripts cannot start other `codemode` scripts.
 
 The result starts with `Script completed` or `Script failed`, the wall time, and the output. A failed script keeps its partial output followed by `Script error:`.
 
@@ -55,6 +57,8 @@ A failed, blocked, or invalid call without structured content rejects with an `E
 | `codemode` | Only if explicitly activated | Always, and listed in the `codemode` description |
 | `deferred` | After `tool_search` loads it | Always, but not listed; found by `tool_search`/`searchTools()` |
 | `hidden` | Never | Never |
+
+MCP tools with the default server `codemode` exposure are registered like `deferred` tools: callable, but not listed in the `codemode` description, so it stays the same while servers connect. Scripts find them with `searchTools()` or `describeNamespace()`.
 
 So an inactive `codemode`/`deferred` tool is still callable, while an inactive `direct` tool is unreachable from scripts. Because `codemode`/`deferred` tools do not depend on the active set, they stay callable after `/tree`, resume, and fork. `ctx.tools` in a tool's `execute()` lists exactly the callable tools.
 
