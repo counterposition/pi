@@ -22,10 +22,6 @@ const packageDir = join(here, "..");
 const modules = join(packageDir, "node_modules");
 const PI_CLI = join(modules, "@earendil-works/pi-coding-agent/dist/bundle/cli.js");
 const PERMISSIONS = join(modules, "@gotgenes/pi-permission-system");
-/** Nested tool calls (`ctx.executeTool`) and the codemode tool arrived in Pi 0.99. */
-const HAS_CODEMODE = existsSync(
-  join(modules, "@earendil-works/pi-coding-agent/dist/extensions/codemode"),
-);
 
 const POLICY = {
   authorizerChain: ["auto-mode"],
@@ -252,7 +248,7 @@ text(r.map((x) => x.status === "fulfilled"
   ? "OK " + JSON.stringify(x.value).slice(0, 60)
   : "ERR " + x.reason.message.replace(/^.*Reason: /, "")).join(" | "));`;
 
-describe.skipIf(!existsSync(PI_CLI) || !HAS_CODEMODE)("headless e2e, nested calls", () => {
+describe.skipIf(!existsSync(PI_CLI))("headless e2e, nested calls", () => {
   const since = () => {
     const start = requests.length;
     return () => requests.slice(start).map((r) => r.state);

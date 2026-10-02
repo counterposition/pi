@@ -18,7 +18,6 @@ cat >"$home/.pi/agent/settings.json" <<EOF
   "defaultModel": "scripted",
   "defaultProjectTrust": "always",
   "quietStartup": true,
-  "tuiMode": "fullscreen",
   "extensions": ["$demo/model.ts", "$package", "$modules/@gotgenes/pi-permission-system"]
 }
 EOF
