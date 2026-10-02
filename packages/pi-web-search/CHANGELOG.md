@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0
+
+### Minor Changes
+
+- 20bd3ea: # Require Pi 1.0.0
+
+  Require Pi 1.0.0 or newer. Older Pi versions are no longer tested.
+
 ## 0.7.0
 
 ### Minor Changes
