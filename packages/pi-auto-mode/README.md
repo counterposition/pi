@@ -148,17 +148,20 @@ file is read: settings in a project's `.pi/` folder can't change auto mode.
 ## Choosing a classifier
 
 Auto mode asks the classifier through Pi, with the credentials you gave Pi. Its
-thresholds are tuned for Jev 1.13, which these Pi models serve:
+thresholds are tuned for Jev 1.13, through either of these Pi models:
 
-- `typesafe/jev-latest` (the default): `TYPESAFE_API_KEY`
-- `openrouter/typesafe/jev-1.13`: `OPENROUTER_API_KEY` or `/login openrouter`
-- `opencode/jev-1.13` and `opencode/jev-1.13-free`: `OPENCODE_API_KEY`
+- `typesafe/jev-latest` (the default): `TYPESAFE_API_KEY`. Tuned on the full
+  evaluation.
+- `openrouter/typesafe/jev-1.13`: `OPENROUTER_API_KEY` or `/login openrouter`.
+  Checked on the hand-written cases only, where it decided every case as
+  TypeSafe did.
 
-`jev-latest` moves to TypeSafe's newest Jev when one comes out; pick a versioned
-model to stay on the one auto mode was tested with.
+`jev-latest` moves to TypeSafe's newest Jev when one comes out. Auto mode
+notices, and asks you about every call until an update of auto mode is tuned for
+the new version; `openrouter/typesafe/jev-1.13` stays on 1.13.
 
-Pi lists other classifiers too (see
-[classifier models](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/models.md#use-classifier-models)).
+Pi lists other classifiers too, such as Cloudflare's Clef (Pi 1.0.1 or newer; see
+[classifier models](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/models.md#use-classifier-models)).
 Their probabilities aren't comparable with Jev's, so auto mode stays off for any
 other model until you set all three `thresholds`. [`eval/README.md`](eval/README.md)
 shows how to tune them.

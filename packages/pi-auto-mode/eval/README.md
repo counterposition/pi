@@ -41,3 +41,8 @@ AUTO_MODE_EVAL_MODEL=openrouter/upstage/solar-decide pnpm --filter @counterposit
 model to `TUNED_THRESHOLDS` in `src/route.ts` if it meets the bar. Running
 `eval snapshot` with the default model refreshes the fixture answers the unit
 tests replay.
+
+Scores are cached by model ID, state, and questions in `.cache/classifier`. A
+service can change the model behind an ID, so delete that folder before
+measuring again; the eval refuses `typesafe/jev-latest` answers from any
+revision other than the one in `TUNED_REVISIONS`.

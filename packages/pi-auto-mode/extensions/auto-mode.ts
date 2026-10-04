@@ -7,7 +7,7 @@ import type {
   PermissionsReadyEvent,
 } from "@gotgenes/pi-permission-system";
 
-import { findClassifier } from "../src/classifier.js";
+import { findClassifier, hasCredentials } from "../src/classifier.js";
 import type { Classifier } from "../src/classifier.js";
 import { DEFAULT_CONFIG, loadConfig, MODES } from "../src/config.js";
 import type { LoadedConfig, Mode } from "../src/config.js";
@@ -53,6 +53,8 @@ export default function autoMode(pi: ExtensionAPI): void {
   const consulted = new Set<string>();
   /** Why the configured classifier cannot be used, while it cannot. */
   let classifierProblem: string | undefined;
+  /** The configured classifier once found with credentials; asks then skip the check. */
+  let classifier: Classifier | undefined;
   /** The last classifier failure, until a request works again. */
   let classifierFailure: string | undefined;
   let notInChain = false;
@@ -113,10 +115,23 @@ export default function autoMode(pi: ExtensionAPI): void {
     ctx.ui.setStatus(STATUS_KEY, label && base ? `auto: ${label}` : base);
   };
   const clearStatus = () => setStatus(undefined);
-  const checkClassifier = async (): Promise<Classifier | undefined> => {
+  const checkClassifier = async (signal?: AbortSignal): Promise<Classifier | undefined> => {
     if (!ctx) return undefined;
-    const found = await findClassifier(ctx.modelRegistry, loaded.config.model);
-    const problem = "problem" in found ? found.problem : undefined;
+    const spec = loaded.config.model;
+    let problem: string | undefined;
+    let found: Classifier | undefined;
+    try {
+      const model = findClassifier(ctx.modelRegistry, spec);
+      if ("problem" in model) problem = model.problem;
+      else if (await hasCredentials(ctx.modelRegistry, model, signal)) found = model;
+      else problem = `no ${model.provider} credentials for ${spec}`;
+    } catch (error: unknown) {
+      // An ask that ran out of time says nothing about the setup.
+      if (signal?.aborted) return undefined;
+      const err = error instanceof Error ? error : new Error(String(error));
+      problem = `cannot check the credentials for ${spec}: ${err.message}`;
+    }
+    classifier = found;
     if (problem !== classifierProblem) {
       classifierProblem = problem;
       if (problem) {
@@ -128,7 +143,7 @@ export default function autoMode(pi: ExtensionAPI): void {
       }
       clearStatus();
     }
-    return "problem" in found ? undefined : found;
+    return found;
   };
 
   const linkContext = (): LinkContext | undefined => {
@@ -147,7 +162,7 @@ export default function autoMode(pi: ExtensionAPI): void {
       prepared: (toolCallId) => (generation === born ? running.get(toolCallId) : undefined),
       tools: () => pi.getAllTools(),
       models: current.modelRegistry,
-      classifier: checkClassifier,
+      classifier: async (signal) => classifier ?? checkClassifier(signal),
       signal: () => current.signal,
       setStatus,
       classifierResult: (error) => {
@@ -212,6 +227,7 @@ export default function autoMode(pi: ExtensionAPI): void {
     if (loaded.errors.length > 0) {
       c.ui.notify(`Auto mode is off: ${loaded.errors.join("; ")}`, "warning");
     }
+    classifier = undefined;
     classifierFailure = undefined;
     if (loaded.config.mode !== "off") void checkClassifier();
     const result = await pi.exec("git", ["remote", "-v"], { cwd: c.cwd, timeout: 5000 });

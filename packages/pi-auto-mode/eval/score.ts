@@ -5,10 +5,11 @@ import { join } from "node:path";
 import type { JsonObject } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
-import { parseModel } from "../src/classifier.js";
+import { ClassifierError, parseModel, servedModel, toAnswers } from "../src/classifier.js";
 import type { Classifier } from "../src/classifier.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
-import { QUESTION_IDS, QUESTIONS } from "../src/questions.js";
+import { QUESTIONS } from "../src/questions.js";
+import { TUNED_REVISIONS } from "../src/route.js";
 import type { Answers } from "../src/questions.js";
 import type { ClassifierState } from "../src/state.js";
 import { baselineRequest, baselineVerdict } from "./baseline.js";
@@ -150,9 +151,14 @@ export async function systemOne(request: unknown, apiKey: string): Promise<Cache
 }
 
 interface ClassifiedEntry {
-  /** Null when the service's edge refused the request; the link defers such calls. */
+  /**
+   * Null when the service's edge refused the request or the answers were out of
+   * range; the link defers such calls.
+   */
   answers: Answers | null;
   latencyMs: number;
+  /** The model the service said it served, when it names one. */
+  served?: string;
 }
 
 /** Pi's model runtime with the user's credentials, as a session would build it. */
@@ -170,7 +176,11 @@ function classifier() {
   return runtime;
 }
 
-/** One classification of `state` through Pi's runtime, cached by model, state, and questions. */
+/**
+ * One classification of `state` through Pi's runtime, cached by model, state, and
+ * questions. The cache does not notice a service changing the model behind an ID:
+ * delete `.cache/classifier` to measure again.
+ */
 export async function classify(
   state: ClassifierState,
   questions: typeof QUESTIONS,
@@ -192,6 +202,7 @@ export async function classify(
   for (let attempt = 1; ; attempt++) {
     const started = performance.now();
     let status: number | undefined;
+    let served: string | undefined;
     const result = await models.classify(
       model,
       { state: state as unknown as JsonObject, questions },
@@ -202,19 +213,26 @@ export async function classify(
         fetch: async (input, init) => {
           const response = await fetch(input, init);
           status = response.status;
+          served = await servedModel(response);
           return response;
         },
       },
     );
     const latencyMs = Math.round(performance.now() - started);
     if (result.stopReason === "stop") {
-      const answers = {} as Answers;
-      for (const id of QUESTION_IDS) {
-        const answer = result.answers[id];
-        if (answer?.type !== "bool") throw new Error(`${MODEL} gave no bool answer for '${id}'`);
-        answers[id] = answer.probability;
+      const revision = TUNED_REVISIONS[MODEL];
+      if (revision && served !== revision) {
+        throw new Error(`${MODEL} served ${served ?? "an unnamed model"}, not ${revision}`);
       }
-      const entry: ClassifiedEntry = { answers, latencyMs };
+      let answers: Answers | null;
+      try {
+        answers = toAnswers(result);
+      } catch (error: unknown) {
+        // The link defers on answers it cannot use, so they count as asks here too.
+        if (!(error instanceof ClassifierError)) throw error;
+        answers = null;
+      }
+      const entry: ClassifiedEntry = { answers, latencyMs, ...(served ? { served } : {}) };
       await writeEntry(path, entry);
       return entry;
     }
@@ -235,7 +253,7 @@ export interface Scores {
   baseline: Map<string, "allow" | "ask">;
   /** The baseline with its WAF-tripping criterion reworded. */
   baselineWafSafe: Map<string, "allow" | "ask">;
-  /** Items the edge refused; they have no answers and count as asks. */
+  /** Items the edge refused or answered out of range; they count as asks. */
   blocked: Set<string>;
   /** Baseline requests the edge refused, as shipped and reworded. */
   baselineBlocked: { shipped: number; wafSafe: number };

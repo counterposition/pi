@@ -19,11 +19,16 @@ export const DEFAULT_THRESHOLDS: Thresholds = { safe: 0.3, intent: 0.5, hard: 0.
  * needs its own thresholds in the config.
  */
 export const TUNED_THRESHOLDS: Readonly<Record<string, Thresholds>> = {
-  // jev-latest served jev-1.13.0 when this was checked.
   "typesafe/jev-latest": DEFAULT_THRESHOLDS,
   "openrouter/typesafe/jev-1.13": DEFAULT_THRESHOLDS,
-  "opencode/jev-1.13": DEFAULT_THRESHOLDS,
-  "opencode/jev-1.13-free": DEFAULT_THRESHOLDS,
+};
+
+/**
+ * Models that are aliases a service moves to newer revisions, with the revision
+ * their thresholds were tuned on. A response from any other revision is refused.
+ */
+export const TUNED_REVISIONS: Readonly<Record<string, string>> = {
+  "typesafe/jev-latest": "jev-1.13.0",
 };
 
 export interface Flag {

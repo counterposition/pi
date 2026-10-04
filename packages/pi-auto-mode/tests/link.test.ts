@@ -34,7 +34,7 @@ const models = await testModels();
 let classifier: Classifier;
 
 beforeAll(async () => {
-  const found = await findClassifier(models, DEFAULT_CONFIG.model);
+  const found = findClassifier(models, DEFAULT_CONFIG.model);
   if ("problem" in found) throw new Error(found.problem);
   classifier = found;
 });
@@ -283,6 +283,16 @@ describe("authorize", () => {
     });
     expect(await run()).toEqual({ kind: "defer" });
     expect(lastReview(log)[1]).toMatchObject({ why: "error", error: "failed", status: 503 });
+  });
+
+  it("defers when the default model serves a revision it was not tuned for", async () => {
+    const { log, run } = setup({
+      fetch: vi.fn<typeof fetch>(async () =>
+        Response.json({ ...answerBody(), model: "jev-1.14.0" }),
+      ),
+    });
+    expect(await run()).toEqual({ kind: "defer" });
+    expect(lastReview(log)[1]).toMatchObject({ why: "error", error: "failed" });
   });
 
   it("defers without a usable classifier", async () => {

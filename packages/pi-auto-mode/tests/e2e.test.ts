@@ -71,7 +71,7 @@ function startClassifier(): Promise<string> {
         ]),
       );
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ model: "jev-latest", answers }));
+      res.end(JSON.stringify({ model: "jev-1.13.0", answers }));
     });
   });
   return new Promise((resolve) =>

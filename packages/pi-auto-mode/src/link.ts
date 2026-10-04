@@ -8,7 +8,7 @@ import type {
 import type { AutoModeConfig, Mode } from "./config.js";
 import { askClassifier, ClassifierError } from "./classifier.js";
 import type { Classifier } from "./classifier.js";
-import { flagText, route } from "./route.js";
+import { flagText, route, TUNED_REVISIONS } from "./route.js";
 import { neverAutoAllow } from "./never.js";
 import { isOversized, resolveAction, resolveState } from "./state.js";
 import type { BranchEntry, PreparedLookup, ToolDescription, Unresolved } from "./state.js";
@@ -39,8 +39,11 @@ export interface LinkContext {
   tools(): readonly ToolDescription[];
   /** Pi's model registry, which runs the request with the provider's credentials. */
   models: ModelRegistry;
-  /** The configured classifier, or undefined while it is missing or has no credentials. */
-  classifier(): Promise<Classifier | undefined>;
+  /**
+   * The configured classifier, or undefined while it is missing or has no credentials.
+   * `signal` bounds any credential check it makes.
+   */
+  classifier(signal: AbortSignal): Promise<Classifier | undefined>;
   /** The agent run's abort signal, if it is running. */
   signal(): AbortSignal | undefined;
   /** Shows a flagged call's hazard next to the approval dialog. */
@@ -142,7 +145,7 @@ export async function authorize(
     }
     if (ctx.pendingInput()) return defer("pending");
 
-    const model = await ctx.classifier();
+    const model = await ctx.classifier(AbortSignal.timeout(ctx.config.timeoutMs));
     if (!model) return defer("no_classifier");
 
     let result;
@@ -153,6 +156,7 @@ export async function authorize(
         state: resolved.state,
         timeoutMs: ctx.config.timeoutMs,
         signal: ctx.signal(),
+        revision: TUNED_REVISIONS[ctx.config.model],
       });
     } catch (error: unknown) {
       const err =

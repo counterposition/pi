@@ -1,7 +1,13 @@
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { askClassifier, ClassifierError, findClassifier, parseModel } from "../src/classifier.js";
+import {
+  askClassifier,
+  ClassifierError,
+  findClassifier,
+  hasCredentials,
+  parseModel,
+} from "../src/classifier.js";
 import type { Classifier } from "../src/classifier.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
 import { QUESTION_IDS } from "../src/questions.js";
@@ -33,7 +39,7 @@ let model: Classifier;
 beforeEach(async () => {
   process.env.TYPESAFE_API_KEY = "k";
   models = await testModels();
-  const found = await findClassifier(models, DEFAULT_CONFIG.model);
+  const found = findClassifier(models, DEFAULT_CONFIG.model);
   if ("problem" in found) throw new Error(found.problem);
   model = found;
 });
@@ -43,9 +49,14 @@ afterEach(() => {
   delete process.env.TYPESAFE_API_KEY;
 });
 
-const request = (fetch: typeof globalThis.fetch, timeoutMs = 2000, signal?: AbortSignal) => {
+const request = (
+  fetch: typeof globalThis.fetch,
+  timeoutMs = 2000,
+  signal?: AbortSignal,
+  revision?: string,
+) => {
   vi.stubGlobal("fetch", fetch);
-  return askClassifier({ models, model, state, timeoutMs, signal });
+  return askClassifier({ models, model, state, timeoutMs, signal, revision });
 };
 
 const rejection = async (promise: Promise<unknown>): Promise<ClassifierError> => {
@@ -70,17 +81,18 @@ describe("parseModel", () => {
 });
 
 describe("findClassifier", () => {
-  it("says when Pi has no such model", async () => {
-    expect(await findClassifier(models, "typesafe/jev-0.1")).toEqual({
+  it("says when Pi has no such model", () => {
+    expect(findClassifier(models, "typesafe/jev-0.1")).toEqual({
       problem: "Pi has no classifier model 'typesafe/jev-0.1'",
     });
   });
+});
 
-  it("says when the provider has no credentials", async () => {
+describe("hasCredentials", () => {
+  it("says whether Pi has the provider's credentials", async () => {
+    expect(await hasCredentials(models, model)).toBe(true);
     delete process.env.TYPESAFE_API_KEY;
-    expect(await findClassifier(models, "typesafe/jev-latest")).toEqual({
-      problem: "no typesafe credentials for typesafe/jev-latest",
-    });
+    expect(await hasCredentials(models, model)).toBe(false);
   });
 });
 
@@ -111,6 +123,27 @@ describe("askClassifier", () => {
 
   it("times out a slow response", async () => {
     expect((await rejection(request(hanging, 20))).kind).toBe("timeout");
+  });
+
+  it("refuses a pinned alias that served another revision", async () => {
+    const fetch = async () => Response.json({ ...goodBody(), model: "jev-1.14.0" });
+    expect((await request(fetch)).answers.requested).toBe(0.1);
+    const error = await rejection(request(fetch, 2000, undefined, "jev-1.13.0"));
+    expect(error.kind).toBe("failed");
+    expect(error.message).toContain("served jev-1.14.0, not jev-1.13.0");
+    expect(
+      (await request(async () => Response.json(goodBody()), 2000, undefined, "jev-1.13.0")).answers
+        .requested,
+    ).toBe(0.1);
+  });
+
+  it("refuses an answer that arrives after the run was aborted", async () => {
+    const run = new AbortController();
+    const late = async () => {
+      run.abort();
+      return Response.json(goodBody());
+    };
+    expect((await rejection(request(late, 2000, run.signal))).kind).toBe("aborted");
   });
 
   it("stops waiting when the agent run is aborted", async () => {
