@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0
+
+### Minor Changes
+
+- 66bae17: # Require Pi 1.0.2
+
+  Require Pi 1.0.2 or newer, the version the packages are now tested with.
+
 ## 0.8.0
 
 ### Minor Changes
