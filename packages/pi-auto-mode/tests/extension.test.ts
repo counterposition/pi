@@ -535,6 +535,45 @@ describe("auto-mode extension", () => {
     );
   });
 
+  it("ignores a credential check that finishes after its session was replaced", async () => {
+    const check = models.getAvailableOfType.bind(models);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const spy = vi
+      .spyOn(models, "getAvailableOfType")
+      .mockImplementationOnce(async (type, provider, options) => {
+        await held;
+        return check(type, provider, options);
+      });
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const svc = service();
+    services.byId.set("s1", svc);
+    const pi = fakePi();
+    await writeFile(join(agentDir, "auto-mode.json"), "{}");
+    await pi.fire("session_start");
+    // The next session uses a model Pi has no credentials for.
+    await writeFile(join(agentDir, "auto-mode.json"), '{"model": "openrouter/typesafe/jev-1.13"}');
+    await pi.fire("session_shutdown");
+    await pi.fire("session_start");
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    pi.emit("permissions:ready", { sessionId: "s1" });
+    await vi.waitFor(() => expect(svc.registerAuthorizer).toHaveBeenCalled());
+    const authorize = svc.registerAuthorizer.mock.calls[0]?.[1] as (
+      ...args: unknown[]
+    ) => Promise<unknown>;
+    const call = { id: "late", command: "echo ok" };
+    pi.message([call]);
+    await pi.prepare(call);
+    const details = { requestId: "r-late", surface: "bash", toolCallId: "late", toolName: "bash" };
+    expect(await authorize(details, {}, { review: vi.fn(), debug: vi.fn() })).toEqual({
+      kind: "defer",
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   it("says once, with the fix, when the provider has no credentials", async () => {
     delete process.env.TYPESAFE_API_KEY;
     const { pi, fetch, ask } = await linked();

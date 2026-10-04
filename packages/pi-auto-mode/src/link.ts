@@ -145,7 +145,10 @@ export async function authorize(
     }
     if (ctx.pendingInput()) return defer("pending");
 
-    const model = await ctx.classifier(AbortSignal.timeout(ctx.config.timeoutMs));
+    // One deadline covers finding the classifier and asking it.
+    const deadline = AbortSignal.timeout(ctx.config.timeoutMs);
+    const run = ctx.signal();
+    const model = await ctx.classifier(run ? AbortSignal.any([run, deadline]) : deadline);
     if (!model) return defer("no_classifier");
 
     let result;
@@ -154,8 +157,8 @@ export async function authorize(
         models: ctx.models,
         model,
         state: resolved.state,
-        timeoutMs: ctx.config.timeoutMs,
-        signal: ctx.signal(),
+        deadline,
+        signal: run,
         revision: TUNED_REVISIONS[ctx.config.model],
       });
     } catch (error: unknown) {

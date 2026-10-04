@@ -56,7 +56,8 @@ const request = (
   revision?: string,
 ) => {
   vi.stubGlobal("fetch", fetch);
-  return askClassifier({ models, model, state, timeoutMs, signal, revision });
+  const deadline = AbortSignal.timeout(timeoutMs);
+  return askClassifier({ models, model, state, deadline, signal, revision });
 };
 
 const rejection = async (promise: Promise<unknown>): Promise<ClassifierError> => {

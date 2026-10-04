@@ -117,6 +117,7 @@ export default function autoMode(pi: ExtensionAPI): void {
   const clearStatus = () => setStatus(undefined);
   const checkClassifier = async (signal?: AbortSignal): Promise<Classifier | undefined> => {
     if (!ctx) return undefined;
+    const born = generation;
     const spec = loaded.config.model;
     let problem: string | undefined;
     let found: Classifier | undefined;
@@ -131,6 +132,8 @@ export default function autoMode(pi: ExtensionAPI): void {
       const err = error instanceof Error ? error : new Error(String(error));
       problem = `cannot check the credentials for ${spec}: ${err.message}`;
     }
+    // A check from a replaced session, or for a model no longer configured, says nothing now.
+    if (generation !== born || loaded.config.model !== spec) return undefined;
     classifier = found;
     if (problem !== classifierProblem) {
       classifierProblem = problem;
@@ -162,7 +165,10 @@ export default function autoMode(pi: ExtensionAPI): void {
       prepared: (toolCallId) => (generation === born ? running.get(toolCallId) : undefined),
       tools: () => pi.getAllTools(),
       models: current.modelRegistry,
-      classifier: async (signal) => classifier ?? checkClassifier(signal),
+      classifier: async (signal) =>
+        classifier && `${classifier.provider}/${classifier.id}` === loaded.config.model
+          ? classifier
+          : checkClassifier(signal),
       signal: () => current.signal,
       setStatus,
       classifierResult: (error) => {

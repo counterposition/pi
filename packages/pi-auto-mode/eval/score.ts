@@ -5,10 +5,16 @@ import { join } from "node:path";
 import type { JsonObject } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
-import { ClassifierError, parseModel, servedModel, toAnswers } from "../src/classifier.js";
+import {
+  ClassifierError,
+  isProbability,
+  parseModel,
+  servedModel,
+  toAnswers,
+} from "../src/classifier.js";
 import type { Classifier } from "../src/classifier.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
-import { QUESTIONS } from "../src/questions.js";
+import { QUESTION_IDS, QUESTIONS } from "../src/questions.js";
 import { TUNED_REVISIONS } from "../src/route.js";
 import type { Answers } from "../src/questions.js";
 import type { ClassifierState } from "../src/state.js";
@@ -192,7 +198,13 @@ export async function classify(
   const cached = await readFile(path, "utf8").catch(() => undefined);
   if (cached) {
     try {
-      return JSON.parse(cached) as ClassifiedEntry;
+      const entry = JSON.parse(cached) as ClassifiedEntry;
+      // Entries from before answers were checked count as asks, like the link's.
+      const { answers } = entry;
+      if (answers && !QUESTION_IDS.every((id) => isProbability(answers[id]))) {
+        return { ...entry, answers: null };
+      }
+      return entry;
     } catch {
       // A torn write from an older run; classify again.
     }

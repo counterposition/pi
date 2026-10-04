@@ -277,6 +277,19 @@ describe("authorize", () => {
     expect(headless.ctx.fetch).not.toHaveBeenCalled();
   });
 
+  it("spends one deadline on finding the classifier and asking it", async () => {
+    const { ctx, log, run } = setup({
+      config: { ...DEFAULT_CONFIG, timeoutMs: 30 },
+      classifier: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        return classifier;
+      },
+    });
+    expect(await run()).toEqual({ kind: "defer" });
+    expect(lastReview(log)[1]).toMatchObject({ why: "error", error: "timeout" });
+    expect(ctx.fetch).not.toHaveBeenCalled();
+  });
+
   it("defers when the classifier fails", async () => {
     const { log, run } = setup({
       fetch: vi.fn<typeof fetch>(async () => new Response("down", { status: 503 })),
