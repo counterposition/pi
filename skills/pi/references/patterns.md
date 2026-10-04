@@ -23,7 +23,7 @@ Practical recipes for extending Pi. Each pattern is a self-contained example.
 17. [Nested Tool Calls](#nested-tool-calls)
 18. [Classifier Gate](#classifier-gate)
 
-Patterns 16–18 are full files under `examples/` that type-check against Pi 1.0.0 in this skill's package; read them rather than retyping.
+Patterns 16–18 are full files under `examples/` that type-check against Pi 1.0.2 in this skill's package; read them rather than retyping.
 
 ---
 
@@ -252,7 +252,7 @@ Pi's TUI library (`@earendil-works/pi-tui`) provides:
 - `Container` — Vertical grouping
 - `Spacer` — Vertical space
 - `Markdown` — Rendered markdown
-- `Image` — Terminal image display
+- `Image` — Terminal image display. Kitty-protocol terminals need PNG; since Pi 1.0.1 standalone pi-tui apps call `setImageTranscoder((base64Data, mimeType) => png | null)` to convert JPEG/GIF/WebP, and `Image` shows its text fallback without one or when conversion fails. Pi's interactive host registers a transcoder itself.
 - `SelectList` — Interactive selection list
 - `BorderedLoader` — Async spinner with cancel
 

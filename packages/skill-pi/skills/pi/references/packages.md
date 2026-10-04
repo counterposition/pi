@@ -16,7 +16,7 @@ pi install ./relative/path/to/package
 pi remove npm:@foo/bar
 pi uninstall npm:@foo/bar
 pi list
-pi update                 # update pi only (changed in Pi 0.79.7)
+pi update                 # update pi only (changed in Pi 0.79.7; not for Nix installs)
 pi update --all           # update pi + packages, reconcile pinned git refs
 pi update --extensions    # update packages only
 pi update --models        # refresh model catalogs only (Pi 0.80.8)
@@ -27,6 +27,8 @@ pi config -l              # start in project overrides (.pi/settings.json)
 ```
 
 By default, `install` and `remove` write to user settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead. `pi update` installs the exact version returned by the update check.
+
+Pi itself (Pi 1.0.1): the pi.dev installer pins all dependencies and `pi update` updates it. npm installs no longer pin transitive dependencies (the published `npm-shrinkwrap.json` is gone), and `pi update` on a global npm install recommends moving to the installer. Nix users run `nix profile add github:earendil-works/pi/stable` and update with `nix profile upgrade pi`; `pi update` cannot update a Nix install.
 
 Package commands follow the project trust flow (`pi update` never prompts); pass `--approve`/`-a` or `--no-approve`/`-na` to trust or ignore project-local settings for one command.
 
@@ -94,7 +96,7 @@ If there is no `pi` manifest, Pi auto-discovers:
 
 ## Dependencies
 
-Checked against Pi v1.0.0 [packages.md](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/packages.md#declare-dependencies).
+Checked against Pi v1.0.2 [packages.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/packages.md#declare-dependencies).
 
 - Normal runtime dependencies belong in `dependencies`
 - Pi supplies these to extensions; declare them as peer deps with `"*"` ranges and never bundle them:
@@ -108,7 +110,7 @@ Checked against Pi v1.0.0 [packages.md](https://github.com/earendil-works/pi/blo
 - Git package installs omit dev dependencies — runtime needs go in `dependencies`, not `devDependencies`
 - Installed packages load with separate module roots. Do not rely on two packages sharing one dependency instance, or on one package resolving another package's undeclared dependency.
 - Other Pi packages used as dependencies must be included in the published tarball and referenced through their `node_modules` resource paths.
-- Pin dev dependencies to the Pi line you test against (e.g. `^1.0.0`) so typecheck/tests validate against what users run; keep peers `"*"` so installs stay compatible across Pi versions. `"*"` does not prove compatibility: document the minimum supported Pi version and feature-check newer APIs (for example `ctx.executeTool`, `pi.registerMcpServer`) if you support older hosts.
+- Pin dev dependencies to the Pi line you test against (e.g. `^1.0.2`) so typecheck/tests validate against what users run; keep peers `"*"` so installs stay compatible across Pi versions. `"*"` does not prove compatibility: document the minimum supported Pi version and feature-check newer APIs (for example `ctx.executeTool`, `pi.registerMcpServer`) if you support older hosts.
 
 ## Package Filtering
 

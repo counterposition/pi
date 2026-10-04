@@ -38,7 +38,7 @@ try {
 }
 ```
 
-Run with `npx tsx my-script.ts` (or Node's built-in type stripping). `prompt()` resolves when the run finishes, including automatic retries. `session.dispose()` aborts active work, invalidates extension contexts, and removes listeners. Checked against Pi v1.0.0: [sdk.md](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/sdk.md), [SDK examples](https://github.com/earendil-works/pi/tree/v1.0.0/packages/coding-agent/examples/sdk).
+Run with `npx tsx my-script.ts` (or Node's built-in type stripping). `prompt()` resolves when the run finishes, including automatic retries. `session.dispose()` aborts active work, invalidates extension contexts, and removes listeners. Checked against Pi v1.0.2: [sdk.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/sdk.md), [SDK examples](https://github.com/earendil-works/pi/tree/v1.0.2/packages/coding-agent/examples/sdk).
 
 **Breaking (Pi 0.80.8):** `ModelRuntime` replaced the old `AuthStorage`/`ModelRegistry` pair as the SDK model/auth facade. `CreateAgentSessionOptions.authStorage` and `modelRegistry` are gone — pass the async `modelRuntime` instead. `AuthStorage` is no longer exported; use `ModelRuntime` (or a custom pi-ai `CredentialStore`), or `readStoredCredential()` for one-off reads of `auth.json`. `ModelRegistry` still exists only as the synchronous extension-facing compatibility facade, and its `refresh()` is now `Promise<void>`.
 
@@ -96,7 +96,7 @@ Notes:
 
 ## Built-in Extensions: Codemode, Tool Search, MCP
 
-The CLI loads `codemode`, `tool_search`, MCP, and llama.cpp as built-in extensions. SDK sessions load none of them. Opt in through the resource loader (Pi 0.99.0, [example](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/examples/sdk/14-codemode-mcp.ts)):
+The CLI loads `codemode`, `tool_search`, MCP, and llama.cpp as built-in extensions. SDK sessions load none of them. Opt in through the resource loader (Pi 0.99.0, [example](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/examples/sdk/14-codemode-mcp.ts)):
 
 ```typescript
 import {
@@ -323,7 +323,7 @@ Pi 0.84.0 added transport-neutral remote-session client APIs: `@earendil-works/p
 
 ## RPC Mode
 
-`pi --mode rpc` speaks newline-delimited JSON over stdio ([rpc.md](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/rpc.md), [rpc-commands.md](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/rpc-commands.md)). Additions since Pi 0.79:
+`pi --mode rpc` speaks newline-delimited JSON over stdio ([rpc.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/rpc.md), [rpc-commands.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/rpc-commands.md)). Additions since Pi 0.79:
 
 - Input dispositions (Pi 0.99.0): a successful `prompt` response carries `data.disposition` — `"started"` (a run started), `"queued"` (queued during a run), or `"handled"` (an extension command or input handler consumed it). `steer` and `follow_up` responses carry `"queued"` or `"handled"`. On `"handled"` no run started for that input: do not wait for `agent_settled`. Otherwise keep consuming events and wait for `agent_settled`, not `agent_end`. Failures after acceptance arrive as events, never as a second response. `RpcClient.prompt(message, images?, streamingBehavior?)`, `steer()`, and `followUp()` return the disposition.
 - `agent_settled` event (Pi 0.80.4) fires when a run is fully settled — no automatic retry, compaction retry, or queued continuation remains; `agent_end` now carries `willRetry`. `set_thinking_level` accepts `"max"` where the model supports it.

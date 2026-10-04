@@ -28,7 +28,7 @@ If you develop inside this repo, Pi already loads the skill via `.pi/settings.js
 
 ## What this covers
 
-Pi's architecture and package layout. Skill authoring, discovery, and routing. Extensions, tools, and UI hooks. MCP servers, codemode, and nested tool calls. Settings, models, providers, classifiers, and packages. Sessions, forks, and compaction. The SDK and RPC interface. Checked against Pi 1.0.0.
+Pi's architecture and package layout. Skill authoring, discovery, and routing. Extensions, tools, and UI hooks. MCP servers, codemode, and nested tool calls. Settings, models, providers, classifiers, and packages. Sessions, forks, and compaction. The SDK and RPC interface. Checked against Pi 1.0.2.
 
 The reference material lives in `references/` as task-specific documents — not a single monolith, but pieces sized for injection into a conversation when relevant.
 

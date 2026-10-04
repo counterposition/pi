@@ -7,7 +7,7 @@ compatibility: "Pi-specific guidance for agents that support Agent Skills"
 
 # Pi Coding Agent
 
-Pi is a minimal terminal coding harness. Default tools: `read`, `bash`, `edit`, `write`; `grep`, `find`, `ls`, and the Windows `powershell` tool are opt-in via the `defaultTools` setting or `--tools`. Built-in extensions (Pi 0.99.0) add MCP servers, the `codemode` tool (model-written JavaScript that calls other tools), and `tool_search`. `codemode` and `tool_search` start inactive: enable them with `defaultTools`/`--tools`, or let MCP activate them when a server needs them. Modes: interactive (`pi`), print (`pi -p`), JSON (`--mode json`), RPC (`--mode rpc`), or embedded (`createAgentSession()`). Sub-agents, plan mode, and permission flows are intentionally left to extensions and Pi packages. Skill synced with Pi 1.0.0.
+Pi is a minimal terminal coding harness. Default tools: `read`, `bash`, `edit`, `write`; `grep`, `find`, `ls`, and the Windows `powershell` tool are opt-in via the `defaultTools` setting or `--tools`. Built-in extensions (Pi 0.99.0) add MCP servers, the `codemode` tool (model-written JavaScript that calls other tools), and `tool_search`. `codemode` and `tool_search` start inactive: enable them with `defaultTools`/`--tools`, or let MCP activate them when a server needs them. Modes: interactive (`pi`), print (`pi -p`), JSON (`--mode json`), RPC (`--mode rpc`), or embedded (`createAgentSession()`). Sub-agents, plan mode, and permission flows are intentionally left to extensions and Pi packages. Skill synced with Pi 1.0.2.
 
 Pi's philosophy: **adapt Pi to your workflows, not the other way around**.
 

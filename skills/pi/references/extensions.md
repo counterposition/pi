@@ -193,7 +193,7 @@ Important rules:
 
 ## Tool Exposure & Structured Results
 
-Pi 0.99.0 added fields for tools that other tools, codemode scripts, and permission extensions consume ([docs](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/extensions.md#tool-exposure), [types](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/src/core/extensions/types.ts)):
+Pi 0.99.0 added fields for tools that other tools, codemode scripts, and permission extensions consume ([docs](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/extensions.md#tool-exposure), [types](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/src/core/extensions/types.ts)):
 
 - `outputSchema` (TypeBox) plus `structuredContent` on every result: the model still reads `content`; codemode scripts receive `structuredContent` instead of text. Without `outputSchema`, scripts get the text. `structuredContent` must be JSON-compatible. A `tool_result` handler that replaces `content` must also return `structuredContent`, or it is dropped.
 - `isError: true` on a returned result: the model sees an error, while `details` and `structuredContent` are kept for the UI and scripts.
@@ -212,10 +212,10 @@ Pi 0.80.7 lets an extension register many tools while keeping only a small initi
 
 1. Register every tool with `pi.registerTool()` (all appear in `pi.getAllTools()`).
 2. Keep a loader tool (e.g. `search_tools`) active; leave searchable tools inactive — e.g. on `session_start`, `pi.setActiveTools()` to the filtered set.
-3. During loader execution, call `pi.setActiveTools([...pi.getActiveTools(), ...matches])`. The change must be purely additive; unknown names are ignored.
+3. During loader execution, call `pi.setActiveTools([...pi.getActiveTools(), ...matches])`. Unknown names are ignored. Additive changes are the most cache-friendly everywhere.
 4. Pi records the added tools on that tool result and exposes their definitions before the next model response. Since Pi 0.86.0 prompt and tool changes are transcript-backed system messages, so they survive resume and branch navigation.
 
-Native deferred loading preserves the cached prompt prefix on Anthropic Sonnet/Opus/Fable ≥ 4.5 (not Haiku), OpenAI `gpt-5.4`+, and Fireworks Messages models (Pi 0.86.0; name the loader `ToolSearch` or `tool_search`); Kimi K3 works via `compat.deferredToolsMode: "kimi"` (Pi 0.80.9). For verified custom models/proxies, enable `compat.supportsToolReferences: true` (`anthropic-messages`) or `compat.supportsToolSearch: true` (`openai-responses`/`openai-codex-responses`). All other models fall back to sending the full active tool list on the next request — activation still works, but may invalidate the provider's cached prefix. Non-additive changes (removals/replacements) always use the fallback.
+Native deferred loading preserves the cached prompt prefix on Anthropic Sonnet/Opus/Fable ≥ 4.5 (not Haiku), OpenAI `gpt-5.4`+, and Fireworks Messages models (Pi 0.86.0; name the loader `ToolSearch` or `tool_search`); Kimi K3 works via `compat.deferredToolsMode: "kimi"` (Pi 0.80.9). For verified custom models/proxies, enable `compat.supportsToolReferences: true` (`anthropic-messages`) or `compat.supportsToolSearch: true` (`openai-responses`/`openai-codex-responses`). All other models fall back to sending the full active tool list on the next request — activation still works, but may invalidate the provider's cached prefix. Since Pi 1.0.1, Anthropic models with native mid-conversation tool changes (`compat.supportsMidConvoSystemMessages` and `supportsMidConvoToolChanges`) use the `inline-tools-2026-09-15` beta: the initial tool list never changes, later tools are defined by value in `tool_addition` blocks and withdrawn with `tool_removal`, so additions, removals, and same-name redefinitions all keep the cached prefix. Elsewhere, removals and replacements still fall back. pi-ai's `hasToolRedefinitions()` is deprecated.
 
 Cache tips: keep the loader active for the whole session; add rather than replace. Activating a tool that has `promptSnippet`/`promptGuidelines` rebuilds the system prompt and can invalidate the prefix even with native support — lazily loaded tools should rely on their `description` alone.
 
@@ -230,6 +230,8 @@ Cache tips: keep the loader active for the whole session; add rather than replac
 Model capability metadata gates what is actually sent: `compat.supportsStrictTools` / Anthropic built-ins enable strict JSON-schema tools, and `compat.supportsOpenAIGrammarTools` marks endpoints that accept Lark/regex grammar tools (enabled in generated metadata for GPT-5+ across OpenAI, Codex, Azure, GitHub Copilot, opencode, Cloudflare AI Gateway). With `strict: "prefer"`, unsupported combinations fall back to normal function tools; with `strict: "require"`, the request fails when the model has no strict tools or the schema uses keywords strict mode rejects. Since Pi 0.99.2 Anthropic strict tools also reject keywords such as `minimum`/`maximum`, so such `prefer` tools are sent non-strict. Since Pi 0.86.0, strict-prefer JSON-schema sampling is on by default for the built-in `read`, `bash`, `powershell`, `edit`, and `write` tools (no `PI_EXPERIMENTAL` needed); re-register a definition with `constrainedSampling: false` to opt out.
 
 ## Display Transformers
+
+`pi.registerToolRenderer((toolName, next) => renderers)` (Pi 1.0.1) chooses `renderShell`/`renderCall`/`renderResult` for calls to any tool, including tools not registered yet, such as MCP tools in a resumed session before their server connects. Resolvers run in extension load order; `next()` returns what the remaining resolvers, then the registered tool, would use, so `next() ?? mine` only fills gaps. Renderers apply to the interactive transcript and HTML exports.
 
 `pi.registerMarkdownTransformer(transformer)` (Pi 0.84.0) chains display-only Markdown transforms over user text, assistant text, and thinking blocks:
 
