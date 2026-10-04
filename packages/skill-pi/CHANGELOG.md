@@ -1,5 +1,16 @@
 # @counterposition/skill-pi
 
+## 1.0.2
+
+### Patch Changes
+
+- Sync the Pi skill with Pi 1.0.2, covering 1.0.1–1.0.2: Cloudflare Clef and
+  Clef Flash classifiers, `samplingParamsByThinkingLevel`, the codemode output
+  limit, `pi.registerToolRenderer()`, project overrides of user-level MCP
+  servers, `oauth.clientRegistration: "cimd"`, the pi-mcp
+  `clientMetadataDocument()` change, and how Pi itself is installed and updated
+  (pi.dev installer, npm without a shrinkwrap, Nix).
+
 ## 1.0.0
 
 ### Major Changes

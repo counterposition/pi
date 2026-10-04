@@ -23,7 +23,7 @@ Practical recipes for extending Pi. Each pattern is a self-contained example.
 17. [Nested Tool Calls](#nested-tool-calls)
 18. [Classifier Gate](#classifier-gate)
 
-Patterns 16–18 are full files under `examples/` that type-check against Pi 1.0.0 in this skill's package; read them rather than retyping.
+Patterns 16–18 are full files under `examples/` that type-check against Pi 1.0.2 in this skill's package; read them rather than retyping.
 
 ---
 

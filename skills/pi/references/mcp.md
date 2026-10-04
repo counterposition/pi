@@ -1,6 +1,6 @@
 # MCP Servers
 
-Pi connects to MCP servers through a built-in extension. There is no package to install. Checked against Pi v1.0.0: [mcp.md](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/mcp.md), [cli.md#mcp-commands](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/cli.md#mcp-commands), [extensions.md#mcp-servers](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/extensions.md#mcp-servers).
+Pi connects to MCP servers through a built-in extension. There is no package to install. Checked against Pi v1.0.2: [mcp.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/mcp.md), [cli.md#mcp-commands](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/cli.md#mcp-commands), [extensions.md#mcp-servers](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/extensions.md#mcp-servers).
 
 ## Configure
 
@@ -9,7 +9,7 @@ Pi connects to MCP servers through a built-in extension. There is no package to 
 | `~/.pi/agent/mcp.json` | Global. Put personal servers and servers with credentials here |
 | `.pi/mcp.json` | Project. Read only after the project is trusted, because stdio servers run commands |
 
-A project entry replaces a global entry with the same name. The format is the usual `mcpServers` object, so Claude Desktop, Claude Code, and Cursor entries copy over unchanged:
+A project entry replaces a global entry with the same name, except that a project entry without `command`, `url`, or `type` (Pi 1.0.1) overrides only `enabled`, `exposure`, and `toolExposure` of the user-level server and keeps the rest (`env`, `headers`, `auth`); `{ "internal-tools": { "enabled": false } }` turns a user-level server off in one project. In a trusted project, `/mcp` offers "Enable/Disable in this project", which writes such an override. The format is the usual `mcpServers` object, so Claude Desktop, Claude Code, and Cursor entries copy over unchanged:
 
 ```json
 {
@@ -67,6 +67,7 @@ Pi connects every enabled server in the background when a session starts (Pi 0.9
   - `callbackPort` alone gives `http://127.0.0.1:<port>/callback`; a `callbackUrl` (HTTP on a loopback host) without a port gets `callbackPort` or a free one.
   - `scope`: space-separated scopes to request when the server does not advertise the ones it needs.
   - `clientName` (Pi 0.99.2): the name sent at client registration (default `pi`), for servers that only accept known clients, e.g. `"Claude Code"`. Sign out first to register again under a new name.
+  - `clientRegistration: "cimd"` (Pi 1.0.1): identify as Pi's Client ID Metadata Document (`https://pi.dev/oauth/client.json`) instead of registering, for authorization servers that allow clients by document URL. The server must advertise CIMD and public-client support, or sign-in fails.
   - `authServerMetadataUrl` (Pi 1.0.0): the authorization server metadata document to use instead of discovery, for servers that advertise a wrong authorization server or none. Trusted as configured; HTTPS except on loopback.
 - Pi rejects an authorization response whose `iss` names another authorization server (RFC 9207), and step-up sign-in after `insufficient_scope` keeps the scopes already granted (Pi 1.0.0).
 - `"auth": { "provider": "<provider>" }` (Pi 0.99.2) sends a `/login` provider's current token as the bearer token instead of MCP OAuth, read on every request. Allowed only in the global `mcp.json` and from extensions, and HTTPS except on loopback. After a Radius sign-in, `/login` offers to add the Radius MCP server this way.
@@ -134,4 +135,4 @@ pi.unregisterMcpServer("jira");
 
 SDK sessions do not load built-in extensions. Add `createMcpExtension()`, plus `createCodemodeExtension()` for `codemode` servers and `createToolSearchExtension()` for `deferred` servers, then call `session.bindExtensions()` so `session_start` connects the servers. See `references/sdk.md`.
 
-The standalone client is published as `@earendil-works/pi-mcp` (stdio and streamable HTTP transports, OAuth, an in-memory testing transport). It has no Pi session dependency.
+The standalone client is published as `@earendil-works/pi-mcp` (stdio and streamable HTTP transports, OAuth, an in-memory testing transport). It has no Pi session dependency. Breaking in 1.0.1: `OAuthClientProvider.clientMetadataUrl` became `clientMetadataDocument(metadata)`, which returns the document URL and redirect URI per authorization server, or `undefined` to register dynamically.

@@ -201,7 +201,7 @@ Common `api` values:
 
 ### Model & Compatibility Knobs
 
-- `samplingParams` (Pi 0.84.0) is a free-form object merged verbatim into every request body after pi's own fields (its keys win) — for OpenAI-compatible APIs only (`openai-completions`, `openai-responses`, `azure-openai-responses`). Use it for server-specific knobs like llama.cpp `min_p` or vLLM `top_k`; in `modelOverrides` it merges per key.
+- `samplingParams` (Pi 0.84.0) is a free-form object merged verbatim into every request body after pi's own fields (its keys win) — for OpenAI-compatible APIs only (`openai-completions`, `openai-responses`, `azure-openai-responses`). Use it for server-specific knobs like llama.cpp `min_p` or vLLM `top_k`; in `modelOverrides` it merges per key. `samplingParamsByThinkingLevel` (Pi 1.0.2) overrides it per Pi thinking level (`off` … `max`, not `thinkingLevelMap` values): Pi clamps the level, then merges model `samplingParams`, the level's entry, and request-level `samplingParams`, later keys winning.
 - `thinkingLevelMap` (Pi 0.72) replaces `compat.reasoningEffortMap`. Map pi levels (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`) to provider values; use `null` to hide a level. Maps may contain holes (Pi 0.80.6) — e.g. expose `high` and `max` without `xhigh`. When a key is omitted, standard levels through `high` use the provider default mapping, but the extended `xhigh`/`max` levels are unsupported.
 - `cost` supports request-wide input pricing tiers (Pi 0.80.6): a `tiers` array where each tier supplies a complete alternate rate set and applies to the whole request when total input usage (`input + cacheRead + cacheWrite`) exceeds `inputTokensAbove`; the highest matching threshold wins. Also usable in `modelOverrides` and extension-registered providers.
 - `modelOverrides` applies to built-in and (since Pi 0.80.4) extension-registered provider models; per-model fields: `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost` (partial), `contextWindow`, `maxTokens`, `samplingParams`, `headers`, `compat`, `inputLimits`, `promptCache`.
@@ -213,7 +213,7 @@ Common `api` values:
 - `compat.thinkingFormat` supports OpenAI-compatible reasoning variants: `openrouter` sends `reasoning: { effort }`, `together` sends `reasoning: { enabled }` plus `reasoning_effort` when supported, `qwen-chat-template` targets local Qwen-compatible servers that read `chat_template_kwargs.enable_thinking`, `chat-template` (Pi 0.79.9) sends configurable `chat_template_kwargs` via `compat.chatTemplateKwargs` — e.g. `{ "thinking": { "$var": "thinking.enabled" } }` for DeepSeek models behind vLLM/Hugging Face chat templates — and `baseten` (Pi 0.84.0) sends `chat_template_args` via `compat.chatTemplateArgs`.
 - **Breaking (Pi 0.80.7):** `compat.sendSessionIdHeader` was removed. Session affinity is now controlled by `compat.sessionAffinityFormat` (`"openai"` sends `session_id`/`x-client-request-id`, `"openai-nosession"` omits the underscore-containing `session_id` header, `"openrouter"` sends `x-session-id`; default auto-detected). Replace `sendSessionIdHeader: false` with `sessionAffinityFormat: "openai-nosession"`. `sendSessionAffinityHeaders` still gates the behavior for `openai-completions`.
 - `compat.deferredToolsMode: "kimi"` (Pi 0.80.9) enables Kimi's deferred tool serialization; `compat.supportsToolReferences` / `compat.supportsToolSearch` enable native dynamic tool loading on verified custom endpoints, and `compat.supportsStrictTools` / `compat.supportsOpenAIGrammarTools` / per-model `constrainedSampling` gate constrained sampling (see `references/extensions.md`). `compat.supportsFinishReason: false` (Pi 0.84.0) tells pi to infer stop/toolUse for OpenAI-compatible streams that omit `finish_reason`.
-- Advanced `compat` flags exist for proxy quirks (`cacheControlFormat` — now also covering tool-result text content, `supportsReasoningEffort`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `supportsStrictMode`). See [Pi `docs/models.md`](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
+- Advanced `compat` flags exist for proxy quirks (`cacheControlFormat` — now also covering tool-result text content, `supportsReasoningEffort`, `supportsLongCacheRetention`, `supportsEagerToolInputStreaming`, `supportsStrictMode`). See [Pi `docs/models.md`](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/models.md) when a proxy rejects pi's defaults.
 
 ### Context Overflow Recovery
 
@@ -221,11 +221,11 @@ Pi can auto-compact and retry when a provider fails with a recognized context-wi
 
 ### llama.cpp
 
-Pi supports the llama.cpp router server (Pi 0.81.0): configure with `/login llama.cpp`, search/download Hugging Face models and load/unload with live progress via `/llama`, then select loaded models in `/model`. The model catalog persists across restarts (fixed in Pi 0.82.1). Every llama.cpp chat model is also listed as a classifier model (see [Classifier Models](#classifier-models)). `"extensions": ["-builtin:llama.cpp"]` removes the provider and `/llama`. See [Pi `docs/llama-cpp.md`](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/llama-cpp.md).
+Pi supports the llama.cpp router server (Pi 0.81.0): configure with `/login llama.cpp`, search/download Hugging Face models and load/unload with live progress via `/llama`, then select loaded models in `/model`. The model catalog persists across restarts (fixed in Pi 0.82.1). Every llama.cpp chat model is also listed as a classifier model (see [Classifier Models](#classifier-models)). `"extensions": ["-builtin:llama.cpp"]` removes the provider and `/llama`. See [Pi `docs/llama-cpp.md`](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/llama-cpp.md).
 
 ## Model Types
 
-Since Pi 0.99.0 catalogs hold typed models: `type` is `"chat"` (the default when omitted), `"image"`, or `"classifier"`. Chat-facing reads (`getModels()`, `getAvailable()`, `ctx.modelRegistry.getAll()`, `/model`) stay chat-only. `ModelRuntime`, `ctx.modelRegistry`, and pi-ai `Models` all have `getModelsOfType(type, provider?)`, `getModelOfType(type, provider, id)`, and async `getAvailableOfType(type, provider?)`. Only `ModelRuntime` and `Models` have `getAllModels()` and `getAllAvailable()` for every type; `ctx.modelRegistry` adds `findOfType(type, provider, id)` instead. pi-ai exports `isModelType()` and `getModelType()` for mixed lists. One upstream ID may have separate chat and image entries. Sources: [models.md](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/models.md#use-classifier-models), [pi-ai types](https://github.com/earendil-works/pi/blob/v1.0.0/packages/ai/src/types.ts).
+Since Pi 0.99.0 catalogs hold typed models: `type` is `"chat"` (the default when omitted), `"image"`, or `"classifier"`. Chat-facing reads (`getModels()`, `getAvailable()`, `ctx.modelRegistry.getAll()`, `/model`) stay chat-only. `ModelRuntime`, `ctx.modelRegistry`, and pi-ai `Models` all have `getModelsOfType(type, provider?)`, `getModelOfType(type, provider, id)`, and async `getAvailableOfType(type, provider?)`. Only `ModelRuntime` and `Models` have `getAllModels()` and `getAllAvailable()` for every type; `ctx.modelRegistry` adds `findOfType(type, provider, id)` instead. pi-ai exports `isModelType()` and `getModelType()` for mixed lists. One upstream ID may have separate chat and image entries. Sources: [models.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/models.md#use-classifier-models), [pi-ai types](https://github.com/earendil-works/pi/blob/v1.0.2/packages/ai/src/types.ts).
 
 ### Classifier Models
 
@@ -235,7 +235,7 @@ Classifiers do not chat. They answer typed questions about JSON state with proba
 |----------|-----------|------|
 | `typesafe` | `jev-latest` | `TYPESAFE_API_KEY` |
 | `openrouter` | `typesafe/jev-1.13`, `~typesafe/jev-latest` | `OPENROUTER_API_KEY` or `/login` |
-| `cloudflare-workers-ai` | `typesafe/jev` | `CLOUDFLARE_API_KEY` + `CLOUDFLARE_ACCOUNT_ID` |
+| `cloudflare-workers-ai` | `typesafe/jev`, `@cf/cloudflare/clef`, `@cf/cloudflare/clef-flash` (Clef, Pi 1.0.1) | `CLOUDFLARE_API_KEY` + `CLOUDFLARE_ACCOUNT_ID` (or the credential's `env` in `auth.json`) |
 | `vercel-ai-gateway` | `typesafe-ai/jev` | `AI_GATEWAY_API_KEY` |
 | `opencode` | `jev-1.13`, `jev-1.13-free` | `OPENCODE_API_KEY` |
 | llama.cpp router | every loaded chat model ID | `/login llama.cpp` |
@@ -278,7 +278,7 @@ In pi-ai, image models live in the same catalog as chat models: `builtinModels()
 
 ## Virtual Models
 
-A virtual model (experimental, Pi 0.99.0) is a selectable entry that routes each request to a physical model. It is for routing by task, cost, or conversation state, not for permission decisions. Source: [virtual-models.md](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/virtual-models.md), [`jev-router.ts`](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/examples/extensions/jev-router.ts).
+A virtual model (experimental, Pi 0.99.0) is a selectable entry that routes each request to a physical model. It is for routing by task, cost, or conversation state, not for permission decisions. Source: [virtual-models.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/virtual-models.md), [`jev-router.ts`](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/examples/extensions/jev-router.ts).
 
 ```typescript
 pi.registerVirtualModel({
@@ -309,7 +309,7 @@ pi.registerVirtualModel({
 
 Use extensions when you need custom streaming, custom headers, OAuth/device-flow logic, or want to override an existing provider's `baseUrl`/`headers`:
 
-A config-form `models` list replaces the provider's models across chat, image, and classifier operations; image and classifier entries need an explicit `type` and implementations keyed by `api` through `images` and `classifiers`. Registering only `baseUrl` or `headers` keeps the built-in models. See [custom-provider.md](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/custom-provider.md).
+A config-form `models` list replaces the provider's models across chat, image, and classifier operations; image and classifier entries need an explicit `type` and implementations keyed by `api` through `images` and `classifiers`. Registering only `baseUrl` or `headers` keeps the built-in models. See [custom-provider.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/custom-provider.md).
 
 ```typescript
 // Full registration
