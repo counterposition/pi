@@ -201,7 +201,7 @@ has the details.
 
 ## Good to know
 
-- Needs Pi 1.0.0 or newer.
+- Needs Pi 1.0.2 or newer.
 - This is a guardrail, not a sandbox: it decides which prompts you see, not what
   an allowed command can do.
 - Jev reads the text of your messages, not images. An instruction that only
