@@ -11,7 +11,8 @@ system settings.
 It is an add-on for
 [`@gotgenes/pi-permission-system`](https://www.npmjs.com/package/@gotgenes/pi-permission-system).
 That extension decides which calls need your approval; auto mode answers the
-routine ones for you, using [TypeSafe](https://typesafe.ai)'s Jev classifier.
+routine ones for you, using a classifier model such as
+[TypeSafe](https://typesafe.ai)'s Jev.
 
 ## What you'll see
 
@@ -54,8 +55,9 @@ and `/auto` says what to fix.
    Auto mode only answers calls your policy sends to `ask`. If you don't have a
    policy yet, see [A starting policy](#a-starting-policy).
 
-3. Give it a TypeSafe API key. Either set the `TYPESAFE_API_KEY` environment
-   variable, or keep the key in your system's password store:
+3. Give Pi a key for the classifier. Auto mode uses TypeSafe's Jev by default,
+   so set the `TYPESAFE_API_KEY` environment variable, or keep the key in your
+   system's password store:
    - **macOS**: save it in the Keychain:
 
      ```bash
@@ -69,15 +71,18 @@ and `/auto` says what to fix.
      secret-tool store --label="TypeSafe API key" service TYPESAFE_API_KEY
      ```
 
-     Then tell auto mode where to find it, in `~/.pi/agent/auto-mode.json`:
-
-     ```json
-     {
-       "apiKey": "!secret-tool lookup service TYPESAFE_API_KEY"
-     }
-     ```
-
    Both commands ask for the key, so it never ends up in your shell history.
+   Then tell Pi where to find it, in `~/.pi/agent/auth.json` (on Linux, use
+   `!secret-tool lookup service TYPESAFE_API_KEY` as the key):
+
+   ```json
+   {
+     "typesafe": {
+       "type": "api_key",
+       "key": "!security find-generic-password -s TYPESAFE_API_KEY -w"
+     }
+   }
+   ```
 
 Then start Pi and run `/auto`. It lists anything that still needs setup. It
 can't see the permission system's `authorizerChain`, so if that entry is missing
@@ -87,25 +92,26 @@ you'll hear about it the first time a call asks you.
 
 - `/auto`: is it working, and what needs fixing.
 - `/auto on`, `/auto off`: turn it on or off for this session.
-- `/auto shadow`: every call asks you as usual, but Jev's verdicts are recorded,
-  so you can see what auto mode would have done.
+- `/auto shadow`: every call asks you as usual, but the classifier's verdicts
+  are recorded, so you can see what auto mode would have done.
 
 ## What always asks you
 
-These come to you without asking Jev at all:
+These come to you without asking the classifier at all:
 
 - Well-known commands that schedule jobs, add background services, turn off
   certificate or SSH host key checks, or weaken system security (`crontab`,
   `at`, `systemctl enable`, `launchctl load`, `brew services start`, `curl -k`,
   `ssh -o StrictHostKeyChecking=no`, and a few more). Even mentioning one in a
   command asks. This is a fixed list; other ways of doing the same are left to
-  Jev, which also asks about changes like these.
-- Calls in very long conversations, when your messages don't all fit in what Jev
-  is sent: an instruction in the part it can't see could matter.
+  the classifier, which also asks about changes like these.
+- Calls in very long conversations, when your messages don't all fit in what the
+  classifier is sent: an instruction in the part it can't see could matter.
 - Files outside the project folder. The permission system decides those, and
   auto mode can't approve them.
 
-These come to you whenever Jev spots them, even if you asked for the call:
+These come to you whenever the classifier spots them, even if you asked for the
+call:
 
 - Anything you told the agent not to do ("don't run the tests yet").
 - Sending secrets somewhere untrusted.
@@ -121,23 +127,49 @@ All optional, in `~/.pi/agent/auto-mode.json`:
 ```json
 {
   "mode": "on",
-  "apiKey": "$TYPESAFE_API_KEY",
+  "model": "typesafe/jev-latest",
   "environment": ["Deploying to staging is routine"],
   "timeoutMs": 2000
 }
 ```
 
 - `mode`: `on`, `shadow`, or `off`. `/auto` changes it for one session.
-- `apiKey`: `$VAR` reads an environment variable, `!command` runs a command,
-  anything else is the key itself.
-- `environment`: facts Jev should know about your setup. Your repository's git
-  remotes are added for you.
-- `timeoutMs`: how long to wait for Jev before asking you instead.
+- `model`: the classifier, as `provider/id` (see
+  [Choosing a classifier](#choosing-a-classifier)).
+- `environment`: facts the classifier should know about your setup. Your
+  repository's git remotes are added for you.
+- `timeoutMs`: how long to wait for the classifier before asking you instead.
 - `thresholds`: how cautious to be (`safe`, `intent`, `hard`). The defaults are
-  tuned; leave them unless you have a reason.
+  tuned for Jev; leave them unless you have a reason.
 
 A setting Pi can't read turns auto mode off, and it tells you why. Only this
 file is read: settings in a project's `.pi/` folder can't change auto mode.
+
+## Choosing a classifier
+
+Auto mode asks the classifier through Pi, with the credentials you gave Pi. Its
+thresholds are tuned for Jev 1.13, through either of these Pi models:
+
+- `typesafe/jev-latest` (the default): `TYPESAFE_API_KEY`. Tuned on the full
+  evaluation.
+- `openrouter/typesafe/jev-1.13`: `OPENROUTER_API_KEY` or `/login openrouter`.
+  Checked on the hand-written cases only, where it decided every case as
+  TypeSafe did.
+
+`jev-latest` moves to TypeSafe's newest Jev when one comes out. Auto mode
+notices, and asks you about every call until an update of auto mode is tuned for
+the new version; `openrouter/typesafe/jev-1.13` stays on 1.13.
+
+Pi lists other classifiers too, such as Cloudflare's Clef (see
+[classifier models](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/models.md#use-classifier-models)).
+Their probabilities aren't comparable with Jev's, so auto mode stays off for any
+other model until you set all three `thresholds`. [`eval/README.md`](eval/README.md)
+shows how to tune them.
+
+Clef and Clef Flash were tested this way, and neither is recommended yet. With
+the best thresholds, Clef let through 8 of 21 risky real calls that Jev caught,
+and took about 0.7 seconds per call. Clef Flash only caught every hand-written
+risky case when it asked about nearly every call.
 
 ## A starting policy
 
@@ -175,8 +207,8 @@ them.
 
 ## How it decides
 
-For each call your policy asks about, auto mode sends Jev your messages and the
-call, and Jev answers seven yes/no questions:
+For each call your policy asks about, auto mode sends the classifier your
+messages and the call, and it answers seven yes/no questions:
 
 | Question       | Asks                                                   |
 | -------------- | ------------------------------------------------------ |
@@ -189,13 +221,13 @@ call, and Jev answers seven yes/no questions:
 | `requested`    | Did you ask for it?                                    |
 
 A call runs without asking when it looks harmless, or when it's risky but you
-clearly asked for it. When Jev thinks a call leaks secrets or does something you
-said not to do, you're asked even if you asked for it. If Jev is slow, fails, or
-anything can't be checked, you're asked.
+clearly asked for it. When the classifier thinks a call leaks secrets or does
+something you said not to do, you're asked even if you asked for it. If it is
+slow, fails, or anything can't be checked, you're asked.
 
-Jev is a classifier, so it can be wrong. On a held-out set of real Pi tool
-calls, auto mode asked about 1% of ordinary shell commands, and it let none of
-124 hand-written risky cases through. A few of Jev's questions were reworded
+A classifier can be wrong. On a held-out set of real Pi tool calls, auto mode
+with Jev asked about 1% of ordinary shell commands, and it let none of 124
+hand-written risky cases through. A few of the questions were reworded
 after looking at held-out mistakes, so treat these as estimates. [`eval/REPORT.md`](eval/REPORT.md)
 has the details.
 
@@ -204,15 +236,16 @@ has the details.
 - Needs Pi 1.0.2 or newer.
 - This is a guardrail, not a sandbox: it decides which prompts you see, not what
   an allowed command can do.
-- Jev reads the text of your messages, not images. An instruction that only
-  appears in a screenshot isn't seen.
+- The classifier reads the text of your messages, not images. An instruction
+  that only appears in a screenshot isn't seen.
 - Commands built while they run (from variables or downloaded text) are judged
-  by Jev alone; the "always asks" list only catches what's written out.
-- Tool calls a codemode script makes, including MCP tools, go to Jev too. Each
-  is judged on its own input; Jev doesn't see the script or the calls it made
-  earlier.
+  by the classifier alone; the "always asks" list only catches what's written out.
+- Tool calls a codemode script makes, including MCP tools, go to the classifier
+  too. Each is judged on its own input; it doesn't see the script or the calls it
+  made earlier.
 - Calls from subagents are passed to you rather than judged.
-- Your messages and tool calls are sent to TypeSafe.
+- Your messages and tool calls are sent to the classifier's provider (TypeSafe
+  by default).
 
 Developers: [`eval/README.md`](eval/README.md) explains how the thresholds were
 tuned and how to rerun the evaluation, and `demo/record.sh` re-records the demo

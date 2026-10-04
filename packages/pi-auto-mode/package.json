@@ -1,7 +1,7 @@
 {
   "name": "@counterposition/pi-auto-mode",
   "version": "0.3.0",
-  "description": "Auto mode for Pi: TypeSafe's Jev decides which permission asks can run without a human",
+  "description": "Auto mode for Pi: a classifier model, such as TypeSafe's Jev, decides which permission asks can run without a human",
   "keywords": [
     "auto-mode",
     "permissions",

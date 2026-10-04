@@ -16,7 +16,7 @@ describe("README", () => {
   it("documents a config the loader accepts", () => {
     const config = blocks
       .map((b) => JSON.parse(b) as Record<string, unknown>)
-      .find((b) => "apiKey" in b);
+      .find((b) => "model" in b);
     expect(parseConfig(config, "README").errors).toEqual([]);
   });
 });

@@ -1,3 +1,4 @@
+import type { ModelRegistry } from "@earendil-works/pi-coding-agent";
 import type {
   AuthorizerLog,
   AuthorizerVerdict,
@@ -5,8 +6,9 @@ import type {
 } from "@gotgenes/pi-permission-system";
 
 import type { AutoModeConfig, Mode } from "./config.js";
-import { askJev, JevError } from "./jev.js";
-import { flagText, route } from "./route.js";
+import { askClassifier, ClassifierError } from "./classifier.js";
+import type { Classifier } from "./classifier.js";
+import { flagText, route, TUNED_REVISIONS } from "./route.js";
 import { neverAutoAllow } from "./never.js";
 import { isOversized, resolveAction, resolveState } from "./state.js";
 import type { BranchEntry, PreparedLookup, ToolDescription, Unresolved } from "./state.js";
@@ -14,7 +16,7 @@ import type { BranchEntry, PreparedLookup, ToolDescription, Unresolved } from ".
 export const LINK_NAME = "auto-mode";
 
 export interface LinkContext {
-  /** Read live: `/auto` can change it while a Jev request is in flight. */
+  /** Read live: `/auto` can change it while a classifier request is in flight. */
   mode(): Mode;
   /** False once the session this context was built for has been replaced. */
   isCurrent(): boolean;
@@ -35,17 +37,24 @@ export interface LinkContext {
    */
   prepared: PreparedLookup;
   tools(): readonly ToolDescription[];
-  apiKey(): Promise<string | undefined>;
+  /** Pi's model registry, which runs the request with the provider's credentials. */
+  models: ModelRegistry;
+  /**
+   * The configured classifier, or undefined while it is missing or has no credentials.
+   * `signal` bounds any credential check it makes.
+   */
+  classifier(signal: AbortSignal): Promise<Classifier | undefined>;
+  /** The agent run's abort signal, if it is running. */
+  signal(): AbortSignal | undefined;
   /** Shows a flagged call's hazard next to the approval dialog. */
   setStatus(label: string | undefined): void;
-  /** Told whether each Jev request worked, so setup problems (a rejected key) can surface. */
-  jevResult?(error: JevError | undefined): void;
-  fetch?: typeof fetch;
+  /** Told whether each classifier request worked, so a failing setup can surface. */
+  classifierResult?(error: ClassifierError | undefined): void;
 }
 
 type Why =
   | Unresolved
-  | "no_api_key"
+  | "no_classifier"
   | "oversized"
   | "incomplete"
   | "capped"
@@ -66,7 +75,7 @@ function capped(details: PromptPermissionDetails): boolean {
 }
 
 /**
- * The `auto-mode` chain link. Every path that is not a clean Jev verdict defers,
+ * The `auto-mode` chain link. Every path that is not a clean classifier verdict defers,
  * so the human (or, headless, the permission system's own denial) decides.
  */
 export async function authorize(
@@ -96,7 +105,7 @@ export async function authorize(
   try {
     if (ctx.mode() === "off") return DEFER;
     // The permission system never lets a link approve paths or outside-project access,
-    // so asking Jev there would only send it the call.
+    // so asking the classifier there would only send it the call.
     if (capped(details)) return defer("capped");
 
     const resolved = resolveState({
@@ -109,7 +118,7 @@ export async function authorize(
     });
     if (!resolved.ok) return defer(resolved.why);
     if (isOversized(resolved.state)) {
-      ctx.setStatus("asking you: too long for Jev to read");
+      ctx.setStatus("asking you: too long for the classifier to read");
       return defer("oversized");
     }
 
@@ -129,44 +138,48 @@ export async function authorize(
       };
     }
 
-    // Jev cannot rule out a limit the user set in text it never sees.
+    // The classifier cannot rule out a limit the user set in text it never sees.
     if (!resolved.intentTrusted) {
-      ctx.setStatus("asking you: too long for Jev to read");
+      ctx.setStatus("asking you: too long for the classifier to read");
       return defer("incomplete");
     }
     if (ctx.pendingInput()) return defer("pending");
 
-    const apiKey = await ctx.apiKey();
-    if (!apiKey) return defer("no_api_key");
+    // One deadline covers finding the classifier and asking it.
+    const deadline = AbortSignal.timeout(ctx.config.timeoutMs);
+    const run = ctx.signal();
+    const model = await ctx.classifier(run ? AbortSignal.any([run, deadline]) : deadline);
+    if (!model) return defer("no_classifier");
 
     let result;
     try {
-      result = await askJev({
-        apiKey,
-        model: ctx.config.model,
-        url: ctx.config.url,
+      result = await askClassifier({
+        models: ctx.models,
+        model,
         state: resolved.state,
-        timeoutMs: ctx.config.timeoutMs,
-        fetch: ctx.fetch,
+        deadline,
+        signal: run,
+        revision: TUNED_REVISIONS[ctx.config.model],
       });
     } catch (error: unknown) {
-      const err = error instanceof JevError ? error : new JevError("network", String(error));
-      ctx.jevResult?.(err);
-      ctx.setStatus("asking you: Jev didn't answer");
+      const err =
+        error instanceof ClassifierError ? error : new ClassifierError("failed", String(error));
+      ctx.classifierResult?.(err);
+      ctx.setStatus("asking you: the classifier didn't answer");
       return defer("error", { error: err.kind, status: err.status, message: err.message });
     }
-    ctx.jevResult?.(undefined);
+    ctx.classifierResult?.(undefined);
 
     const routed = route(result.answers, ctx.config.thresholds, ctx.hasUI);
     const trail = {
       probabilities: result.answers,
       latencyMs: result.latencyMs,
-      model: result.model,
+      model: ctx.config.model,
       intentTrusted: resolved.intentTrusted,
       ...(routed.kind === "allow" ? {} : { hazard: routed.flag.hazard }),
     };
 
-    // The call, or a call it runs under, may have ended while Jev was answering.
+    // The call, or a call it runs under, may have ended while the classifier was answering.
     const again = resolveAction(ctx.branch(), details, ctx.prepared);
     if (
       !ctx.isCurrent() ||

@@ -16,6 +16,9 @@ vi.mock("@gotgenes/pi-permission-system", async () => {
 });
 
 import { QUESTION_IDS } from "../src/questions.js";
+import { testModels } from "./fixtures/models.js";
+
+const models = await testModels();
 
 const { default: autoMode } = await import("../extensions/auto-mode.js");
 
@@ -49,6 +52,8 @@ function fakePi(sessionId = "s1") {
     cwd: "/repo",
     ui,
     hasPendingMessages: () => false,
+    modelRegistry: models,
+    signal: undefined,
     sessionManager: { getBranch: () => branch, getSessionId: () => session.id },
   };
   const fire = async (name: string, event: unknown = {}) => {
@@ -102,6 +107,7 @@ let agentDir: string;
 beforeEach(async () => {
   agentDir = await mkdtemp(join(tmpdir(), "auto-mode-ext-"));
   process.env.PI_CODING_AGENT_DIR = agentDir;
+  process.env.TYPESAFE_API_KEY = "test-key";
   services.byId.clear();
   services.importGate = undefined;
 });
@@ -109,11 +115,12 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.unstubAllGlobals();
   delete process.env.PI_CODING_AGENT_DIR;
+  delete process.env.TYPESAFE_API_KEY;
   await rm(agentDir, { recursive: true, force: true });
 });
 
-/** A registered link against a Jev that finds everything safe unless the command says FLAG. */
-async function linked(config = '{"apiKey": "test-key"}') {
+/** A registered link against a classifier that finds everything safe unless the command says FLAG. */
+async function linked(config = "{}") {
   await writeFile(join(agentDir, "auto-mode.json"), config);
   const fetch = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
     const flagged = String(init?.body).includes("FLAG");
@@ -277,7 +284,7 @@ describe("auto-mode extension", () => {
     });
 
     it("says nothing about load order while off", async () => {
-      const { pi, ask } = await linked('{"mode": "off", "apiKey": "test-key"}');
+      const { pi, ask } = await linked('{"mode": "off"}');
       const call = { id: "c1", command: "echo ok" };
       pi.message([call]);
       expect(await ask(call)).toEqual({ kind: "defer" });
@@ -385,7 +392,7 @@ describe("auto-mode extension", () => {
       expect(fetch).not.toHaveBeenCalled();
     });
 
-    it("defers when the parent ends while Jev is answering", async () => {
+    it("defers when the parent ends while the classifier is answering", async () => {
       const { pi, fetch, ask } = await linked();
       const answer = fetch.getMockImplementation()!;
       fetch.mockImplementationOnce(async (...args) => {
@@ -399,7 +406,7 @@ describe("auto-mode extension", () => {
       expect(fetch).toHaveBeenCalledTimes(1);
     });
 
-    it("defers when a new call with the same id replaces it while Jev is answering", async () => {
+    it("defers when a new call with the same id replaces it while the classifier is answering", async () => {
       const { pi, fetch, ask } = await linked();
       const answer = fetch.getMockImplementation()!;
       fetch.mockImplementationOnce(async (...args) => {
@@ -416,7 +423,7 @@ describe("auto-mode extension", () => {
       expect(fetch).toHaveBeenCalledTimes(1);
     });
 
-    it("defers when the session is replaced while Jev is answering", async () => {
+    it("defers when the session is replaced while the classifier is answering", async () => {
       const { pi, fetch, ask } = await linked();
       const call = child(1);
       // The same input object, so only the session check can tell the captures apart.
@@ -442,7 +449,7 @@ describe("auto-mode extension", () => {
     });
   });
 
-  it("says once when TypeSafe rejects the key, and recovers when it works again", async () => {
+  it("says once when the classifier fails, and recovers when it works again", async () => {
     const { pi, ask } = await linked();
     const ok = vi.mocked(fetch).getMockImplementation();
     vi.stubGlobal(
@@ -455,18 +462,20 @@ describe("auto-mode extension", () => {
       await pi.prepare(call);
       expect(await ask(call)).toEqual({ kind: "defer" });
     }
-    const warnings = pi.ui.notify.mock.calls.filter(([m]) => String(m).includes("rejected"));
+    const warnings = pi.ui.notify.mock.calls.filter(([m]) =>
+      String(m).includes("classifier failed"),
+    );
     expect(warnings).toHaveLength(1);
     expect(pi.ui.setStatus).toHaveBeenLastCalledWith(
       "auto-mode",
-      "auto: asking you: Jev didn't answer",
+      "auto: asking you: the classifier didn't answer",
     );
     pi.emit("permissions:decision", { result: "deny" });
     expect(pi.ui.setStatus).toHaveBeenLastCalledWith("auto-mode", "auto: needs setup (/auto)");
     await pi.command("status");
-    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).toContain("rejected the API key");
+    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).toContain("the classifier failed");
 
-    // Another kind of failure says nothing about the key.
+    // Another failure keeps the problem until a request works.
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("down", { status: 503 })),
@@ -487,7 +496,7 @@ describe("auto-mode extension", () => {
   });
 
   it("says when the permission system is missing, at the first tool call", async () => {
-    await writeFile(join(agentDir, "auto-mode.json"), '{"apiKey": "test-key"}');
+    await writeFile(join(agentDir, "auto-mode.json"), "{}");
     const pi = fakePi();
     await pi.fire("session_start");
     await pi.prepare({ id: "c1", command: "echo ok" });
@@ -499,30 +508,75 @@ describe("auto-mode extension", () => {
     expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).toContain("Needs setup");
   });
 
-  it("checks the key when turned on from an off config", async () => {
-    const { pi } = await linked('{"mode": "off", "apiKey": "$PI_AUTO_MODE_TEST_UNSET_KEY"}');
+  it("checks the classifier when turned on from an off config", async () => {
+    delete process.env.TYPESAFE_API_KEY;
+    const { pi } = await linked('{"mode": "off"}');
     await pi.command("on");
-    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).toContain("no TypeSafe API key");
+    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).toContain("no typesafe credentials");
   });
 
   it("notices a key added during the session", async () => {
-    const { pi } = await linked('{"apiKey": "$PI_AUTO_MODE_TEST_LATE_KEY"}');
+    delete process.env.TYPESAFE_API_KEY;
+    const { pi } = await linked();
     await pi.command("status");
-    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).toContain("no TypeSafe API key");
-    vi.stubEnv("PI_AUTO_MODE_TEST_LATE_KEY", "late-key");
+    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).toContain("no typesafe credentials");
+    process.env.TYPESAFE_API_KEY = "late-key";
     await pi.command("status");
-    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).not.toContain("no TypeSafe API key");
-    vi.unstubAllEnvs();
+    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).not.toContain("no typesafe credentials");
   });
 
-  it("reports a missing key in /auto before any ask", async () => {
-    const { pi } = await linked('{"apiKey": "$PI_AUTO_MODE_TEST_UNSET_KEY"}');
+  it("reports a model Pi does not have in /auto before any ask", async () => {
+    const { pi } = await linked(
+      '{"model": "typesafe/jev-0.1", "thresholds": {"safe": 0.3, "intent": 0.5, "hard": 0.5}}',
+    );
     await pi.command("status");
-    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).toContain("no TypeSafe API key");
+    expect(String(pi.ui.notify.mock.calls.at(-1)?.[0])).toContain(
+      "Pi has no classifier model 'typesafe/jev-0.1'",
+    );
   });
 
-  it("says once, with the fix, when it has no API key", async () => {
-    const { pi, fetch, ask } = await linked('{"apiKey": "$PI_AUTO_MODE_TEST_UNSET_KEY"}');
+  it("ignores a credential check that finishes after its session was replaced", async () => {
+    const check = models.getAvailableOfType.bind(models);
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const spy = vi
+      .spyOn(models, "getAvailableOfType")
+      .mockImplementationOnce(async (type, provider, options) => {
+        await held;
+        return check(type, provider, options);
+      });
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const svc = service();
+    services.byId.set("s1", svc);
+    const pi = fakePi();
+    await writeFile(join(agentDir, "auto-mode.json"), "{}");
+    await pi.fire("session_start");
+    // The next session uses a model Pi has no credentials for.
+    await writeFile(join(agentDir, "auto-mode.json"), '{"model": "openrouter/typesafe/jev-1.13"}');
+    await pi.fire("session_shutdown");
+    await pi.fire("session_start");
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    pi.emit("permissions:ready", { sessionId: "s1" });
+    await vi.waitFor(() => expect(svc.registerAuthorizer).toHaveBeenCalled());
+    const authorize = svc.registerAuthorizer.mock.calls[0]?.[1] as (
+      ...args: unknown[]
+    ) => Promise<unknown>;
+    const call = { id: "late", command: "echo ok" };
+    pi.message([call]);
+    await pi.prepare(call);
+    const details = { requestId: "r-late", surface: "bash", toolCallId: "late", toolName: "bash" };
+    expect(await authorize(details, {}, { review: vi.fn(), debug: vi.fn() })).toEqual({
+      kind: "defer",
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("says once, with the fix, when the provider has no credentials", async () => {
+    delete process.env.TYPESAFE_API_KEY;
+    const { pi, fetch, ask } = await linked();
     for (const id of ["k1", "k2"]) {
       const call = { id, command: "echo ok" };
       pi.message([call]);

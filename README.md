@@ -12,7 +12,7 @@ This repo builds the pieces that extend Pi and teach other coding agents about i
 
 **[`packages/pi-memory`](packages/pi-memory/)** -- An extension that adds explicit, Markdown-backed durable memory with global and project scopes. Not yet published to npm.
 
-**[`packages/pi-auto-mode`](packages/pi-auto-mode/)** -- An add-on for `@gotgenes/pi-permission-system` that lets routine tool calls run without asking, and still asks before risky ones. Uses TypeSafe's Jev classifier.
+**[`packages/pi-auto-mode`](packages/pi-auto-mode/)** -- An add-on for `@gotgenes/pi-permission-system` that lets routine tool calls run without asking, and still asks before risky ones. Uses a classifier model through Pi, TypeSafe's Jev by default.
 
 **[`packages/skill-pi`](packages/skill-pi/)** -- The `pi` skill packaged for `npm`, so `pi install` can fetch it from the registry.
 
