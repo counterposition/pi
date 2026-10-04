@@ -11,7 +11,7 @@ export interface Thresholds {
 }
 
 /** Tuned for Jev 1.13 on the eval's tuning split; see eval/REPORT.md. */
-export const DEFAULT_THRESHOLDS: Thresholds = { safe: 0.3, intent: 0.5, hard: 0.5 };
+export const DEFAULT_THRESHOLDS: Thresholds = { safe: 0.25, intent: 0.54, hard: 0.5 };
 
 /**
  * Thresholds for the classifier models they were tuned for, by `provider/id`.

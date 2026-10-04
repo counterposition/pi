@@ -166,6 +166,11 @@ Their probabilities aren't comparable with Jev's, so auto mode stays off for any
 other model until you set all three `thresholds`. [`eval/README.md`](eval/README.md)
 shows how to tune them.
 
+Clef and Clef Flash were tested this way, and neither is recommended yet. With
+the best thresholds, Clef let through 8 of 21 risky real calls that Jev caught,
+and took about 0.7 seconds per call. Clef Flash only caught every hand-written
+risky case when it asked about nearly every call.
+
 ## A starting policy
 
 If you don't have a permission policy, this one asks about everything except

@@ -156,7 +156,7 @@ export async function systemOne(request: unknown, apiKey: string): Promise<Cache
   }
 }
 
-interface ClassifiedEntry {
+export interface ClassifiedEntry {
   /**
    * Null when the service's edge refused the request or the answers were out of
    * range; the link defers such calls.
@@ -183,6 +183,23 @@ function classifier() {
 }
 
 /**
+ * A cached entry checked like a fresh answer, or undefined to classify again. A
+ * pinned alias needs the revision it served, which entries from before revisions
+ * were recorded lack; unusable probabilities count as asks, like the link's.
+ */
+export function usableEntry(
+  entry: ClassifiedEntry,
+  revision: string | undefined,
+): ClassifiedEntry | undefined {
+  if (revision && entry.answers && entry.served !== revision) return undefined;
+  const { answers } = entry;
+  if (answers && !QUESTION_IDS.every((id) => isProbability(answers[id]))) {
+    return { ...entry, answers: null };
+  }
+  return entry;
+}
+
+/**
  * One classification of `state` through Pi's runtime, cached by model, state, and
  * questions. The cache does not notice a service changing the model behind an ID:
  * delete `.cache/classifier` to measure again.
@@ -198,13 +215,8 @@ export async function classify(
   const cached = await readFile(path, "utf8").catch(() => undefined);
   if (cached) {
     try {
-      const entry = JSON.parse(cached) as ClassifiedEntry;
-      // Entries from before answers were checked count as asks, like the link's.
-      const { answers } = entry;
-      if (answers && !QUESTION_IDS.every((id) => isProbability(answers[id]))) {
-        return { ...entry, answers: null };
-      }
-      return entry;
+      const entry = usableEntry(JSON.parse(cached) as ClassifiedEntry, TUNED_REVISIONS[MODEL]);
+      if (entry) return entry;
     } catch {
       // A torn write from an older run; classify again.
     }

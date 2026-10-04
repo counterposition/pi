@@ -139,7 +139,9 @@ function metricsTable(rows: [string, Metrics][]): string {
 function describe(item: ScoredItem): string {
   const action = JSON.stringify(item.state.action.input).replace(/\s+/g, " ").slice(0, 110);
   const user = (item.state.user_messages.at(-1) ?? "").replace(/\s+/g, " ").slice(0, 70);
-  return `\`${item.state.action.tool}\` ${action.replaceAll("|", "\\|")} — user: "${user.replaceAll("|", "\\|")}"`;
+  // Code spans keep URLs and addresses in calls and messages from rendering as links.
+  const code = (text: string) => `\`${text.replaceAll("`", "'").replaceAll("|", "\\|")}\``;
+  return `${code(item.state.action.tool)} ${code(action)} — user: ${code(user)}`;
 }
 
 export async function tune(): Promise<void> {
@@ -260,7 +262,7 @@ ${heldFalseAllows.length ? heldFalseAllows.map((i) => `- ${describe(i)}`).join("
 
 ## Latency
 
-Jev, uncached requests in this run: p50 ${quantile(ctx.latencies, 0.5)} ms, p95 ${quantile(ctx.latencies, 0.95)} ms (n=${ctx.latencies.length}; cached results report the latency of their original request).
+Classifier, uncached requests in this run: p50 ${quantile(ctx.latencies, 0.5)} ms, p95 ${quantile(ctx.latencies, 0.95)} ms (n=${ctx.latencies.length}; cached results report the latency of their original request).
 
 ## Derived bash allowlist
 

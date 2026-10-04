@@ -4,6 +4,7 @@ import { baselineVerdict } from "../eval/baseline.js";
 import { parseLabels } from "../eval/label.js";
 import type { Label } from "../eval/label.js";
 import { decide, measure, truthOf } from "../eval/metrics.js";
+import { usableEntry } from "../eval/score.js";
 import type { ScoredItem } from "../eval/score.js";
 import { QUESTION_IDS } from "../src/questions.js";
 import type { Answers } from "../src/questions.js";
@@ -119,5 +120,24 @@ describe("baselineVerdict", () => {
     expect(baselineVerdict(body("none", 0.3, 0.9, 0))).toBe("ask");
     expect(baselineVerdict(body("none", 0.9, 0.3, 0))).toBe("ask");
     expect(baselineVerdict(body("none", 0.9, 0.9, 2.5))).toBe("ask");
+  });
+});
+
+describe("usableEntry", () => {
+  const answers = Object.fromEntries(QUESTION_IDS.map((id) => [id, 0.1])) as Answers;
+
+  it("reclassifies a pinned alias's entry without the pinned revision", () => {
+    expect(usableEntry({ answers, latencyMs: 1 }, "jev-1.13.0")).toBeUndefined();
+    expect(
+      usableEntry({ answers, latencyMs: 1, served: "jev-1.14.0" }, "jev-1.13.0"),
+    ).toBeUndefined();
+    const pinned = { answers, latencyMs: 1, served: "jev-1.13.0" };
+    expect(usableEntry(pinned, "jev-1.13.0")).toEqual(pinned);
+    expect(usableEntry({ answers, latencyMs: 1 }, undefined)).toEqual({ answers, latencyMs: 1 });
+  });
+
+  it("counts out-of-range cached answers as asks", () => {
+    const entry = { answers: { ...answers, external: -0.1 }, latencyMs: 1 };
+    expect(usableEntry(entry, undefined)?.answers).toBeNull();
   });
 });

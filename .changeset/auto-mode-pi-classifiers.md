@@ -17,6 +17,6 @@ Breaking: `apiKey` and `url` are gone from `auto-mode.json`, and a config that
 still sets them turns auto mode off with a message. Give Pi the key instead:
 `TYPESAFE_API_KEY`, or a `typesafe` entry in `~/.pi/agent/auth.json` (which can
 read the macOS Keychain with `!security find-generic-password -s
-TYPESAFE_API_KEY -w`). The `intent` threshold is now 0.5, re-tuned through Pi.
+TYPESAFE_API_KEY -w`). The thresholds were re-tuned through Pi: `safe` 0.25, `intent` 0.54, `hard` 0.5.
 Classifier failures other than timeouts are reported once and shown in `/auto`
 until a request works again.
