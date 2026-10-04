@@ -4,7 +4,7 @@ Pi supports subscription-based providers via OAuth, API-key providers via env va
 
 ## Subscription Providers
 
-Use `/login` in interactive mode, then select a provider. The `/login` selector is fuzzy-searchable and shows where each entry's auth comes from (`--api-key`, env var, custom provider) without leaking the secret.
+Use `/login` in interactive mode, then select a provider. On OAuth sign-in screens (`/login`, `/mcp`, `/mcp login`), `app.message.copy` (default `ctrl+x`, Pi 1.0.1) copies the sign-in URL when the browser cannot open or the wrapped link cannot be selected. The `/login` selector is fuzzy-searchable and shows where each entry's auth comes from (`--api-key`, env var, custom provider) without leaking the secret.
 
 - Anthropic Claude Pro / Max — third-party usage draws from extra usage and is billed per token (suppress the warning via `warnings.anthropicExtraUsage`). Since Pi 1.0.0 `/login anthropic` offers browser login (default) or **copy code** login, which shows the authorization code on Anthropic's page for pasting into Pi when the browser runs on another machine
 - OpenAI with a ChatGPT subscription (Pi 0.99.0) — `/login openai` offers **Sign in with ChatGPT**, an OAuth login that uses the subscription with the OpenAI API on the regular `openai` provider. Pi stores a stable `deviceId` for it in global settings. Subscription usage-limit errors are not retried
@@ -59,6 +59,8 @@ Since Pi 0.80.8, built-in catalogs are complemented by dynamic ones: `/model` re
 | Xiaomi MiMo Token Plan (CN/AMS/SGP) | `XIAOMI_TOKEN_PLAN_{CN,AMS,SGP}_API_KEY` | `xiaomi-token-plan-{cn,ams,sgp}` |
 
 With no Anthropic key or token set, Pi 0.99.2+ uses Anthropic workload identity federation when `ANTHROPIC_FEDERATION_RULE_ID`, `ANTHROPIC_ORGANIZATION_ID`, and `ANTHROPIC_IDENTITY_TOKEN_FILE` are set (plus optional `ANTHROPIC_SERVICE_ACCOUNT_ID` and `ANTHROPIC_WORKSPACE_ID`). The Anthropic SDK exchanges and refreshes the token, re-reading the identity token file, so keep that file fresh for long sessions.
+
+Model IDs that changed in Pi 1.0.1, for explicit `--model`, `enabledModels`, and `modelOverrides` entries: Cloudflare AI Gateway Claude models use dashed IDs (`claude-opus-5-5`, not `claude-opus-5.5`); Together's DeepSeek V4 Pro is `deepseek-ai/DeepSeek-V4-Pro-0813`; NVIDIA's default is `nvidia/nemotron-3-ultra-550b-a55b`, since NVIDIA no longer serves `nvidia/nemotron-3-super-120b-a12b`.
 
 ## Auth File
 
@@ -201,10 +203,10 @@ Common `api` values:
 
 ### Model & Compatibility Knobs
 
-- `samplingParams` (Pi 0.84.0) is a free-form object merged verbatim into every request body after pi's own fields (its keys win) — for OpenAI-compatible APIs only (`openai-completions`, `openai-responses`, `azure-openai-responses`). Use it for server-specific knobs like llama.cpp `min_p` or vLLM `top_k`; in `modelOverrides` it merges per key. `samplingParamsByThinkingLevel` (Pi 1.0.2) overrides it per Pi thinking level (`off` … `max`, not `thinkingLevelMap` values): Pi clamps the level, then merges model `samplingParams`, the level's entry, and request-level `samplingParams`, later keys winning.
+- `samplingParams` (Pi 0.84.0) is a free-form object merged verbatim into every request body after pi's own fields (its keys win) — for OpenAI-compatible APIs only (`openai-completions`, `openai-responses`, `azure-openai-responses`). Use it for server-specific knobs like llama.cpp `min_p` or vLLM `top_k`; in `modelOverrides` it merges per key. `samplingParamsByThinkingLevel` (Pi 1.0.2) overrides it per Pi thinking level (`off` … `max`, not `thinkingLevelMap` values): Pi clamps the level, then merges model `samplingParams`, the level's entry, and request-level `samplingParams`, later keys winning. Missing levels inherit the model defaults, and `modelOverrides` merges each level's entry per key with the base model.
 - `thinkingLevelMap` (Pi 0.72) replaces `compat.reasoningEffortMap`. Map pi levels (`off`/`minimal`/`low`/`medium`/`high`/`xhigh`/`max`) to provider values; use `null` to hide a level. Maps may contain holes (Pi 0.80.6) — e.g. expose `high` and `max` without `xhigh`. When a key is omitted, standard levels through `high` use the provider default mapping, but the extended `xhigh`/`max` levels are unsupported.
 - `cost` supports request-wide input pricing tiers (Pi 0.80.6): a `tiers` array where each tier supplies a complete alternate rate set and applies to the whole request when total input usage (`input + cacheRead + cacheWrite`) exceeds `inputTokensAbove`; the highest matching threshold wins. Also usable in `modelOverrides` and extension-registered providers.
-- `modelOverrides` applies to built-in and (since Pi 0.80.4) extension-registered provider models; per-model fields: `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost` (partial), `contextWindow`, `maxTokens`, `samplingParams`, `headers`, `compat`, `inputLimits`, `promptCache`.
+- `modelOverrides` applies to built-in and (since Pi 0.80.4) extension-registered provider models; per-model fields: `name`, `reasoning`, `thinkingLevelMap`, `input`, `cost` (partial), `contextWindow`, `maxTokens`, `samplingParams`, `samplingParamsByThinkingLevel` (Pi 1.0.2), `headers`, `compat`, `inputLimits`, `promptCache`.
 - `inputLimits.images.resize` (Pi 0.87.0) sets per-model cache-safe image encoding — `maxWidth`, `maxHeight`, `maxBytes` (base64 payload), `jpegQuality`; defaults 2000×2000, 4.5 MiB, quality 80 — applied once to attachments, `read` images, and tool-result images (switching models does not re-encode history).
 - `promptCache: { short?, long? }` (Pi 0.86.0) declares best-effort cache lifetimes in seconds per retention tier; models without a lifetime for the active tier are not eligible for cache warming (see `cacheWarming` in `references/settings.md`).
 - `compat.allowedFallbackModels` (Pi 0.86.0) overrides or disables Anthropic server-side fallback models; `compat.supportsMidConvoEffort` (Pi 0.84.4) marks custom Anthropic Messages models that accept per-turn effort changes.

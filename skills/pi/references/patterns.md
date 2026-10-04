@@ -252,7 +252,7 @@ Pi's TUI library (`@earendil-works/pi-tui`) provides:
 - `Container` — Vertical grouping
 - `Spacer` — Vertical space
 - `Markdown` — Rendered markdown
-- `Image` — Terminal image display
+- `Image` — Terminal image display. Kitty-protocol terminals need PNG; since Pi 1.0.1 standalone pi-tui apps call `setImageTranscoder((base64Data, mimeType) => png | null)` to convert JPEG/GIF/WebP, and `Image` shows its text fallback without one or when conversion fails. Pi's interactive host registers a transcoder itself.
 - `SelectList` — Interactive selection list
 - `BorderedLoader` — Async spinner with cancel
 

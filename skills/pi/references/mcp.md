@@ -55,19 +55,19 @@ pi mcp logout sentry
 
 `pi mcp add` also takes `--oauth-client-id`, `--oauth-client-secret`, `--oauth-callback-port`, and `--oauth-client-name`. It does not connect; verify with `pi mcp list`. A running session picks up added or changed servers after `/reload` or a new session.
 
-In a session, `/mcp` opens the server manager (state, tools, errors, sign in/out, reconnect, exposure, enable/disable). Changes are written back to the `mcp.json` that defines the server. Outside the TUI, `/mcp` prints status and `/mcp login|logout|reconnect <server>` run directly.
+In a session, `/mcp` opens the server manager (state, tools, errors, sign in/out, reconnect, exposure, enable/disable). Changes are written back to the `mcp.json` that defines the server, or to the project override once one exists for a user-level server. Outside the TUI, `/mcp` prints status and `/mcp login|logout|reconnect <server>` run directly.
 
 Pi connects every enabled server in the background when a session starts (Pi 0.99.2). The first prompt waits up to 10 seconds only for servers with `direct` tools. Other servers are waited for when needed: a codemode script waits for the servers it names (`mcp__<server>`), and `searchTools()`, `ALL_TOOLS`, `tool_search`, and the resource tools wait for all of them. Server log notifications go to `~/.pi/agent/mcp.log`.
 
 ### Authentication
 
 - OAuth is used only for HTTP servers whose config has no `Authorization` header. Tokens live in `~/.pi/agent/mcp-auth.json`, stored per server name and URL (Pi 1.0.0), so two names for the same URL sign in with different accounts.
-- `oauth: { clientId?, clientSecret?, callbackPort?, callbackUrl?, scope?, clientName?, authServerMetadataUrl? }`:
+- `oauth: { clientId?, clientSecret?, callbackPort?, callbackUrl?, scope?, clientName?, clientRegistration?, authServerMetadataUrl? }`:
   - `clientId`/`clientSecret` set a pre-registered client for servers without dynamic client registration.
   - `callbackPort` alone gives `http://127.0.0.1:<port>/callback`; a `callbackUrl` (HTTP on a loopback host) without a port gets `callbackPort` or a free one.
   - `scope`: space-separated scopes to request when the server does not advertise the ones it needs.
   - `clientName` (Pi 0.99.2): the name sent at client registration (default `pi`), for servers that only accept known clients, e.g. `"Claude Code"`. Sign out first to register again under a new name.
-  - `clientRegistration: "cimd"` (Pi 1.0.1): identify as Pi's Client ID Metadata Document (`https://pi.dev/oauth/client.json`) instead of registering, for authorization servers that allow clients by document URL. The server must advertise CIMD and public-client support, or sign-in fails.
+  - `clientRegistration: "cimd"` (Pi 1.0.1): identify as Pi's Client ID Metadata Document instead of registering, for authorization servers that allow clients by document URL. The client ID is `https://pi.dev/oauth/client.json` with redirect `http://127.0.0.1:<port>/callback`; when the authorization server does not send `iss` in authorization responses (RFC 9207), Pi uses a per-server document and path instead: `https://pi.dev/oauth/<id>/client.json` with `/callback/<id>`. The server must advertise CIMD and public-client support, or sign-in fails. `cimd` cannot be combined with `clientId` or `clientName`, and a `callbackUrl` must use `localhost` or `127.0.0.1` with the path `/callback`.
   - `authServerMetadataUrl` (Pi 1.0.0): the authorization server metadata document to use instead of discovery, for servers that advertise a wrong authorization server or none. Trusted as configured; HTTPS except on loopback.
 - Pi rejects an authorization response whose `iss` names another authorization server (RFC 9207), and step-up sign-in after `insufficient_scope` keeps the scopes already granted (Pi 1.0.0).
 - `"auth": { "provider": "<provider>" }` (Pi 0.99.2) sends a `/login` provider's current token as the bearer token instead of MCP OAuth, read on every request. Allowed only in the global `mcp.json` and from extensions, and HTTPS except on loopback. After a Radius sign-in, `/login` offers to add the Radius MCP server this way.
@@ -135,4 +135,4 @@ pi.unregisterMcpServer("jira");
 
 SDK sessions do not load built-in extensions. Add `createMcpExtension()`, plus `createCodemodeExtension()` for `codemode` servers and `createToolSearchExtension()` for `deferred` servers, then call `session.bindExtensions()` so `session_start` connects the servers. See `references/sdk.md`.
 
-The standalone client is published as `@earendil-works/pi-mcp` (stdio and streamable HTTP transports, OAuth, an in-memory testing transport). It has no Pi session dependency. Breaking in 1.0.1: `OAuthClientProvider.clientMetadataUrl` became `clientMetadataDocument(metadata)`, which returns the document URL and redirect URI per authorization server, or `undefined` to register dynamically.
+The standalone client is published as `@earendil-works/pi-mcp` (stdio and streamable HTTP transports, OAuth, an in-memory testing transport). It has no Pi session dependency. Breaking in 1.0.1: `OAuthClientProvider.clientMetadataUrl` became `clientMetadataDocument(metadata)`, which returns `{ url, redirectUrl }` for an authorization server (its metadata may be `undefined`), or `undefined` to register dynamically. It is called whenever no client information is stored, also when the server does not advertise CIMD support, so check support yourself; the document is no longer stored as client information. `McpOAuthProviderOptions.clientMetadataDocument`, `OAuthCallbackServerOptions.extraPaths`, and a `path` argument to `OAuthCallbackServer.waitForCallback()` (which rejects responses on other paths) support per-server redirect paths.
