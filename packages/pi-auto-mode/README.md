@@ -160,7 +160,7 @@ thresholds are tuned for Jev 1.13, through either of these Pi models:
 notices, and asks you about every call until an update of auto mode is tuned for
 the new version; `openrouter/typesafe/jev-1.13` stays on 1.13.
 
-Pi lists other classifiers too, such as Cloudflare's Clef (Pi 1.0.1 or newer; see
+Pi lists other classifiers too, such as Cloudflare's Clef (see
 [classifier models](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/models.md#use-classifier-models)).
 Their probabilities aren't comparable with Jev's, so auto mode stays off for any
 other model until you set all three `thresholds`. [`eval/README.md`](eval/README.md)
