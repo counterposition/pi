@@ -1,6 +1,6 @@
 # MCP Servers
 
-Pi connects to MCP servers through a built-in extension. There is no package to install. Checked against Pi v1.0.2: [mcp.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/mcp.md), [cli.md#mcp-commands](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/cli.md#mcp-commands), [extensions.md#mcp-servers](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/extensions.md#mcp-servers).
+Pi connects to MCP servers through a built-in extension. There is no package to install. Checked against Pi v1.2.0: [mcp.md](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/mcp.md), [cli.md#mcp-commands](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/cli.md#mcp-commands), [extensions.md#mcp-servers](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/extensions.md#mcp-servers).
 
 ## Configure
 
@@ -53,7 +53,7 @@ pi mcp remove docs     # keeps stored OAuth credentials
 pi mcp logout sentry
 ```
 
-`pi mcp add` also takes `--oauth-client-id`, `--oauth-client-secret`, `--oauth-callback-port`, and `--oauth-client-name`. It does not connect; verify with `pi mcp list`. A running session picks up added or changed servers after `/reload` or a new session.
+`pi mcp add` also takes `--oauth-client-id`, `--oauth-client-secret`, `--oauth-callback-port`, and `--oauth-client-name`. `add` does not connect; verify with `pi mcp list`. `pi mcp login --timeout <seconds>` (default 300) limits the whole sign-in since Pi 1.1.0, not only the wait for the browser. A running session picks up added or changed servers after `/reload` or a new session.
 
 In a session, `/mcp` opens the server manager (state, tools, errors, sign in/out, reconnect, exposure, enable/disable). Changes are written back to the `mcp.json` that defines the server, or to the project override once one exists for a user-level server. Outside the TUI, `/mcp` prints status and `/mcp login|logout|reconnect <server>` run directly.
 
@@ -104,8 +104,8 @@ Undeclared tools (`codemode`, `deferred`) are reachable through either tool: cod
 ## Results
 
 - Text results over 20KB reach the model with the middle cut out; the full text goes to a temp file named in the result.
-- Codemode scripts receive the whole `CallToolResult` (`content`, `structuredContent`, `isError`). A result with `isError` resolves in scripts and is reported to the model as an error for direct calls. `image(result.content[0])` forwards an image block. Server instructions are not part of any tool description; scripts read them with `describeNamespace("mcp__<server>")`.
-- Servers with resources add `list_mcp_resources`, `list_mcp_resource_templates`, and `read_mcp_resource` (marked read-only).
+- Codemode scripts receive the whole `CallToolResult` (`content`, `structuredContent`, `isError`). Since Pi 1.2.0 `structuredContent` may be any JSON value, not only an object. A result with `isError` resolves in scripts and is reported to the model as an error for direct calls. `image(result.content[0])` forwards an image block. Server instructions are not part of any tool description; scripts read them with `describeNamespace("mcp__<server>")`.
+- Servers with resources add `list_mcp_resources`, `list_mcp_resource_templates`, and `read_mcp_resource` (marked read-only). Since Pi 1.2.0 `pi mcp list --json` reports `resources: true` instead of resource counts.
 - Tool calls are never retried (the server may have run them); resource reads retry once on 408/429/5xx.
 
 ## Permissions
@@ -129,6 +129,7 @@ pi.unregisterMcpServer("jira");
 
 - `"extensions": ["-builtin:mcp"]` in settings, or `pi config` → Built-in, disables the built-in support. `pi mcp` shell commands still work.
 - `--no-extensions` disables built-ins too; `pi -ne -e builtin:mcp` keeps only MCP.
+- `--no-mcp` (Pi 1.0.4) disables built-in MCP for one run; `--exclude-tools 'mcp__*'` removes only its tools.
 - An extension that registers the `/mcp` command (for example `pi-mcp-adapter`) replaces the built-in support: `mcp.json` is then not read in sessions.
 
 ## SDK

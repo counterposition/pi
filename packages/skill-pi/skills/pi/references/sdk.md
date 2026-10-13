@@ -38,7 +38,7 @@ try {
 }
 ```
 
-Run with `npx tsx my-script.ts` (or Node's built-in type stripping). `prompt()` resolves when the run finishes, including automatic retries. `session.dispose()` aborts active work, invalidates extension contexts, and removes listeners. Checked against Pi v1.0.2: [sdk.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/sdk.md), [SDK examples](https://github.com/earendil-works/pi/tree/v1.0.2/packages/coding-agent/examples/sdk).
+Run with `npx tsx my-script.ts` (or Node's built-in type stripping). `prompt()` resolves when the run finishes, including automatic retries. `session.dispose()` aborts active work, invalidates extension contexts, and removes listeners. Checked against Pi v1.2.0: [sdk.md](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/sdk.md), [SDK examples](https://github.com/earendil-works/pi/tree/v1.2.0/packages/coding-agent/examples/sdk).
 
 **Breaking (Pi 0.80.8):** `ModelRuntime` replaced the old `AuthStorage`/`ModelRegistry` pair as the SDK model/auth facade. `CreateAgentSessionOptions.authStorage` and `modelRegistry` are gone — pass the async `modelRuntime` instead. `AuthStorage` is no longer exported; use `ModelRuntime` (or a custom pi-ai `CredentialStore`), or `readStoredCredential()` for one-off reads of `auth.json`. `ModelRegistry` still exists only as the synchronous extension-facing compatibility facade, and its `refresh()` is now `Promise<void>`.
 
@@ -96,7 +96,7 @@ Notes:
 
 ## Built-in Extensions: Codemode, Tool Search, MCP
 
-The CLI loads `codemode`, `tool_search`, MCP, and llama.cpp as built-in extensions. SDK sessions load none of them. Opt in through the resource loader (Pi 0.99.0, [example](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/examples/sdk/14-codemode-mcp.ts)):
+The CLI loads `codemode`, `tool_search`, MCP, and llama.cpp as built-in extensions. SDK sessions load none of them. Opt in through the resource loader (Pi 0.99.0, [example](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/examples/sdk/14-codemode-mcp.ts)):
 
 ```typescript
 import {
@@ -139,7 +139,7 @@ try {
 }
 ```
 
-- `codemode` and `tool_search` are registered inactive. Enable them with `defaultTools` (`+name` keeps the other defaults), or let MCP activate them for servers that need them. Passing `tools: [...]` instead restricts the session to the named tools, which hides MCP tools.
+- `codemode` and `tool_search` are registered inactive. Enable them with `defaultTools` (`+name` keeps the other defaults), or let MCP activate them for servers that need them. Passing `tools: [...]` instead restricts the session to the named tools; since Pi 1.0.4 MCP tools stay unless an entry starts with `mcp__`, so `tools: ["read", "codemode"]` keeps them callable from scripts.
 - Extension `session_start` handlers run only when the host calls `session.bindExtensions()`. Without it, MCP servers never connect.
 - Inline extensions can be named `{ name, factory, replaceable?: true, builtin?: true }`. `replaceable` drops the extension when another one registers the same tool, command, or flag name. `builtin` supplies the code for `builtin:<name>`: it loads by default, is listed in `pi config`, is disabled by `-builtin:<name>` or `noExtensions`, and loads after project trust (so it cannot handle `project_trust`).
 
@@ -317,16 +317,12 @@ session.subscribe((event) => {
 
 **Streaming deltas (Pi 0.84.x, JSON/RPC wire only):** `message_update` records are delta-only — the cumulative `message` field and `assistantMessageEvent.partial` were removed to keep stream size linear. A top-level `usage` carries latest cumulative provider usage; assemble partial text from `contentIndex` + `delta` between `message_start` and `message_end`, which remains authoritative. In-process SDK subscribers still receive full events.
 
-## Remote Sessions (experimental)
-
-Pi 0.84.0 added transport-neutral remote-session client APIs: `@earendil-works/pi-client` (`PiClient`) with a CBOR protocol over Unix sockets, `@earendil-works/pi-protocol` for the wire contract, and `@earendil-works/pi-coding-agent/client` exporting a `RemoteSession` controller with transcript reducers. Sessions list durable `SessionMetadata`; runtime phase/model/lock state lives on acquired `SessionSnapshot` values. Expect these APIs to evolve while experimental.
-
 ## RPC Mode
 
-`pi --mode rpc` speaks newline-delimited JSON over stdio ([rpc.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/rpc.md), [rpc-commands.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/rpc-commands.md)). Additions since Pi 0.79:
+`pi --mode rpc` speaks newline-delimited JSON over stdio ([rpc.md](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/rpc.md), [rpc-commands.md](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/rpc-commands.md)). Additions since Pi 0.79:
 
 - Input dispositions (Pi 0.99.0): a successful `prompt` response carries `data.disposition` — `"started"` (a run started), `"queued"` (queued during a run), or `"handled"` (an extension command or input handler consumed it). `steer` and `follow_up` responses carry `"queued"` or `"handled"`. On `"handled"` no run started for that input: do not wait for `agent_settled`. Otherwise keep consuming events and wait for `agent_settled`, not `agent_end`. Failures after acceptance arrive as events, never as a second response. `RpcClient.prompt(message, images?, streamingBehavior?)`, `steer()`, and `followUp()` return the disposition.
-- `agent_settled` event (Pi 0.80.4) fires when a run is fully settled — no automatic retry, compaction retry, or queued continuation remains; `agent_end` now carries `willRetry`. `set_thinking_level` accepts `"max"` where the model supports it.
+- `agent_settled` event (Pi 0.80.4) fires when a run is fully settled — no automatic retry, compaction retry, or queued continuation remains; `agent_end` now carries `willRetry`. Since Pi 1.1.0 `agent_settled` carries `aborted`, and `tool_execution_end` carries `durationMs`. `set_thinking_level` accepts `"max"` where the model supports it.
 - `clear_queue` (Pi 0.84.4) returns and removes queued steering and follow-up messages; direct RPC `steer`/`follow_up` commands pass through extension `input` handlers since Pi 0.86.0.
 - `get_entries` / `get_tree` (Pi 0.80.3) read session entries and tree snapshots over RPC; `get_available_thinking_levels` (Pi 0.81.0) lists the current model's supported thinking levels.
 - Direct RPC `bash` commands stream `bash_execution_update` chunks correlated by request `id` (Pi 0.82.0); include an `id` on the command to associate them.

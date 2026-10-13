@@ -7,7 +7,7 @@ Pi uses JSON settings files with project settings overriding global settings:
 | `~/.pi/agent/settings.json` | Global |
 | `.pi/settings.json` | Project |
 
-Edit JSON directly or use `/settings` for common interactive options.
+Edit JSON directly or use `/settings` for common interactive options. Add `"$schema": "https://pi.dev/schemas/settings.schema.json"` (Pi 1.2.0) for editor validation; `models.json`, keybindings, and themes have matching schemas there.
 
 ## Model & Thinking
 
@@ -56,7 +56,9 @@ Edit JSON directly or use `/settings` for common interactive options.
 - `treeFilterMode`: `"default"`, `"no-tools"`, `"user-only"`, `"labeled-only"`, or `"all"`
 - In `/tree`, `Shift+T` toggles timestamps on entry labels
 - `theme` defaults to `"system"` (Pi 0.99.0), which builds Pi's colors from the terminal's reported foreground, background, and ANSI palette and follows light/dark switches; `system` is a reserved theme name. `dark` and `light` are the other built-ins. `"light-name/dark-name"` (Pi 0.79.7) switches themes with the terminal color scheme; `/` is reserved in theme names for this. `--use-theme <name[/name]>` (Pi 0.84.2) sets a per-run initial theme without changing saved settings.
-- `outputPad` (Pi 0.80.3, `0` or `1`) sets horizontal padding for user messages, assistant messages, and thinking blocks; custom message renderers receive it as `options.outputPad` (Pi 0.82.1).
+- `outputPad` (Pi 0.80.3, `0` or `1`) sets horizontal padding for user messages, assistant messages, and thinking blocks, and since Pi 1.1.0 for tool output, `!` command output, and summary blocks; custom message renderers receive it as `options.outputPad` (Pi 0.82.1), and tool renderers in their render context (Pi 1.1.0).
+- `showHardwareCursor` (changed in Pi 1.2.0) uses only the terminal cursor instead of also drawing Pi's reverse-video cursor. Custom editor components should wrap their cursor cell in pi-tui's `renderFakeCursor()` after `CURSOR_MARKER`, so the TUI hides it when the hardware cursor is shown.
+- Themes are strict since Pi 1.2.0: define reusable colors under `vars`; custom keys under `colors` or `export` and extra top-level fields are rejected.
 - `externalEditor` (Pi 0.80.3) sets the `Ctrl+G` external editor command and takes precedence over `$VISUAL`/`$EDITOR`.
 
 ## Fullscreen TUI Mode
@@ -205,8 +207,8 @@ When multiple sources specify a session directory, `--session-dir` takes precede
 ```
 
 - `defaultTools` picks the tools enabled at startup (default `read`, `bash`, `edit`, `write`; also `grep`, `find`, `ls`, `powershell`, and the built-in extension tools `codemode` and `tool_search`). Plain names replace the defaults. A list of only `+name`/`-name` entries (Pi 0.99.0) changes the inherited selection instead; in a mixed list the plain names form the selection and `+`/`-` apply in order. A project list of only `+`/`-` entries applies on top of the user setting; a project list with a plain name replaces it. An empty array disables built-in tools but keeps extension/SDK tools.
-- `--tools` replaces the whole selection for one run and does not accept `+`/`-`; `--exclude-tools` filters the result.
-- `/reload` (Pi 0.99.2) enables tools newly added to `defaultTools`. It does not disable tools removed from it or re-enable unchanged tools turned off in the session; `--tools`, `--no-tools`, and `--no-builtin-tools` still win on reload.
+- `--tools` with plain names replaces the whole selection for one run; entries may be `*` patterns (Pi 1.0.4), and MCP tools stay unless an entry starts with `mcp__`. A list of only `+name`/`-name` entries (Pi 1.1.0, exact names) changes the `defaultTools` selection instead, e.g. `pi --tools +codemode,-write`; the two forms cannot be mixed. `--exclude-tools` filters the result, takes patterns, and covers MCP tools; `--no-mcp` (Pi 1.0.4) turns off built-in MCP for one run.
+- `/reload` (Pi 0.99.2) enables tools newly added to `defaultTools`. It does not disable tools removed from it or re-enable unchanged tools turned off in the session; `--tools` with plain names, `--no-tools`, and `--no-builtin-tools` still win on reload, and a tool removed with `--tools -name` stays removed.
 - `codemode.mode`: `"on"` (default) keeps declared tools declared; `"only"` hides active built-in and extension tools from the model so it reaches them through `codemode`. `codemode.inlineBudget` (default `3000`, estimated tokens) caps tool declarations in the `codemode` description. See `references/codemode.md`.
 - MCP servers are configured in `~/.pi/agent/mcp.json` and the trust-gated `.pi/mcp.json`, not in `settings.json`. See `references/mcp.md`.
 
@@ -271,7 +273,7 @@ Arrays support filtering:
 }
 ```
 
-- `!pattern` excludes glob matches
+- `!pattern` excludes glob matches; `~` expands in `!pattern`, `+path`, and `-path` since Pi 1.2.0
 - `+path` force-includes an exact path
 - `-path` force-excludes an exact path
 
@@ -286,8 +288,8 @@ pi [options] [@files...] [messages...]
 # MCP commands: pi mcp add|remove|list|login|logout (see references/mcp.md)
 
 # modes
--p, --print                      single-shot text output
---mode json|rpc                  newline-delimited events / JSON-RPC over stdio
+-p, --print                      single-shot text output; nonzero exit on error, abort, or (Pi 1.2.0) a reply cut off at the token limit
+--mode json|rpc                  newline-delimited JSON events / RPC commands over stdio
 --export <in> [out]              export a session to HTML
 
 # model
@@ -309,9 +311,11 @@ pi [options] [@files...] [messages...]
 --no-session                     ephemeral
 
 # tools and resources
---tools <list>, -t               name allowlist (read,bash,edit,write,grep,find,ls,codemode,...)
---exclude-tools <list>, -xt      disable specific built-in/extension/custom tools, keep the rest
---no-tools, -nt                  disable everything
+--tools <list>, -t               allowlist of names or * patterns; keeps MCP tools unless an entry starts with mcp__
+                                 a list of only +name/-name entries adjusts the defaults instead
+--exclude-tools <list>, -xt      disable tools by name or pattern, MCP included; keep the rest
+--no-tools, -nt                  disable everything, MCP tools included
+--no-mcp                         disable built-in MCP for this run (Pi 1.0.4)
 --no-builtin-tools, -nbt         disable built-ins, keep extension/custom
 -e, --extension <source>         repeatable; npm/git/path, or builtin:<name>
 --skill <path>                   repeatable
@@ -350,6 +354,8 @@ Use `/bug [description]` (Pi 0.86.0) to report a problem with redacted diagnosti
 | `PI_OAUTH_CALLBACK_HOST` | Bind the OAuth callback server to a custom interface |
 | `PI_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
 | `PI_HARDWARE_CURSOR` | `1` shows the hardware cursor (see terminal-setup docs) |
+| `PI_CLIPBOARD_OSC52` | `1` (Pi 1.2.0) also sends copied text to the terminal with OSC 52, for remote clients Pi cannot detect, such as a multiplexer attached from another machine |
+| `PI_PROGRAM_STATUS` | OSC 7501 program status (Pi 1.1.0): Pi reports working/blocked/done/error/idle to terminals and agent dashboards that confirm support; `1` always reports, `0` never |
 | `PI_TUI_ESC_TIMEOUT` | Ms to wait after a lone ESC before treating it as Escape (default 100 over SSH, 10 otherwise; Pi 0.84.2) — raise it if Alt-key input is misread |
 | `PI_EXPERIMENTAL` | `1` enables experimental features (strict JSON-schema sampling for built-in tools no longer needs it since Pi 0.86.0) |
 | `AI_AGENT=pi` / `PI_CODING_AGENT=true` | Set automatically by CLI/RPC entry points so child processes can detect Pi (generic vs Pi-specific marker) |
