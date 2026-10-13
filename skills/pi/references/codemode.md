@@ -1,6 +1,6 @@
 # Codemode and Tool Search
 
-`codemode` is a built-in tool (Pi 0.99) that runs model-written JavaScript in a QuickJS sandbox. Scripts call Pi's other tools, filter their results, and return only what the model needs. `tool_search` declares tools the model cannot see yet. Checked against Pi v1.0.2: [codemode.md](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/codemode.md), [cli.md#tools](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/cli.md#tools), [extensions.md#tool-exposure](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/extensions.md#tool-exposure), [settings.md#tools](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/settings.md#tools), [codemode tool source](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/src/extensions/codemode/tool.ts).
+`codemode` is a built-in tool (Pi 0.99) that runs model-written JavaScript in a QuickJS sandbox. Scripts call Pi's other tools, filter their results, and return only what the model needs. `tool_search` declares tools the model cannot see yet. Checked against Pi v1.2.0: [codemode.md](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/codemode.md), [cli.md#tools](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/cli.md#tools), [extensions.md#tool-exposure](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/extensions.md#tool-exposure), [settings.md#tools](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/settings.md#tools), [codemode tool source](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/src/extensions/codemode/tool.ts).
 
 ## Enable
 
@@ -10,7 +10,7 @@ Both tools are registered inactive. The default tools stay `read`, `bash`, `edit
 { "defaultTools": ["+codemode"] }
 ```
 
-- `+name` adds to the default selection; `--tools` replaces it, so list everything: `pi --tools read,bash,edit,write,codemode`. `--tools` is an allowlist over every tool, including extension and MCP `mcp__*` tools: unlisted tools are not registered, so scripts can call only the listed ones.
+- `+name` adds to the default selection, also on the command line (`pi --tools +codemode`, Pi 1.1.0). `--tools` with plain names replaces the selection and unregisters unlisted built-in and extension tools, so scripts cannot call them; MCP tools stay unless an entry starts with `mcp__` (Pi 1.0.4). See `references/settings.md`.
 - The MCP extension activates `codemode` for servers with `codemode` exposure and `tool_search` for `deferred` servers (see `references/mcp.md`).
 - SDK sessions need `createCodemodeExtension()` / `createToolSearchExtension()` in the resource loader (see `references/sdk.md`).
 
@@ -19,6 +19,8 @@ Both tools are registered inactive. The default tools stay `read`, `bash`, `edit
 | `codemode.mode` | `"on"` | `on`: declared tools stay declared and their descriptions show the script call; `codemode` lists only undeclared tools. `only`: active built-in and extension tools are hidden from the model and listed in the `codemode` description instead |
 | `codemode.inlineBudget` | `3000` | Estimated tokens the `codemode` description may spend on tool declarations; the rest are found with `searchTools()`. `0` lists only namespaces |
 
+Since Pi 1.2.0, tool declarations in scripts show parameter constraints (integer, minimum/maximum, length, pattern, default) as `@` tags on property comments, so a tool need not repeat them in its descriptions. Use `Type.Integer` for counts and offsets.
+
 ## Script API
 
 The script body is an async function: top-level `await` and `return` work.
@@ -26,14 +28,15 @@ The script body is an async function: top-level `await` and `return` work.
 - `await tools.<name>(args)` calls a tool. Characters that are not valid in an identifier become `_` (`mcp__dev-radius__search` → `tools.mcp__dev_radius__search`).
 - Since Pi 1.0.0, reading a member of `tools`, `models`, or another global namespace that does not exist throws an error naming the close matches (`tools.Bash` suggests `tools.bash`). Check for a tool with `"name" in tools`; `typeof tools.name` now throws.
 - `ALL_TOOLS` lists `{ name, description }`. `await searchTools(query, { limit, namespace })` ranks tools with BM25; `await describeTool(name)` returns one declaration; `await describeNamespace(name)` returns `{ name, description?, instructions?, tools }` for a namespace such as an MCP server (`mcp__dev-radius`, `dev_radius`, and similar spellings all work).
-- Output: `text(value)`, `image(dataUrlOrImageContent)`, `console.*`, and the returned value. Since Pi 0.99.2 `image()` accepts only base64 PNG, JPEG, GIF, or WebP (a `data:` URL, `{ image_url }`, or an image block); it derives the MIME type from the image bytes, rejects remote URLs, and throws a `TypeError` for anything else, such as an SVG. `exit()` ends early and keeps output.
+- Output: `text(value)`, `image(dataUrlOrImageContent)`, `console.*`, and the returned value. Since Pi 0.99.2 `image()` accepts only base64 PNG, JPEG, GIF, or WebP (a `data:` URL, `{ image_url }`, or an image block); it derives the MIME type from the image bytes, rejects remote URLs, and throws a `TypeError` for anything else, such as an SVG. Since Pi 1.0.3 it also saves each image to a temp file and names the path in the result, so a later turn can copy or move it. `exit()` ends early and keeps output.
 - `store(key, value)` / `load(key)` keep JSON values across `codemode` calls (storing `undefined` deletes). Successful scripts append a `codemode-store` custom entry, so values follow the session branch. Limits: 262144 characters of JSON per value, 1048576 in total; do not store image data.
-- `models.getModelsOfType`, `getAvailableOfType`, `getModelOfType`, `models.classify(model, { state, questions })`, and `models.generateImages(model, { input })` (Pi 1.0.0) reach the model catalog, classifiers, and image models with session credentials. Both calls use only the model's `provider` and `id`, never throw on provider errors (check `stopReason`), and run at most four at a time per script. Their usage and cost are added to the `codemode` result. Show generated images with `image(block)` rather than printing `data`; they are not saved to disk, and generation can take minutes, so avoid a short `timeout_ms`.
+- `models.getModelsOfType`, `getAvailableOfType`, `getModelOfType`, `models.classify(model, { state, questions })`, and `models.generateImages(model, { input })` (Pi 1.0.0) reach the model catalog, classifiers, and image models with session credentials. Both calls use only the model's `provider` and `id`, never throw on provider errors (check `stopReason`), and run at most four at a time per script. Their usage and cost are added to the `codemode` result. Show generated images with `image(block)` rather than printing `data`; generation can take minutes, so avoid a short `timeout_ms`.
+- `models.classify()` also takes `images` (Pi 1.1.0): image blocks judged with the state, for classifiers whose `input` includes `"image"`, such as `openai/gpt-6-luna`. Other classifiers return an error result. `await tools.read({ path })` on an image file resolves to such a block (Pi 1.0.4).
 - Malformed `classify()`/`generateImages()` arguments are rejected with the expected shape, and an unknown model points to `models.getAvailableOfType()`.
-- An optional first line `// @options: {"max_output_tokens": 2000, "timeout_ms": 60000}`. Output is capped at 10000 estimated tokens by default (start and end kept, full text in a temp file); there is no timeout unless set. Since Pi 1.0.1 a script fails with a `RangeError` once its output passes 16777216 characters (text plus base64 image data) or 100000 `text()`/`image()`/`console` calls; write large data to a file with a tool.
+- An optional first line `// @options: {"max_output_tokens": 2000, "timeout_ms": 60000}`. It must be the first line: since Pi 1.2.0 an options line anywhere else fails the call before the script runs. Output is capped at 10000 estimated tokens by default (start and end kept, full text in a temp file); there is no timeout unless set. Since Pi 1.0.1 a script fails with a `RangeError` once its output passes 16777216 characters (text plus base64 image data) or 100000 `text()`/`image()`/`console` calls; write large data to a file with a tool.
 - No timers, `fetch`, `process`, `require`, or modules. The VM has 256 MB of memory; a script awaiting a promise that can never settle fails at once; scripts cannot start other `codemode` scripts.
 
-The result starts with `Script completed` or `Script failed`, the wall time, and the output. A failed script keeps its partial output followed by `Script error:`.
+The result starts with `Script completed` or `Script failed`, the wall time, and the output. Since Pi 1.1.0, with more than one text item each starts with a `==> text N/M <==` line, and `console` calls follow the other output in one `<console_output>` block, one line per call. A failed script keeps its partial output followed by `Script error:`.
 
 ## What a Script Receives
 
@@ -41,6 +44,7 @@ The result starts with `Script completed` or `Script failed`, the wall time, and
 |------|--------------------------------|
 | Declares `outputSchema` | Its `structuredContent`, also when the result has `isError: true` |
 | MCP tool | The whole `CallToolResult` (`content`, `structuredContent`, `isError`) |
+| `read` on an image | An image block `{ type: "image", data, mimeType, note }` that `image()` shows (Pi 1.0.4) |
 | `bash` | `{ output, truncated, full_output_path?, exit_code, wall_time_seconds }`, also for non-zero exits; `output` holds up to 1 MiB |
 | Anything else | Its text content as one string |
 
@@ -88,5 +92,6 @@ For a permission extension this means:
 - An extension that registers a tool named `codemode` or `tool_search` replaces the built-in one.
 - `"extensions": ["-builtin:codemode"]` or `["-builtin:tool-search"]` disables one (note the hyphen in the extension name); `pi config` lists them under Built-in.
 - `codemode` uses only `exposure`, `prepareLoadout()`, and `ctx.executeTool()`, and `tool_search` only ranks registered tools (`pi.getAllTools()`) and adds matches with `pi.setActiveTools()`, so an extension can build either under another name.
+- A replacement should declare `reachesTools` (Pi 1.2.0, see `references/extensions.md`): only then does Pi activate it for MCP servers and wait for the servers its calls need.
 
-`@earendil-works/pi-codemode` publishes the sandbox (`CodemodeSandbox`) without Pi dependencies, for exposing any functions to model-written scripts.
+`@earendil-works/pi-codemode` publishes the sandbox (`CodemodeSandbox`) without Pi dependencies, for exposing any functions to model-written scripts. Since Pi 1.2.0 its `/portable` entry adds sandboxes with the same API for Cloudflare Workers and other runtimes without worker threads.

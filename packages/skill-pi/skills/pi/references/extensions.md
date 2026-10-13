@@ -81,7 +81,7 @@ Useful session events:
 - `resources_discover`
 - `project_trust` — user/global and CLI extensions only, fired before project resources load; return `{ trusted: "yes" | "no" | "undecided" }` (optionally `remember: true` to persist). The first yes/no decision wins and suppresses the built-in trust prompt.
 
-`session_before_compact` and `session_compact` carry `reason` and `willRetry` (Pi 0.79.10) so handlers can distinguish manual `/compact`, threshold auto-compaction, and overflow-retry compaction. `session_compact_failed` (Pi 0.84.3) reports failed or aborted compactions with `reason`, `aborted`, `willRetry`, `fromExtension`, and `errorMessage`.
+`session_before_compact` and `session_compact` carry `reason` and `willRetry` (Pi 0.79.10) so handlers can distinguish manual `/compact`, threshold auto-compaction, and overflow-retry compaction. `session_compact_failed` (Pi 0.84.3) reports failed or aborted compactions with `reason`, `aborted`, `willRetry`, `fromExtension`, and `errorMessage`. Since Pi 1.2.0 `serializeConversation()`, which compaction and branch summaries use, omits thinking blocks.
 
 `session_start` carries `event.reason` — `"startup" | "reload" | "new" | "resume" | "fork"` — and `event.previousSessionFile` for `"new"`/`"resume"`/`"fork"`. The old post-transition `session_switch` / `session_fork` events were removed; route all of those flows through `session_start`.
 
@@ -89,10 +89,11 @@ Useful agent events:
 
 - `input` — carries `event.streamingBehavior` (`"steer" | "followUp" | undefined`) so handlers can distinguish idle prompts, mid-stream steers, and queued follow-ups; return `{ action: "transform" | "handled" | "continue" }`
 - `before_agent_start` — `event.systemPrompt` is read-only; mutate `event.systemPromptOptions` (sections, selected tools, guidelines) so Pi appends a transcript delta that survives resume/branching and keeps the cached prefix (Pi 0.86.0). Returning `{ systemPrompt }` replaces the whole prompt for that run and is sent as the provider's leading system prompt
+  - Breaking in Pi 1.2.0: it also fires for runs started by `pi.sendMessage(..., { triggerTurn: true })` while idle. `event.messageType` is `"user"` (with `prompt` and `images`) or `"custom"` (with the starting `message`, no `prompt`). A returned `message` is added to both kinds of run, so check `event.messageType === "user"` before adding one meant for user prompts
 - `agent_start`
 - `agent_end` — one low-level run; Pi may still auto-retry, auto-compact and retry, or continue with queued follow-ups
 - `agent_before_settle` (Pi 0.87.0) — the final actionable boundary before settlement (see below)
-- `agent_settled` (Pi 0.80.4) — notification-only; fired when no retry/compaction/follow-up remains, for status integrations that need to know Pi will not continue automatically. Since Pi 0.87.0, runs requested from `agent_settled` handlers are deferred until every settled handler finishes (`ctx.isIdle()` stays true, no reentrant `agent_start`)
+- `agent_settled` (Pi 0.80.4) — notification-only; fired when no retry/compaction/follow-up remains, for status integrations that need to know Pi will not continue automatically. `event.aborted` (Pi 1.1.0) tells a cancelled run from a finished one. Since Pi 0.87.0, runs requested from `agent_settled` handlers are deferred until every settled handler finishes (`ctx.isIdle()` stays true, no reentrant `agent_start`)
 - `turn_start`
 - `turn_end` — actionable since Pi 0.87.0; carries `turnIndex`, `message`, `toolResults`, and their session entry IDs
 - `message_start`
@@ -120,7 +121,7 @@ Useful tool events:
 - `tool_call`
 - `tool_execution_update`
 - `tool_result`
-- `tool_execution_end`
+- `tool_execution_end` — carries `durationMs` (Pi 1.1.0), the tool's execution time, absent when it did not run; tool renderers get it in their render context
 
 Calls another tool makes through `ctx.executeTool()` (codemode scripts, orchestrating tools) fire the same tool events, so permission gates see them; see [Nested Calls and Permissions](codemode.md#nested-calls-and-permissions).
 
@@ -143,7 +144,7 @@ Tool results may include `terminate: true` to end the current tool batch without
 - `ctx.modelRegistry.findOfType(type, provider, id)`, `getModelsOfType()`, `getAvailableOfType()`, and `classify(model, { state, questions }, { signal })` (Pi 0.99.0), plus `generateImages(model, { input }, options?)` (Pi 1.0.0) — classifier and image models live beside chat models; neither call rejects, so check `result.stopReason`, and report the returned `usage` on the tool result (see `references/providers.md`)
 - `ctx.hasUI` — `true` in TUI and RPC modes
 - `ctx.signal` — the active agent abort signal (or `undefined` when idle); pass it to `fetch`/model calls for abort-aware nested work
-- `ctx.isIdle()` / `ctx.hasPendingMessages()`
+- `ctx.isIdle()` / `ctx.hasPendingMessages()` — since Pi 1.2.0 a session is busy while a run starts, including during `before_agent_start`: `ctx.isIdle()` is false, `pi.sendMessage()` queues into the starting run, `pi.sendUserMessage()` needs `deliverAs`, and an abort requested meanwhile aborts the run once it starts
 - `ctx.abort()` / `ctx.shutdown()`
 - `ctx.getContextUsage()`
 - `ctx.compact(options?)` — trigger compaction without awaiting completion
@@ -193,16 +194,17 @@ Important rules:
 
 ## Tool Exposure & Structured Results
 
-Pi 0.99.0 added fields for tools that other tools, codemode scripts, and permission extensions consume ([docs](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/extensions.md#tool-exposure), [types](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/src/core/extensions/types.ts)):
+Pi 0.99.0 added fields for tools that other tools, codemode scripts, and permission extensions consume ([docs](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/extensions.md#tool-exposure), [types](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/src/core/extensions/types.ts)):
 
 - `outputSchema` (TypeBox) plus `structuredContent` on every result: the model still reads `content`; codemode scripts receive `structuredContent` instead of text. Without `outputSchema`, scripts get the text. `structuredContent` must be JSON-compatible. A `tool_result` handler that replaces `content` must also return `structuredContent`, or it is dropped.
 - `isError: true` on a returned result: the model sees an error, while `details` and `structuredContent` are kept for the UI and scripts.
 - `exposure`: `direct` (default), `model-only`, `codemode`, `deferred`, or `hidden`. `direct` and `model-only` tools activate on registration; the others do not (`defaultActive: false` also keeps a `direct` tool inactive until `--tools`/`defaultTools`/`setActiveTools()` names it). Tools cannot be unregistered: re-register with `exposure: "hidden"` to withdraw one. The table of what each value declares and allows is in `references/codemode.md`.
-- `namespace: { name, description?, instructions? }` groups related tools, as MCP servers do. Codemode lists a namespace under one heading with its short `description`. `instructions` (Pi 0.99.2) holds longer usage guidance that is not listed; scripts read it with `describeNamespace(name)`.
+- `namespace: { name, aliases?, description?, instructions? }` groups related tools, as MCP servers do. Codemode lists a namespace under one heading with its short `description`. `instructions` (Pi 0.99.2) holds longer usage guidance that is not listed; scripts read it with `describeNamespace(name)`. `aliases` (Pi 1.2.0) are other names `describeNamespace()` and `searchTools({ namespace })` match; MCP namespaces use the server name.
 - `annotations`: `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`, with MCP meanings. Missing hints mean "not read-only, may be destructive, open world". They are unverified; mark writes neither read-only nor casually idempotent.
-- `prepareLoadout(loadout)`: for tools that orchestrate others. Runs whenever the active tools change with `declared`, `callable`, and `registered` tools, and returns replacement `descriptions` and `hiddenDeclarations` (active tools left out of requests but still callable). The built-in `codemode` uses only this, `exposure`, and `ctx.executeTool()`.
+- `prepareLoadout(loadout)`: for tools that orchestrate others. Runs whenever the active tools change with `declared`, `callable`, and `registered` tools, and returns replacement `descriptions` and `hiddenDeclarations` (active tools left out of requests but still callable). The built-in `codemode` uses only this, `exposure`, and `ctx.executeTool()`. Since Pi 1.0.4 hidden declarations are left out of the system prompt's tool rules, and `loadout.getPromptGuidelines()` returns each tool's guidelines so the orchestrator can show them with its declarations.
+- `reachesTools(input)` (Pi 1.2.0): for tools that reach other tools, which ones a call may reach — `"all"`, or the words of the input that may name tools or namespaces (a word refers to every tool or namespace whose name it contains: `mcp__radius__search` reaches the `mcp__radius` server, `radius` alone does not). Extensions that register tools late, such as the MCP extension for servers still connecting, read it from their `tool_call` handler to finish registering those tools before the call runs.
 
-`pi.getAllTools()` reports each tool's `exposure`, `namespace`, and `annotations`. `pi.setActiveTools()` ignores unknown and `hidden` names. Compilable examples: `examples/structured-tool.ts` and `examples/nested-tools.ts`.
+`pi.getAllTools()` reports each tool's `exposure`, `namespace`, `annotations`, and `reachesTools`. `pi.setActiveTools()` ignores unknown and `hidden` names. Compilable examples: `examples/structured-tool.ts` and `examples/nested-tools.ts`.
 
 ## Dynamic Tool Loading
 
@@ -215,7 +217,7 @@ Pi 0.80.7 lets an extension register many tools while keeping only a small initi
 3. During loader execution, call `pi.setActiveTools([...pi.getActiveTools(), ...matches])`. Unknown names are ignored. Additive changes are the most cache-friendly everywhere.
 4. Pi records the added tools on that tool result and exposes their definitions before the next model response. Since Pi 0.86.0 prompt and tool changes are transcript-backed system messages, so they survive resume and branch navigation.
 
-Native deferred loading preserves the cached prompt prefix on Anthropic Sonnet/Opus/Fable ≥ 4.5 (not Haiku), OpenAI `gpt-5.4`+, and Fireworks Messages models (Pi 0.86.0; name the loader `ToolSearch` or `tool_search`); Kimi K3 works via `compat.deferredToolsMode: "kimi"` (Pi 0.80.9). For verified custom models/proxies, enable `compat.supportsToolReferences: true` (`anthropic-messages`) or `compat.supportsToolSearch: true` (`openai-responses`/`openai-codex-responses`). All other models fall back to sending the full active tool list on the next request — activation still works, but may invalidate the provider's cached prefix. Since Pi 1.0.1, Anthropic models with native mid-conversation tool changes (`compat.supportsMidConvoSystemMessages` and `supportsMidConvoToolChanges`) use the `inline-tools-2026-09-15` beta: the initial tool list never changes, later tools are defined by value in `tool_addition` blocks and withdrawn with `tool_removal`, so additions, removals, and same-name redefinitions all keep the cached prefix. Elsewhere, removals and replacements still fall back. pi-ai's `hasToolRedefinitions()` is deprecated.
+Adding tools keeps the cached prompt prefix on models that support native tool changes, which Pi's generated `compat` metadata marks (recent Claude, GPT, and Kimi models). On Anthropic's own API, Opus 4.8+, Sonnet and Haiku 5.5, and Fable 5+ use the `inline-tools-2026-09-15` beta (Pi 1.0.1), so removals and same-name redefinitions keep the prefix too. Any change a model cannot take natively falls back to a checkpoint with the full tool list: activation still works, but may invalidate the cached prefix. pi-ai's `hasToolRedefinitions()` is deprecated.
 
 Cache tips: keep the loader active for the whole session; add rather than replace. Activating a tool that has `promptSnippet`/`promptGuidelines` rebuilds the system prompt and can invalidate the prefix even with native support — lazily loaded tools should rely on their `description` alone.
 
@@ -227,7 +229,7 @@ Cache tips: keep the loader active for the whole session; add rather than replac
 - `{ type: "grammar", variants: { openai_lark?: string, openai_regex?: string } }` — OpenAI Lark/regex grammar encodings
 - Set `false` to explicitly disable for that tool
 
-Model capability metadata gates what is actually sent: `compat.supportsStrictTools` / Anthropic built-ins enable strict JSON-schema tools, and `compat.supportsOpenAIGrammarTools` marks endpoints that accept Lark/regex grammar tools (enabled in generated metadata for GPT-5+ across OpenAI, Codex, Azure, GitHub Copilot, opencode, Cloudflare AI Gateway). With `strict: "prefer"`, unsupported combinations fall back to normal function tools; with `strict: "require"`, the request fails when the model has no strict tools or the schema uses keywords strict mode rejects. Since Pi 0.99.2 Anthropic strict tools also reject keywords such as `minimum`/`maximum`, so such `prefer` tools are sent non-strict. Since Pi 0.86.0, strict-prefer JSON-schema sampling is on by default for the built-in `read`, `bash`, `powershell`, `edit`, and `write` tools (no `PI_EXPERIMENTAL` needed); re-register a definition with `constrainedSampling: false` to opt out.
+Model capability metadata gates what is actually sent: `compat.supportsStrictTools` / Anthropic built-ins enable strict JSON-schema tools, and `compat.supportsOpenAIGrammarTools` marks endpoints that accept Lark/regex grammar tools (enabled in generated metadata for GPT-5+ across OpenAI, Codex, Azure, GitHub Copilot, opencode, Cloudflare AI Gateway). With `strict: "prefer"`, unsupported combinations fall back to normal function tools; with `strict: "require"`, the request fails when the model has no strict tools or the schema uses keywords strict mode rejects. Since Pi 0.99.2 Anthropic strict tools also reject keywords such as `minimum`/`maximum`, so such `prefer` tools are sent non-strict. Since Pi 0.86.0, strict-prefer JSON-schema sampling is on by default for the built-in `read`, `bash`, `powershell`, `edit`, and `write` tools (no `PI_EXPERIMENTAL` needed); re-register a definition with `constrainedSampling: false` to opt out. Since Pi 1.2.0, when Anthropic rejects a strict tool set for grammar size, tool count, or union limits, Pi retries once with `prefer` tools non-strict; `require` tools stay strict.
 
 ## Display Transformers
 

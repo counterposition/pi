@@ -1,5 +1,18 @@
 # @counterposition/skill-pi
 
+## 1.2.0
+
+### Patch Changes
+
+- Sync the Pi skill with Pi 1.2.0, covering 1.0.3–1.2.0: the `user`/`custom`
+  `before_agent_start` union and busy-while-starting rules, `reachesTools` and
+  namespace `aliases`, `--tools` patterns, `+name`/`-name` entries, and
+  `--no-mcp`, the `azure` provider rename, GPT-6 Luna and llama.cpp decision
+  models as classifiers with images, codemode output, options-line, and
+  constraint changes, per-key OpenRouter model lists, configuration schemas at
+  `pi.dev/schemas`, strict themes, `durationMs` and `aborted` on events, and
+  the removal of the experimental remote-session packages.
+
 ## 1.0.2
 
 ### Patch Changes

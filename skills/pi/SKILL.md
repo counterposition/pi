@@ -7,7 +7,7 @@ compatibility: "Pi-specific guidance for agents that support Agent Skills"
 
 # Pi Coding Agent
 
-Pi is a minimal terminal coding harness. Default tools: `read`, `bash`, `edit`, `write`; `grep`, `find`, `ls`, and the Windows `powershell` tool are opt-in via the `defaultTools` setting or `--tools`. Built-in extensions (Pi 0.99.0) add MCP servers, the `codemode` tool (model-written JavaScript that calls other tools), and `tool_search`. `codemode` and `tool_search` start inactive: enable them with `defaultTools`/`--tools`, or let MCP activate them when a server needs them. Modes: interactive (`pi`), print (`pi -p`), JSON (`--mode json`), RPC (`--mode rpc`), or embedded (`createAgentSession()`). Sub-agents, plan mode, and permission flows are intentionally left to extensions and Pi packages. Skill synced with Pi 1.0.2.
+Pi is a minimal terminal coding harness. Default tools: `read`, `bash`, `edit`, `write`; `grep`, `find`, `ls`, and the Windows `powershell` tool are opt-in via the `defaultTools` setting or `--tools`. Built-in extensions (Pi 0.99.0) add MCP servers, the `codemode` tool (model-written JavaScript that calls other tools), and `tool_search`. `codemode` and `tool_search` start inactive: enable them with `defaultTools`/`--tools`, or let MCP activate them when a server needs them. Modes: interactive (`pi`), print (`pi -p`), JSON (`--mode json`), RPC (`--mode rpc`), or embedded (`createAgentSession()`). Sub-agents, plan mode, and permission flows are intentionally left to extensions and Pi packages. Skill synced with Pi 1.2.0.
 
 Pi's philosophy: **adapt Pi to your workflows, not the other way around**.
 
@@ -20,10 +20,9 @@ Core packages on npm (source: [github.com/earendil-works/pi](https://github.com/
 | `@earendil-works/pi-ai` | Unified LLM API across 20+ providers |
 | `@earendil-works/pi-agent-core` | `Agent`, the agent loop, and the proxy stream (Pi 1.0.0 removed the experimental harness, sessions, and its `./node`/`./harness/*` subpaths) |
 | `@earendil-works/pi-tui` | Terminal UI components |
-| `@earendil-works/pi-coding-agent` | CLI, extensions, skills, sessions, settings (also exports `./client` for remote sessions and `./rpc-entry`) |
+| `@earendil-works/pi-coding-agent` | CLI, extensions, skills, sessions, settings (also exports `./rpc-entry`) |
 | `@earendil-works/pi-codemode` | QuickJS sandbox that runs model-written JavaScript against injected tools (Pi 0.99.0) |
 | `@earendil-works/pi-mcp` | Standalone MCP client: stdio and streamable HTTP, OAuth (Pi 0.99.0) |
-| `@earendil-works/pi-client` / `@earendil-works/pi-protocol` | Experimental remote-session client and wire protocol (Pi 0.84.0) |
 | `@earendil-works/pi-telemetry` | Vendor-neutral telemetry contracts (Pi 0.84.0) |
 | `@earendil-works/pi-durable` | Experimental durable agent harness: conversations, turns, and tool calls committed to storage and resumed after a crash (Pi 1.0.0; replaces the pi-agent-core harness) |
 
