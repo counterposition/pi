@@ -110,11 +110,11 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
       max_results: Type.Optional(
-        Type.Number({
+        Type.Integer({
           default: 5,
           minimum: 1,
           maximum: 20,
-          description: "Maximum number of results (default: 5).",
+          description: "Maximum number of results.",
         }),
       ),
     }),
@@ -234,18 +234,18 @@ export default function (pi: ExtensionAPI) {
     parameters: Type.Object({
       url: Type.String({ description: "The URL to fetch." }),
       offset: Type.Optional(
-        Type.Number({
+        Type.Integer({
           default: 0,
           minimum: 0,
-          description: "Character offset into the cleaned page content (default: 0).",
+          description: "Character offset into the cleaned page content.",
         }),
       ),
       max_chars: Type.Optional(
-        Type.Number({
+        Type.Integer({
           default: FETCH_DEFAULT_MAX_CHARS,
           minimum: 1_000,
           maximum: 20_000,
-          description: `Maximum characters to return from the cleaned page content (default: ${FETCH_DEFAULT_MAX_CHARS}).`,
+          description: "Maximum characters to return from the cleaned page content.",
         }),
       ),
     }),

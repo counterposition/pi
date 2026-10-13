@@ -177,15 +177,15 @@ export default function (pi: ExtensionAPI) {
       scope: Type.Optional(
         StringEnum(["global", "project", "all"] as const, {
           default: "all",
-          description: "Which memory scope to search. Defaults to all.",
+          description: "Which memory scope to search.",
         }),
       ),
       max_results: Type.Optional(
-        Type.Number({
+        Type.Integer({
           default: 10,
           minimum: 1,
           maximum: 50,
-          description: "Maximum number of matching memories to return. Defaults to 10.",
+          description: "Maximum number of matching memories to return.",
         }),
       ),
     }),
@@ -253,7 +253,7 @@ export default function (pi: ExtensionAPI) {
       scope: Type.Optional(
         StringEnum(MEMORY_SCOPES, {
           default: "project",
-          description: "Memory scope. Defaults to project.",
+          description: "Memory scope.",
         }),
       ),
     }),
