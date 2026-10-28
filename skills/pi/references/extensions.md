@@ -25,6 +25,7 @@ import { Text } from "@earendil-works/pi-tui";
 
 - Use `typebox` (1.x) for schemas. Pi 0.83.0 bundles TypeBox 1.3.7, which removed deprecated APIs (`Type.Base`, `Type.Awaited`, `Type.Promise`, `Type.AsyncIterator`, `Type.Iterator`, `Type.Options`, `Value.Mutate`) — migrate extension sources off those before typechecking against current Pi.
 - Use `StringEnum` from `@earendil-works/pi-ai` for Google-compatible string enums.
+- Since Pi 1.4.0 extensions can import `@earendil-works/pi-ai/models` (for example `clampThinkingLevel`); earlier the extension loader could not resolve that subpath.
 - Pi 0.80.0 moved pi-ai's old global API (`getModel`, `getModels`, `stream`, `complete`, `registerApiProvider`, ...) off the pi-ai root entrypoint to `@earendil-works/pi-ai/compat`. Extensions keep working unchanged at runtime (the extension loader aliases the root to the compat superset), but extension sources that typecheck against pi-ai's published types must import those APIs from `@earendil-works/pi-ai/compat`. `StringEnum` and the type surface remain on the root. The compat entrypoint and loader alias will be removed in a future release.
 
 ## Quick Start
@@ -101,7 +102,7 @@ Useful agent events:
 - `message_end` — return a replacement message to override usage/cost or rewrite the finalized assistant message
 - `context` — transforms conversation messages; since Pi 0.87.0 handlers no longer see prompt/tool system messages, and Pi restores that state afterward (filtering or slicing messages is safe)
 - `context_with_system` (Pi 0.87.0) — runs after `context` on the full transcript including system messages and is sent verbatim; use only when a request-local transform must own the whole transcript, and keep a system message at index 0
-- `before_provider_headers` (Pi 0.80.4) — mutate `event.headers` in place after outgoing HTTP headers are assembled: set a key to a string to add/override, `null` to delete. Runs once per provider request; retries reuse the same headers
+- `before_provider_headers` (Pi 0.80.4) — mutate `event.headers` in place after outgoing HTTP headers are assembled: set a key to a string to add/override, `null` to delete. Runs once per provider request; retries reuse the same headers. Since Pi 1.4.0 handlers no longer see the OpenRouter, NVIDIA NIM, and OpenCode attribution headers, which pi-ai adds from its client identity; setting one to `null` still removes it
 - `before_provider_request`
 - `after_provider_response` — inspect the provider HTTP status and headers before stream consumption
 - `provider_stream_event` (Pi 0.99.0) — notification-only view of each parsed provider stream event before Pi normalizes it (`provider`, `api`, `model`, `data`). Treat `data` as read-only; handlers are awaited in stream order, so keep them fast. Not persisted
@@ -194,7 +195,7 @@ Important rules:
 
 ## Tool Exposure & Structured Results
 
-Pi 0.99.0 added fields for tools that other tools, codemode scripts, and permission extensions consume ([docs](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/extensions.md#tool-exposure), [types](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/src/core/extensions/types.ts)):
+Pi 0.99.0 added fields for tools that other tools, codemode scripts, and permission extensions consume ([docs](https://github.com/earendil-works/pi/blob/v1.4.0/packages/coding-agent/docs/extensions.md#tool-exposure), [types](https://github.com/earendil-works/pi/blob/v1.4.0/packages/coding-agent/src/core/extensions/types.ts)):
 
 - `outputSchema` (TypeBox) plus `structuredContent` on every result: the model still reads `content`; codemode scripts receive `structuredContent` instead of text. Without `outputSchema`, scripts get the text. `structuredContent` must be JSON-compatible. A `tool_result` handler that replaces `content` must also return `structuredContent`, or it is dropped.
 - `isError: true` on a returned result: the model sees an error, while `details` and `structuredContent` are kept for the UI and scripts.
@@ -249,6 +250,8 @@ Context carries `messageType` (`"user" | "assistant" | "assistant-thinking"`), `
 ## UI Methods
 
 Check `ctx.hasUI` first. Non-interactive modes may not support UI.
+
+In interactive mode, a `select`/`confirm`/`input`/`editor` dialog or inline `custom()` component opened while another is visible shows on top, and closing it shows the previous one again (Pi 1.4.0). Before, the second replaced the first and the first promise never settled, so tools running in parallel could hang on their prompts.
 
 ```typescript
 const choice = await ctx.ui.select("Pick one:", ["A", "B"]);

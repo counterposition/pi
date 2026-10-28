@@ -1,5 +1,21 @@
 # @counterposition/skill-pi
 
+## 1.4.0
+
+### Patch Changes
+
+- Sync the Pi skill with Pi 1.4.0, covering 1.3.0–1.4.0: image input for Jev,
+  Clef, and OpenRouter classifiers with System One `compat.imageInput`, new
+  Clef Omni and Jev 1.14 classifiers, codemode's worker limit and
+  `PI_CODEMODE_MAX_WORKERS`, `CodemodeSandbox` shutdown and `acquireWorker()`,
+  `compaction.reserveTokens` as a trigger only, `sessionShareDestination`,
+  resumed sessions keeping their active tools, stacked extension dialogs,
+  `@earendil-works/pi-ai/models` in extensions, attribution headers hidden
+  from `before_provider_headers`, pi-ai client identity and the
+  `telemetry`/`formatUserAgent()`/`resolveTranscriptTools()` breaking
+  changes, Kimi Code over Chat Completions, and the Models Configuration
+  reference.
+
 ## 1.2.0
 
 ### Patch Changes
