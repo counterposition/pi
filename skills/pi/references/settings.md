@@ -211,7 +211,7 @@ When multiple sources specify a session directory, `--session-dir` takes precede
 
 - `defaultTools` picks the tools enabled at startup (default `read`, `bash`, `edit`, `write`; also `grep`, `find`, `ls`, `powershell`, and the built-in extension tools `codemode` and `tool_search`). Plain names replace the defaults. A list of only `+name`/`-name` entries (Pi 0.99.0) changes the inherited selection instead; in a mixed list the plain names form the selection and `+`/`-` apply in order. A project list of only `+`/`-` entries applies on top of the user setting; a project list with a plain name replaces it. An empty array disables built-in tools but keeps extension/SDK tools.
 - `--tools` with plain names replaces the whole selection for one run; entries may be `*` patterns (Pi 1.0.4), and MCP tools stay unless an entry starts with `mcp__`. A list of only `+name`/`-name` entries (Pi 1.1.0, exact names) changes the `defaultTools` selection instead, e.g. `pi --tools +codemode,-write`; the two forms cannot be mixed. `--exclude-tools` filters the result, takes patterns, and covers MCP tools; `--no-mcp` (Pi 1.0.4) turns off built-in MCP for one run.
-- Resumed sessions restore their active tools (Pi 1.3.0), and `--tools +name`/`-name` applies on top of them; `--tools` with plain names, `--no-tools`, and `--no-builtin-tools` still pick tools explicitly.
+- Resumed sessions restore their active tools (Pi 1.3.0), and `--tools +name`/`-name` applies on top of them; `--tools` with plain names, `--no-tools`, and `--no-builtin-tools` still pick tools explicitly. Since Pi 1.4.0, resume and `/tree` also activate extension tools registered after the branch recorded its tools, unless they use `defaultActive: false`; tools the branch removed stay inactive.
 - `/reload` (Pi 0.99.2) enables tools newly added to `defaultTools`. It does not disable tools removed from it or re-enable unchanged tools turned off in the session; `--tools` with plain names, `--no-tools`, and `--no-builtin-tools` still win on reload, and a tool removed with `--tools -name` stays removed.
 - `codemode.mode`: `"on"` (default) keeps declared tools declared; `"only"` hides active built-in and extension tools from the model so it reaches them through `codemode`. `codemode.inlineBudget` (default `3000`, estimated tokens) caps tool declarations in the `codemode` description. See `references/codemode.md`.
 - MCP servers are configured in `~/.pi/agent/mcp.json` and the trust-gated `.pi/mcp.json`, not in `settings.json`. See `references/mcp.md`.
@@ -301,7 +301,7 @@ pi [options] [@files...] [messages...]
 --model <pattern>                supports provider/id and optional :<thinking>; prefers the provider with credentials when several match (Pi 1.3.0)
 --api-key <key>
 --thinking off|minimal|low|medium|high|xhigh|max
---models <patterns>              Ctrl+P cycling allowlist
+--models <patterns>              Ctrl+P cycling allowlist; a model several providers offer is added for each, with a warning (Pi 1.3.0)
 --list-models [search]
 
 # sessions
