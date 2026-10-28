@@ -115,6 +115,7 @@ Fullscreen is the default since Pi 1.0.0 (added in 0.84.0):
 
 Notes:
 
+- `compaction.reserveTokens` only decides when auto-compaction starts: once free context falls below it. Since Pi 1.4.0 compaction and branch summaries use the model's output limit instead of a fixed cap, so long reasoning no longer makes them fail.
 - `compaction.modelOverrides` (Pi 0.86.0) sets per-model `reserveTokens`/`keepRecentTokens` keyed by exact `provider/modelId`; each value falls back to the ordinary compaction setting, then the default.
 - `retry.maxRetries` (default `3`) and `retry.baseDelayMs` (default `2000`) govern Pi's own agent-level retry with exponential backoff, capped per attempt by `retry.maxAgentDelayMs` (default `60000`, Pi 0.86.0).
 - `retry.provider.*` controls the underlying provider SDK's request timeout and retry/backoff — useful for slow local LLMs and flaky proxies. `retry.provider.timeoutMs` sets the SDK request timeout; `retry.provider.maxRetries` defaults to `0` (keep it there unless you need SDK-level retries, since raising it can let provider retries swallow usage-limit errors before Pi handles them).
@@ -185,6 +186,7 @@ Notes:
 ```json
 {
   "sessionDir": ".pi/sessions",
+  "sessionShareDestination": "auto",
   "enabledModels": ["claude-*", "gpt-4o", "gemini-2*"],
   "markdown": {
     "codeBlockIndent": "  ",
@@ -195,6 +197,7 @@ Notes:
 
 When multiple sources specify a session directory, `--session-dir` takes precedence over `sessionDir` in settings. Pi 0.65.0 removed the old `session_directory` extension/settings hook.
 
+- `sessionShareDestination` (Pi 1.3.0): `"auto"` (default) uploads `/share` to Radius when signed in and otherwise to a private GitHub gist; `"gist"` or `"radius"` forces one, and `"radius"` never falls back.
 - `markdown.mermaid` (Pi 0.84.0): `"off"`, `"final"`, or `"streaming"` — themed Unicode rendering of supported Mermaid diagrams in interactive messages. Pi 0.84.0 also renders terminal-friendly Unicode for LaTeX expressions.
 
 ## Tools & Codemode
@@ -208,6 +211,7 @@ When multiple sources specify a session directory, `--session-dir` takes precede
 
 - `defaultTools` picks the tools enabled at startup (default `read`, `bash`, `edit`, `write`; also `grep`, `find`, `ls`, `powershell`, and the built-in extension tools `codemode` and `tool_search`). Plain names replace the defaults. A list of only `+name`/`-name` entries (Pi 0.99.0) changes the inherited selection instead; in a mixed list the plain names form the selection and `+`/`-` apply in order. A project list of only `+`/`-` entries applies on top of the user setting; a project list with a plain name replaces it. An empty array disables built-in tools but keeps extension/SDK tools.
 - `--tools` with plain names replaces the whole selection for one run; entries may be `*` patterns (Pi 1.0.4), and MCP tools stay unless an entry starts with `mcp__`. A list of only `+name`/`-name` entries (Pi 1.1.0, exact names) changes the `defaultTools` selection instead, e.g. `pi --tools +codemode,-write`; the two forms cannot be mixed. `--exclude-tools` filters the result, takes patterns, and covers MCP tools; `--no-mcp` (Pi 1.0.4) turns off built-in MCP for one run.
+- Resumed sessions restore their active tools (Pi 1.3.0), and `--tools +name`/`-name` applies on top of them; `--tools` with plain names, `--no-tools`, and `--no-builtin-tools` still pick tools explicitly. Since Pi 1.4.0, resume and `/tree` also activate extension tools registered after the branch recorded its tools, unless they use `defaultActive: false`; tools the branch removed stay inactive.
 - `/reload` (Pi 0.99.2) enables tools newly added to `defaultTools`. It does not disable tools removed from it or re-enable unchanged tools turned off in the session; `--tools` with plain names, `--no-tools`, and `--no-builtin-tools` still win on reload, and a tool removed with `--tools -name` stays removed.
 - `codemode.mode`: `"on"` (default) keeps declared tools declared; `"only"` hides active built-in and extension tools from the model so it reaches them through `codemode`. `codemode.inlineBudget` (default `3000`, estimated tokens) caps tool declarations in the `codemode` description. See `references/codemode.md`.
 - MCP servers are configured in `~/.pi/agent/mcp.json` and the trust-gated `.pi/mcp.json`, not in `settings.json`. See `references/mcp.md`.
@@ -294,10 +298,10 @@ pi [options] [@files...] [messages...]
 
 # model
 --provider <name>                e.g. anthropic, openai, google; needs --model (Pi 1.0.0)
---model <pattern>                supports provider/id and optional :<thinking>
+--model <pattern>                supports provider/id and optional :<thinking>; prefers the provider with credentials when several match (Pi 1.3.0)
 --api-key <key>
 --thinking off|minimal|low|medium|high|xhigh|max
---models <patterns>              Ctrl+P cycling allowlist
+--models <patterns>              Ctrl+P cycling allowlist; a model several providers offer is added for each, with a warning (Pi 1.3.0)
 --list-models [search]
 
 # sessions
@@ -353,6 +357,7 @@ Use `/bug [description]` (Pi 0.86.0) to report a problem with redacted diagnosti
 | `PI_CACHE_RETENTION` | Set to `long` for extended prompt-cache retention where supported |
 | `PI_OAUTH_CALLBACK_HOST` | Bind the OAuth callback server to a custom interface |
 | `PI_SHARE_VIEWER_URL` | Override the base URL used by `/share` |
+| `PI_CODEMODE_MAX_WORKERS` | Maximum codemode workers alive at once across the process (default `2`, Pi 1.4.0); raise it when one process runs several sessions |
 | `PI_HARDWARE_CURSOR` | `1` shows the hardware cursor (see terminal-setup docs) |
 | `PI_CLIPBOARD_OSC52` | `1` (Pi 1.2.0) also sends copied text to the terminal with OSC 52, for remote clients Pi cannot detect, such as a multiplexer attached from another machine |
 | `PI_PROGRAM_STATUS` | OSC 7501 program status (Pi 1.1.0): Pi reports working/blocked/done/error/idle to terminals and agent dashboards that confirm support; `1` always reports, `0` never |

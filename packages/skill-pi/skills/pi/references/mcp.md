@@ -1,6 +1,6 @@
 # MCP Servers
 
-Pi connects to MCP servers through a built-in extension. There is no package to install. Checked against Pi v1.2.0: [mcp.md](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/mcp.md), [cli.md#mcp-commands](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/cli.md#mcp-commands), [extensions.md#mcp-servers](https://github.com/earendil-works/pi/blob/v1.2.0/packages/coding-agent/docs/extensions.md#mcp-servers).
+Pi connects to MCP servers through a built-in extension. There is no package to install. Checked against Pi v1.4.0: [mcp.md](https://github.com/earendil-works/pi/blob/v1.4.0/packages/coding-agent/docs/mcp.md), [cli.md#mcp-commands](https://github.com/earendil-works/pi/blob/v1.4.0/packages/coding-agent/docs/cli.md#mcp-commands), [extensions.md#mcp-servers](https://github.com/earendil-works/pi/blob/v1.4.0/packages/coding-agent/docs/extensions.md#mcp-servers).
 
 ## Configure
 
